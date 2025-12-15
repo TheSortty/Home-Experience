@@ -1,10 +1,8 @@
-# HOME Experience - The Antigravity Project
+# HOME Experience -
 
 > "Gravity is just a suggestion."
 
 Welcome to the **HOME Experience** repository. This project represents a deep dive into creative coding, bringing the fluidity and "premium feel" of high-end award-winning sites to a modern React architecture.
-
-My goal was to reverse-engineer the physics-based interactions seen in Google's "Antigravity" experiment and adapt them into a scalable, production-ready application.
 
 ## 🏗 Architecture: Feature-First
 
@@ -26,7 +24,7 @@ By colocating components with their specific features, I ensured that deleting a
 
 ## 🚀 Technical Challenges & Solutions
 
-### 1. The Antigravity Engine (Matter.js + React)
+### 1. The Engine (Matter.js + React)
 Integrating a physics engine like `matter-js` into the React lifecycle is notoriously tricky. React wants to control the DOM, while Matter.js wants to control the Canvas.
 
 **My Approach:**
