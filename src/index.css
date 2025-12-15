@@ -152,3 +152,47 @@ body {
   -webkit-text-fill-color: transparent;
   background-image: linear-gradient(to right, var(--color-accent), var(--color-accent-light));
 }
+
+/* Global Button Style (from Moments Swiper) */
+.btn-join {
+  display: block;
+  padding: 10px 40px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-radius: 4px;
+  outline: none;
+  text-decoration: none;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #00A9CE 0%, #8BD8DF 100%);
+  /* Celeste buttons */
+  box-shadow: 0 6px 30px rgba(0, 169, 206, 0.3);
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-join:hover {
+  animation: gelatine 0.5s 1;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 35px rgba(0, 169, 206, 0.4);
+}
+
+@keyframes gelatine {
+
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+
+  25% {
+    transform: scale(0.9, 1.1);
+  }
+
+  50% {
+    transform: scale(1.1, 0.9);
+  }
+
+  75% {
+    transform: scale(0.95, 1.05);
+  }
+}

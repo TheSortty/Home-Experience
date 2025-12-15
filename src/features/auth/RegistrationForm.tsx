@@ -17,6 +17,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack, onSubmitSuc
     const [fields, setFields] = useState<FormField[]>([]);
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [errors, setErrors] = useState<Record<string, boolean>>({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Medical Section Toggles
     const [hasTreatment, setHasTreatment] = useState<boolean | null>(null);
@@ -127,33 +128,47 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack, onSubmitSuc
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSubmitting) return;
 
-        // Final Validation Check for Payment Section (Checkbox)
-        // Usually handled by broweser 'required' attribute on checkbox, but let's be safe.
-
+        setIsSubmitting(true);
         console.log('Enviando a Supabase...', formData);
 
         try {
+            // 1. Guardar en Base de Datos (Insertar el registro)
             const { data, error } = await supabase
                 .from('registrations')
-                .insert([
-                    {
-                        data: formData,
-                        status: 'PENDING_REVIEW'
-                    }
-                ]);
+                .insert([{ data: formData, status: 'PENDING_REVIEW' }])
+                .select()
+                .single(); // Es importante el .select().single() para recuperar el registro creado
 
-            if (error) {
-                console.error('Error de Supabase:', error);
-                alert('Error al guardar: ' + error.message);
-            } else {
-                console.log('¡Éxito!', data);
-                setCurrentStep('success');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (error) throw error;
+
+            // 2. Disparar Email (Invocar Edge Function)
+            // Llamamos a la función 'send-email' pasándole el registro recién creado
+            const { error: funcError } = await supabase.functions.invoke('send-email', {
+                body: { record: data }
+            });
+
+            if (funcError) {
+                console.error('Error enviando email:', funcError);
+                // No bloqueamos el flujo de éxito si falla el email, solo lo logueamos
             }
+
+            // 3. Éxito
+            // 3. Éxito
+            setCurrentStep('success'); // Ensure UI updates to show success/payment screen
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            // Do NOT call onSubmitSuccess() here, otherwise the parent (App.tsx) unmounts us immediately.
+            // We want to show the Success/Payment screen. The user can close it via the 'X' button (onBack).
+
         } catch (err) {
             console.error('Error inesperado:', err);
-            alert('Ocurrió un error inesperado. Intenta de nuevo.');
+            // alert('Ocurrió un error inesperado. Intenta de nuevo.'); 
+            // Commented out alert to avoid interrupting user, or could keep it. 
+            // Existing code used alert. I'll keep the alert behavior if it fails main insert.
+            alert('Error al guardar: ' + (err instanceof Error ? err.message : 'Error desconocido'));
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -441,23 +456,49 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack, onSubmitSuc
 
     const renderPayment = () => (
         <div className="space-y-6 animate-fade-in-up">
-            <h3 className="text-2xl font-bold text-slate-900 mb-6">Confirmación</h3>
+            <h3 className="text-2xl font-bold text-slate-900 mb-6">Confirmación y Legales</h3>
 
             <div className="bg-slate-50 p-6 rounded-xl border border-slate-100 mb-8">
-                <label className="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox" required className="mt-1 w-4 h-4 text-blue-600 rounded" />
-                    <span className="text-sm text-slate-600 leading-relaxed">
-                        He leído y acepto los <button type="button" onClick={() => setShowTerms(true)} className="text-blue-600 hover:underline font-bold">Términos y Condiciones</button> y la <button type="button" onClick={() => setShowPrivacy(true)} className="text-blue-600 hover:underline font-bold">Política de Privacidad</button>.
-                        <br />Declaro bajo juramento que la información proporcionada es verídica y asumo la total responsabilidad por mi participación en el programa, liberando a HOME de cualquier responsabilidad por datos omitidos o falsos.
+                <h4 className="font-bold text-slate-800 mb-3">Términos y Condiciones</h4>
+                <div className="bg-white border border-slate-200 rounded-lg p-4 h-40 overflow-y-auto mb-4 text-sm text-slate-600 space-y-3 shadow-inner">
+                    <p><strong>1. Compromiso:</strong> El participante se compromete a respetar los horarios y dinámicas del programa.</p>
+                    <p><strong>2. Asistencia:</strong> La asistencia a todos los módulos es obligatoria para la certificación.</p>
+                    <p><strong>3. Confidencialidad:</strong> Todo lo compartido dentro del espacio (presencial o virtual) es estrictamente confidencial.</p>
+                    <p><strong>4. Responsabilidad:</strong> HOME no se hace responsable por objetos personales perdidos durante el evento.</p>
+                    <p><strong>5. Uso de Datos:</strong> La información recolectada se utiliza únicamente para fines de organización y seguridad.</p>
+                    <p><strong>6. Derecho de Imagen:</strong> Durante el evento se pueden tomar fotografías con fines promocionales.</p>
+                </div>
+
+                <label className="flex items-start gap-3 cursor-pointer select-none">
+                    <input type="checkbox" required className="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-blue-500" />
+                    <span className="text-sm text-slate-800 font-medium">
+                        He leído y acepto los términos y condiciones, y la política de privacidad.
+                        <br /><span className="text-slate-500 font-normal">Declaro bajo juramento que la información proporcionada es verídica.</span>
                     </span>
                 </label>
             </div>
 
             <div className="flex justify-between pt-8">
-                <button type="button" onClick={prevStep} className="px-6 py-3 text-slate-500 hover:text-slate-800 font-medium transition-colors">Atrás</button>
-                <button onClick={handleSubmit} className="px-10 py-4 bg-blue-600 text-white rounded-full font-bold hover:bg-blue-700 transition-all shadow-xl hover:shadow-blue-600/30 flex items-center">
-                    Confirmar Inscripción
-                    <CheckIcon className="ml-2 w-5 h-5" />
+                <button type="button" onClick={prevStep} className="px-6 py-3 text-slate-500 hover:text-slate-800 font-medium transition-colors" disabled={isSubmitting}>Atrás</button>
+                <button
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                    className={`px-10 py-4 bg-blue-600 text-white rounded-full font-bold transition-all shadow-xl flex items-center ${isSubmitting ? 'opacity-75 cursor-wait' : 'hover:bg-blue-700 hover:shadow-blue-600/30'}`}
+                >
+                    {isSubmitting ? (
+                        <>
+                            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Procesando...
+                        </>
+                    ) : (
+                        <>
+                            Confirmar Inscripción
+                            <CheckIcon className="ml-2 w-5 h-5" />
+                        </>
+                    )}
                 </button>
             </div>
         </div>
@@ -476,75 +517,38 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack, onSubmitSuc
                 Tu inscripción ha sido recibida correctamente. Para confirmar tu lugar, realiza el pago según tu preferencia:
             </p>
 
-            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto text-left mt-8">
-                {/* Option A: Cash/Transfer */}
-                <div className="bg-white p-8 rounded-2xl shadow-lg border-t-4 border-green-500 hover:shadow-xl transition-shadow relative overflow-hidden">
-                    <div className="absolute top-0 right-0 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-                        MEJOR PRECIO
+            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto text-center mt-8">
+                {/* Option 1 */}
+                <a
+                    href="https://mpago.la/12TzA5A"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex flex-col items-center justify-center p-8 bg-white rounded-2xl shadow-lg border-2 border-blue-500 hover:bg-blue-50 transition-all group"
+                >
+                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                        <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 mb-2 text-center">OPCIÓN A</h3>
-                    <h4 className="text-lg font-bold text-slate-800 mb-4 text-center">Transferencia o Depósito</h4>
-                    <p className="text-center text-sm text-green-600 font-medium mb-6">
-                        Aprovecha los descuentos especiales pagando por este medio.
-                    </p>
+                    <span className="text-xl font-bold text-slate-800">Ya me pongo con esto</span>
+                    <span className="text-sm text-blue-600 mt-2 font-medium">Click para pagar</span>
+                </a>
 
-                    <div className="bg-slate-50 p-4 rounded-xl font-mono text-sm text-slate-700 space-y-2 mb-6 border border-slate-100">
-                        <div className="flex justify-between">
-                            <span className="text-slate-400">Alias:</span>
-                            <span className="font-bold select-all">homedh.mp</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-slate-400">Titular:</span>
-                            <span className="font-bold text-right">Mariano Hernán Corigliano</span>
-                        </div>
+                {/* Option 2 */}
+                <a
+                    href="https://mpago.la/12n2ESQ"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex flex-col items-center justify-center p-8 bg-white rounded-2xl shadow-lg border-2 border-blue-500 hover:bg-blue-50 transition-all group"
+                >
+                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                        <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
                     </div>
-
-                    <a
-                        href={`https://wa.me/5493516518774?text=${encodeURIComponent(`Hola! Ya completé mi inscripción. Aquí envío el comprobante de transferencia para confirmar mi lugar.`)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block w-full py-4 bg-green-600 text-white text-center rounded-xl font-bold hover:bg-green-700 transition-colors shadow-lg shadow-green-200"
-                    >
-                        Enviar Comprobante <span className="ml-2">→</span>
-                    </a>
-                </div>
-
-                {/* Option B: Credit Card */}
-                <div className="bg-white p-8 rounded-2xl shadow-lg border-t-4 border-blue-500 hover:shadow-xl transition-shadow">
-                    <h3 className="text-xl font-bold text-slate-900 mb-2 text-center">OPCIÓN B</h3>
-                    <h4 className="text-lg font-bold text-slate-800 mb-6 text-center">Tarjeta de Crédito</h4>
-
-                    <div className="space-y-6">
-                        {/* Combos */}
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">Combos (Paquetes)</p>
-                            <div className="space-y-3">
-                                <a href="#" target="_blank" rel="noopener noreferrer" className="block w-full py-3 px-4 border-2 border-blue-100 text-blue-600 rounded-xl font-bold hover:border-blue-500 hover:bg-blue-50 transition-all text-center">
-                                    Pagar COMBO 1 <span className="text-sm font-normal text-slate-500 block">$480.000 (Incluye Inicial + Avanzado)</span>
-                                </a>
-                                <a href="#" target="_blank" rel="noopener noreferrer" className="block w-full py-3 px-4 border-2 border-blue-100 text-blue-600 rounded-xl font-bold hover:border-blue-500 hover:bg-blue-50 transition-all text-center">
-                                    Pagar COMBO 2 <span className="text-sm font-normal text-slate-500 block">$740.000 (Programa Completo)</span>
-                                </a>
-                            </div>
-                        </div>
-
-                        {/* Individual Stages */}
-                        <div className="pt-4 border-t border-slate-100">
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">Etapas Individuales</p>
-                            <div className="space-y-3">
-                                <a href="#" target="_blank" rel="noopener noreferrer" className="block w-full py-2 px-4 border border-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:border-blue-400 hover:text-blue-600 transition-all text-center">
-                                    Etapa INICIAL <span className="ml-1 text-slate-400 font-normal">($190.000)</span>
-                                </a>
-                                <a href="#" target="_blank" rel="noopener noreferrer" className="block w-full py-2 px-4 border border-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:border-blue-400 hover:text-blue-600 transition-all text-center">
-                                    Etapa AVANZADO <span className="ml-1 text-slate-400 font-normal">($230.000)</span>
-                                </a>
-                                <a href="#" target="_blank" rel="noopener noreferrer" className="block w-full py-2 px-4 border border-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:border-blue-400 hover:text-blue-600 transition-all text-center">
-                                    Etapa LIDERAZGO <span className="ml-1 text-slate-400 font-normal">($350.000)</span>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    <span className="text-xl font-bold text-slate-800">Con tarjeta de crédito</span>
+                    <span className="text-sm text-slate-600 mt-1">En 3 cuotas sin interés</span>
+                </a>
             </div>
 
             <p className="text-sm text-slate-400 mt-8">

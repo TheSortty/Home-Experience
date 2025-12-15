@@ -45,7 +45,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick }) => {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled || isMenuOpen ? 'bg-white/90 backdrop-blur-md shadow-sm py-4' : 'bg-transparent py-6'
+      className={`w-full transition-all duration-300 ${isScrolled || isMenuOpen ? 'bg-white/90 backdrop-blur-md shadow-sm py-4' : 'bg-transparent py-6'
         }`}
     >
       <div className="container mx-auto px-6 flex justify-between items-center">
@@ -83,7 +83,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick }) => {
           <a
             href="#pricing"
             onClick={handleSmoothScroll}
-            className="bg-slate-900 text-white text-sm font-medium px-6 py-2.5 rounded-full hover:bg-slate-800 transition-all"
+            className="btn-join flex items-center justify-center text-sm px-6 py-2.5" /* Added btn-join and adjusted flex/sizing */
             data-interactive="true"
           >
             Empezar

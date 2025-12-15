@@ -1,0 +1,210 @@
+@import url("https://fonts.googleapis.com/css2?family=Comfortaa:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700;800&display=swap");
+
+.moments-section {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: transparent;
+    /* Transparent to show global background */
+    min-height: 100vh;
+    overflow: hidden;
+    font-family: "Comfortaa", cursive;
+}
+
+.moments-content {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+    background: rgba(255, 255, 255, 0.7);
+    /* Slightly more opaque for white bg */
+    backdrop-filter: blur(30px);
+    border-radius: 20px;
+    width: min(1050px, 100%);
+    box-shadow: 0 0.5px 0 1px rgba(0, 0, 0, 0.05) inset,
+        0 1px 0 0 rgba(0, 0, 0, 0.1) inset, 0 4px 16px rgba(0, 0, 0, 0.05);
+    /* Softer shadows for light mode */
+    z-index: 10;
+    padding: 2rem;
+}
+
+.moments-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    max-width: 450px;
+    padding: 0 35px;
+    text-align: justify;
+}
+
+.moments-info p {
+    color: #1F2937;
+    /* Dark text */
+    font-weight: 500;
+    font-size: 1rem;
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+.moments-title-dynamic {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: #111827;
+}
+
+.movie-night {
+    background: linear-gradient(225deg, #00A9CE 0%, #8BD8DF 100%);
+    /* Celeste HOME gradient */
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 700;
+}
+
+.btn-join {
+    display: block;
+    padding: 10px 40px;
+    margin: 10px auto;
+    font-size: 1.1rem;
+    font-weight: 700;
+    border-radius: 4px;
+    outline: none;
+    text-decoration: none;
+    color: #FFFFFF;
+    background: linear-gradient(135deg, #00A9CE 0%, #8BD8DF 100%);
+    /* Celeste buttons */
+    box-shadow: 0 6px 30px rgba(0, 169, 206, 0.3);
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-join:hover {
+    animation: gelatine 0.5s 1;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 35px rgba(0, 169, 206, 0.4);
+}
+
+@keyframes gelatine {
+
+    0%,
+    100% {
+        transform: scale(1, 1);
+    }
+
+    25% {
+        transform: scale(0.9, 1.1);
+    }
+
+    50% {
+        transform: scale(1.1, 0.9);
+    }
+
+    75% {
+        transform: scale(0.95, 1.05);
+    }
+}
+
+/* FADE ANIMATION for TEXT */
+.fade-text {
+    animation: fadeInText 0.5s ease-in-out;
+}
+
+@keyframes fadeInText {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+/* SWIPER customization */
+.moments-swiper {
+    width: 340px;
+    height: 605px;
+    /* Exact 9:16 ratio relative to width (340 * 16/9 ≈ 604.4) */
+    padding: 50px 0;
+    touch-action: pan-y;
+    /* Allow vertical scroll, preventing vertical swipes from being captured */
+}
+
+.swiper-slide {
+    position: relative;
+    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    user-select: none;
+    overflow: hidden;
+    background-color: #fff;
+    /* Ensure slide bg is white */
+}
+
+.swiper-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+    /* Critical: Focus on the top of the image (Head/Name) */
+    display: block;
+}
+
+.img-position {
+    object-position: 50% 0%;
+}
+
+.slide-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to top, rgba(15, 32, 39, 0.8), transparent, transparent);
+    /* Dark gradient for white text legibility */
+}
+
+.slide-overlay span {
+    position: absolute;
+    top: 0;
+    right: 0;
+    color: #fff;
+    padding: 7px 18px;
+    margin: 10px;
+    border-radius: 20px;
+    letter-spacing: 2px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: inset 2px -2px 20px rgba(255, 255, 255, 0.2),
+        inset -3px 3px 3px rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+}
+
+.slide-overlay h2 {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    color: #fff;
+    font-weight: 400;
+    font-size: 1.1rem;
+    line-height: 1.4;
+    margin: 0 0 20px 20px;
+}
+
+@media (max-width: 900px) {
+    .moments-content {
+        flex-direction: column-reverse;
+        width: 90%;
+    }
+
+    .moments-info {
+        padding: 0;
+    }
+}

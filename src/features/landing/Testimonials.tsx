@@ -44,7 +44,7 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onAddTe
   }, []);
 
   return (
-    <section id="voices" className="py-24 relative">
+    <section id="voices" className="py-24 relative bg-transparent">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
           <div>

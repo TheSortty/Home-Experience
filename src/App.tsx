@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { SmoothScroll } from './components/SmoothScroll';
+import { DemoBanner } from './ui/DemoBanner';
 import Header from './ui/Header';
 import Footer from './ui/Footer';
 import TestimonialModal from './ui/TestimonialModal';
@@ -10,7 +11,7 @@ import Hero from './features/landing/Hero';
 import VideoSection from './features/landing/VideoSection';
 import IconWave from './features/landing/IconWave';
 import ScrollyFeature from './features/landing/ScrollyFeature';
-import VideoCarousel from './features/landing/VideoCarousel';
+import MomentsSwiper from './features/landing/MomentsSwiper';
 import InteractivePoints from './features/landing/InteractivePoints';
 import Testimonials from './features/landing/Testimonials';
 import Packages from './features/landing/Packages';
@@ -98,10 +99,10 @@ const App: React.FC = () => {
       <SmoothScroll />
       <div className="relative font-sans text-slate-900 antialiased bg-transparent selection:bg-blue-100 selection:text-blue-900">
         <InteractiveBg />
-        <FloatingShapes />
-        <ElegantDecorations />
-
-        <Header onLoginClick={handleLoginClick} />
+        <div className="fixed top-0 left-0 right-0 z-[9999] flex flex-col">
+          <DemoBanner />
+          <Header onLoginClick={handleLoginClick} />
+        </div>
 
         <main>
           {/* 1. Welcome / Hero */}
@@ -122,9 +123,9 @@ const App: React.FC = () => {
           {/* 4. Scrollytelling Methodology */}
           <ScrollyFeature />
 
-          {/* 5. Video Carousel (Moments) */}
+          {/* 5. Moments Swiper */}
           <div className="reveal-on-scroll opacity-0">
-            <VideoCarousel />
+            <MomentsSwiper />
           </div>
 
           {/* 6. Voces/Blog + Background */}
