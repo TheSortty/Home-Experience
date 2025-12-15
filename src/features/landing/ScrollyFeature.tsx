@@ -64,10 +64,17 @@ const ScrollyFeature: React.FC = () => {
                 ref={(el) => (sectionRefs.current[index] = el)}
                 data-index={index}
                 className={`flex flex-col justify-center transition-all duration-1000 ${
-                  /* Add extra spacing for first and last items to ensure they can be centered */
-                  index === 0 ? 'min-h-[100vh] pt-[20vh]' :
-                    index === features.length - 1 ? 'min-h-[100vh] pb-[20vh]' :
-                      'min-h-[100vh]'
+                  /* Precise Vertical Alignment Logic:
+                   * The sticky container is centered (50vh).
+                   * We want the first text (index 0) to START exactly at that center point when the section begins.
+                   * We want the last text (index len-1) to END/STOP at that center point before scrolling away.
+                   *
+                   * Strategy: Use large padding to push the "centered" flex content to the extremes.
+                   * A padding of roughly 40-45vh helps position the active content trigger zone.
+                   */
+                  index === 0 ? 'min-h-[100vh] py-[40vh] justify-center' : // First item: Content centered in a large active zone
+                    index === features.length - 1 ? 'min-h-[100vh] py-[40vh] justify-center' : // Last item: Similar logic
+                      'min-h-[100vh] justify-center' // Middle items: Standard center
                   } ${activeFeature === index ? 'opacity-100 blur-0' : 'opacity-30 blur-sm'}`}
               >
                 <span className="text-sm font-mono font-bold tracking-widest text-google-grey-800 mb-4 lg:mb-6 uppercase">
@@ -96,8 +103,8 @@ const ScrollyFeature: React.FC = () => {
           {/* Right Column: Sticky Image (Desktop Only) */}
           <div className="lg:w-1/2 relative hidden lg:block">
             {/* Sticky container completely centered and limited height to avoid touching header/bottom */}
-            <div className="sticky top-0 h-screen flex items-center justify-center">
-              <div className="relative w-full max-w-[550px] aspect-[3/4] max-h-[85vh] rounded-[24px] shadow-2xl overflow-hidden bg-white">
+            <div className="sticky top-36 h-[calc(100vh-13rem)] flex items-center justify-center">
+              <div className="relative w-full max-w-[550px] aspect-[3/4] max-h-full rounded-[24px] shadow-2xl overflow-hidden bg-white">
                 {features.map((feature, index) => (
                   <div
                     key={feature.id}
