@@ -39,7 +39,6 @@ const LoadingFallback = () => (
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>('landing');
   const [selectedTestimonial, setSelectedTestimonial] = useState<Testimonial | null>(null);
-  const [isAddTestimonialOpen, setIsAddTestimonialOpen] = useState(false);
   const [isViewAllTestimonialsOpen, setIsViewAllTestimonialsOpen] = useState(false);
 
   // Navigation Handlers
@@ -135,7 +134,6 @@ const App: React.FC = () => {
               <div className="pointer-events-auto">
                 <Testimonials
                   onTestimonialClick={setSelectedTestimonial}
-                  onAddTestimonialClick={() => setIsAddTestimonialOpen(true)}
                   onViewAllClick={() => setIsViewAllTestimonialsOpen(true)}
                 />
               </div>
@@ -165,10 +163,6 @@ const App: React.FC = () => {
           onClose={() => setSelectedTestimonial(null)}
         />
         <Suspense fallback={null}>
-          <AddTestimonial
-            isVisible={isAddTestimonialOpen}
-            onClose={() => setIsAddTestimonialOpen(false)}
-          />
           <TestimonialListModal
             isVisible={isViewAllTestimonialsOpen}
             onClose={() => setIsViewAllTestimonialsOpen(false)}
@@ -178,7 +172,7 @@ const App: React.FC = () => {
             }}
           />
         </Suspense>
-      </div>
+      </div >
     </>
   );
 };

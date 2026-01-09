@@ -8,17 +8,22 @@ export interface Package {
   paymentLink: string;
 }
 
-export type TestimonialRole = 'Participante' | 'Senior' | 'Staff';
+export type TestimonialRole = 'Inicial' | 'Avanzado' | 'PL' | 'Senior' | 'Staff' | 'Coach' | 'Participante';
 export type TestimonialStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Testimonial {
   id: string | number;
   quote: string;
   author: string;
-  cycle?: string; // Optional now as user input might not have it
+  cycle?: string;
   roles: TestimonialRole[];
-  pl?: number; // Optional
-  rating: number;
+  program?: string; // e.g. 'CRESER'
+  camada?: string; // '27', '32'
+  plName?: string; // 'Nombre de tu PL'
+  camadaName?: string; // 'Nombre de tu camada'
+  hasMultiplePL?: boolean;
+  enrolledBy?: string; // 'Quien te enrollo'
+  rating: number; // Supports 4.5 etc.
   photoUrl?: string;
   videoUrl?: string;
   status: TestimonialStatus;
