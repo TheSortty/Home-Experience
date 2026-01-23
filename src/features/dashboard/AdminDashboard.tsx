@@ -13,25 +13,27 @@ import AdminStudents from './admin/AdminStudents';
 import AdminAdmissions from './admin/AdminAdmissions';
 import AdminTestimonials from './admin/AdminTestimonials';
 
+import AdminSettings from './admin/AdminSettings';
+import AdminForms from './admin/AdminForms';
+
 interface AdminDashboardProps {
   onLogout: () => void;
   onRegisterTest: () => void;
 }
 
-type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'communications' | 'reports' | 'forms' | 'testimonials';
+type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'communications' | 'reports' | 'forms' | 'testimonials' | 'settings';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTest }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [formFields, setFormFields] = useState<FormField[]>([]);
-  const [formSubmissions, setFormSubmissions] = useState<FormSubmission[]>([]);
-  const [formTab, setFormTab] = useState<'editor' | 'submissions'>('editor');
 
   // Real Data State
   const [stats, setStats] = useState({
     pendingAdmissions: 0,
-    activeStudents: 0, // Placeholder until students table is ready
-    activeCycles: 0,   // Placeholder until cycles table is ready
-    graduationRate: '94%' // Static for now
+    activeStudents: 0,
+    activeCycles: 0,
+    graduationRateInitial: '0%',
+    graduationRateAdvanced: '0%',
+    graduationRatePL: '0%'
   });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
@@ -39,36 +41,60 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     fetchDashboardData();
   }, []);
 
-  useEffect(() => {
-    if (activeTab === 'forms') {
-      setFormFields(MockDatabase.getFormFields());
-      setFormSubmissions(MockDatabase.getSubmissions());
-    }
-  }, [activeTab]);
-
   const fetchDashboardData = async () => {
     try {
-      // 1. Fetch Pending Admissions Count
+      // 1. Fetch Pending Admissions Count (from form_submissions)
       const { count: pendingCount, error: pendingError } = await supabase
-        .from('registrations')
+        .from('form_submissions')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'PENDING_REVIEW');
+        .eq('status', 'pending');
 
       // 2. Fetch Recent Activity (Latest Registrations)
-      const { data: recentRegs, error: recentError } = await supabase
-        .from('registrations')
+      const { data: recentRegs } = await supabase
+        .from('form_submissions')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(5);
 
-      if (!pendingError) {
-        setStats(prev => ({ ...prev, pendingAdmissions: pendingCount || 0 }));
+      // 3. Fetch Metrics for Graduation Rate
+      // We need counts of enrollements by type and status.
+      // Assuming 'cycles' has 'type' (initial, advanced, plan_lider)
+      // We join enrollments -> cycles
+      const { data: enrollmentsData } = await supabase
+        .from('enrollments')
+        .select(`
+          status,
+          cycle:cycles ( type )
+        `);
+
+      let rates = { initial: '0%', advanced: '0%', pl: '0%' };
+
+      if (enrollmentsData) {
+        const calculateRate = (type: string) => {
+          const relevant = enrollmentsData.filter((e: any) => e.cycle?.type === type);
+          const total = relevant.length;
+          if (total === 0) return '0%';
+          const graduated = relevant.filter((e: any) => e.status === 'completed' || e.status === 'graduated').length; // Check 'completed' enum
+          return Math.round((graduated / total) * 100) + '%';
+        };
+
+        rates.initial = calculateRate('initial');
+        rates.advanced = calculateRate('advanced');
+        rates.pl = calculateRate('plan_lider');
       }
+
+      setStats(prev => ({
+        ...prev,
+        pendingAdmissions: pendingCount || 0,
+        graduationRateInitial: rates.initial,
+        graduationRateAdvanced: rates.advanced,
+        graduationRatePL: rates.pl
+      }));
 
       if (recentRegs) {
         setRecentActivity(recentRegs.map(r => ({
           id: r.id,
-          text: `Nueva solicitud de inscripción: ${r.data.firstName} ${r.data.lastName}`,
+          text: `Nueva solicitud: ${r.data.firstName} ${r.data.lastName}`,
           date: new Date(r.created_at).toLocaleDateString(),
           type: 'registration'
         })));
@@ -79,40 +105,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     }
   };
 
-  const handleAddField = () => {
-    const newField: FormField = {
-      id: `field_${Date.now()}`,
-      type: 'text',
-      label: 'Nueva Pregunta',
-      required: false,
-      section: 'personal'
-    };
-    const updated = [...formFields, newField];
-    setFormFields(updated);
-    MockDatabase.saveFormFields(updated);
-  };
-
-  const handleDeleteField = (id: string) => {
-    const updated = formFields.filter(f => f.id !== id);
-    setFormFields(updated);
-    MockDatabase.saveFormFields(updated);
-  };
-
-  const handleUpdateField = (id: string, updates: Partial<FormField>) => {
-    const updated = formFields.map(f => f.id === id ? { ...f, ...updates } : f);
-    setFormFields(updated);
-    MockDatabase.saveFormFields(updated);
-  };
-
   const renderOverview = () => (
     <div className="space-y-8 animate-fade-in-up">
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Solicitudes Pendientes', value: stats.pendingAdmissions, icon: DocumentIcon, color: 'amber' },
-          { label: 'Alumnos Activos', value: stats.activeStudents, icon: UsersIcon, color: 'blue' },
-          { label: 'Ciclos Activos', value: stats.activeCycles, icon: CalendarIcon, color: 'purple' },
-          { label: 'Tasa de Graduación', value: stats.graduationRate, icon: ChartIcon, color: 'emerald' }
+          { label: 'Tasa Grad. Inicial', value: stats.graduationRateInitial, icon: ChartIcon, color: 'blue' },
+          { label: 'Tasa Grad. Avanzado', value: stats.graduationRateAdvanced, icon: ChartIcon, color: 'purple' },
+          { label: 'Tasa Grad. PL', value: stats.graduationRatePL, icon: ChartIcon, color: 'emerald' }
         ].map((stat, idx) => (
           <div key={idx} className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
             <div className={`h-12 w-12 bg-${stat.color}-50 rounded-xl flex items-center justify-center text-${stat.color}-600 mb-4`}>
@@ -151,99 +152,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                 </div>
               </div>
             ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderForms = () => (
-    <div className="space-y-6 animate-fade-in-up">
-      <div className="bg-white border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden">
-        <div className="border-b border-slate-200 flex">
-          <button
-            onClick={() => setFormTab('editor')}
-            className={`px-6 py-4 font-bold transition-colors ${formTab === 'editor' ? 'bg-white text-slate-900 border-b-2 border-blue-600' : 'bg-slate-50 text-slate-500'}`}
-          >
-            Editor de Formulario
-          </button>
-          <button
-            onClick={() => setFormTab('submissions')}
-            className={`px-6 py-4 font-bold transition-colors ${formTab === 'submissions' ? 'bg-white text-slate-900 border-b-2 border-blue-600' : 'bg-slate-50 text-slate-500'}`}
-          >
-            Respuestas ({formSubmissions.length})
-          </button>
-        </div>
-
-        <div className="p-6">
-          {formTab === 'editor' ? (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold">Gestionar Campos</h3>
-                <div className="flex gap-3">
-                  <button onClick={handleAddField} className="px-4 py-2 bg-slate-900 text-white rounded-lg font-bold text-sm">
-                    + Agregar Campo
-                  </button>
-                  <button onClick={onRegisterTest} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm flex items-center gap-2">
-                    ⚡ Probar Formulario
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {formFields.map(field => (
-                  <div key={field.id} className="bg-slate-50 p-4 rounded-lg flex justify-between items-start">
-                    <div className="flex-1 grid grid-cols-3 gap-4">
-                      <input
-                        type="text"
-                        value={field.label}
-                        onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
-                        className="px-3 py-2 border rounded text-sm"
-                      />
-                      <select
-                        value={field.type}
-                        onChange={(e) => handleUpdateField(field.id, { type: e.target.value as any })}
-                        className="px-3 py-2 border rounded text-sm"
-                      >
-                        <option value="text">Texto</option>
-                        <option value="email">Email</option>
-                        <option value="tel">Teléfono</option>
-                        <option value="textarea">Área de Texto</option>
-                        <option value="date">Fecha</option>
-                        <option value="select">Selección</option>
-                        <option value="radio">Radio</option>
-                      </select>
-                      <select
-                        value={field.section}
-                        onChange={(e) => handleUpdateField(field.id, { section: e.target.value as any })}
-                        className="px-3 py-2 border rounded text-sm"
-                      >
-                        <option value="personal">Personal</option>
-                        <option value="medical">Médico</option>
-                        <option value="payment">Pago</option>
-                        <option value="intro">Intro</option>
-                      </select>
-                    </div>
-                    <button onClick={() => handleDeleteField(field.id)} className="ml-3 text-red-500 hover:text-red-700 text-sm font-bold">
-                      Eliminar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {formSubmissions.map(submission => (
-                <div key={submission.id} className="bg-slate-50 p-4 rounded-lg">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-bold">ID: {submission.id.substring(0, 8)}</span>
-                    <span className="text-xs text-slate-500">{new Date(submission.submittedAt).toLocaleDateString()}</span>
-                  </div>
-                  <div className="text-sm text-slate-700">
-                    <strong>{submission.data.firstName} {submission.data.lastName}</strong> - {submission.data.email}
-                  </div>
-                </div>
-              ))}
-            </div>
           )}
         </div>
       </div>
@@ -303,8 +211,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
     { id: 'communications', label: 'Comunicación', icon: MailIcon },
     { id: 'reports', label: 'Reportes', icon: SettingsIcon },
-    { id: 'forms', label: 'Formulario', icon: DocumentIcon },
-    { id: 'testimonials', label: 'Testimonios', icon: UsersIcon }
+    { id: 'forms', label: 'Formulario y Encuestas', icon: DocumentIcon },
+    { id: 'testimonials', label: 'Testimonios', icon: UsersIcon },
+    { id: 'settings', label: 'Configuración Web', icon: SettingsIcon },
   ];
 
   return (
@@ -322,8 +231,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
               key={item.id}
               onClick={() => setActiveTab(item.id as Tab)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === item.id
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}
             >
               <item.icon className={`w-5 h-5 ${activeTab === item.id ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
@@ -367,8 +276,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
             {activeTab === 'calendar' && <AdminCalendar />}
             {activeTab === 'communications' && renderCommunications()}
             {activeTab === 'reports' && renderReports()}
-            {activeTab === 'forms' && renderForms()}
+            {activeTab === 'forms' && <AdminForms />}
             {activeTab === 'testimonials' && <AdminTestimonials />}
+            {activeTab === 'settings' && <AdminSettings />}
           </div>
         </div>
       </main>

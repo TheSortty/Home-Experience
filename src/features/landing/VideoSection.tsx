@@ -1,7 +1,7 @@
 import React from 'react';
 
 const VideoSection: React.FC = () => {
-  const videoId = "F-yPgKcgIsw";
+  const videoId = "Usht_kWIkiY";
 
   return (
     <section className="w-full relative overflow-hidden py-12">

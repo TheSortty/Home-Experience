@@ -14,43 +14,81 @@ serve(async (req) => {
   }
 
   try {
-    const { record } = await req.json();
-    const formData = record.data;
+    const payload = await req.json();
 
-    // 1. Email para TI (Admin) - Aviso de nuevo inscrito
-    // CAMBIO AQUÍ: Usamos tu dominio verificado
-    await resend.emails.send({
-      from: "Notificaciones <info@mail.siendohome.com>", 
-      to: ["contacto@siendohome.com"], 
-      subject: `Nuevo Inscrito: ${formData.firstName} ${formData.lastName}`,
-      html: `
-        <h1>¡Nueva solicitud recibida!</h1>
-        <p><strong>Nombre:</strong> ${formData.firstName} ${formData.lastName}</p>
-        <p><strong>Email:</strong> ${formData.email}</p>
-        <p><strong>Teléfono:</strong> ${formData.phone}</p>
-        <p>Revisa el panel de admin para aprobarlo.</p>
-      `,
-    });
+    // CASO 1: Webhook de Supabase (Nuevo registro en DB)
+    if (payload.record) {
+      const formData = payload.record.data;
 
-    // 2. Email para el CLIENTE (Alumno) - Bienvenida
-    // CAMBIO AQUÍ: Usamos tu dominio verificado
-    await resend.emails.send({
-      from: "HOME Experience <hola@mail.siendohome.com>",
-      to: [formData.email],
-      subject: "Hemos recibido tu solicitud - HOME Experience",
-      html: `
-        <h1>Hola ${formData.firstName},</h1>
-        <p>Gracias por querer formar parte de HOME.</p>
-        <p>Hemos recibido tu formulario correctamente. Nuestro equipo lo está revisando y te contactaremos pronto para confirmar tu vacante.</p>
-        <br/>
-        <p>Atte, el equipo de HOME.</p>
-      `,
-    });
+      // 1. Email para TI (Admin)
+      await resend.emails.send({
+        from: "Notificaciones <info@mail.siendohome.com>",
+        to: ["contacto@siendohome.com"],
+        subject: `Nuevo Inscrito: ${formData.firstName} ${formData.lastName}`,
+        html: `
+            <h1>¡Nueva solicitud recibida!</h1>
+            <p><strong>Nombre:</strong> ${formData.firstName} ${formData.lastName}</p>
+            <p><strong>Email:</strong> ${formData.email}</p>
+            <p><strong>Teléfono:</strong> ${formData.phone}</p>
+            <p>Revisa el panel de admin para aprobarlo.</p>
+          `,
+      });
 
-    return new Response(JSON.stringify({ message: "Emails enviados" }), {
+      // 2. Email para el CLIENTE (Recibo el form)
+      await resend.emails.send({
+        from: "HOME Experience <hola@mail.siendohome.com>",
+        to: [formData.email],
+        subject: "Hemos recibido tu solicitud - HOME Experience",
+        html: `
+            <h1>Hola ${formData.firstName},</h1>
+            <p>Gracias por querer formar parte de HOME.</p>
+            <p>Hemos recibido tu formulario correctamente. Nuestro equipo lo está revisando y te contactaremos pronto para confirmar tu vacante.</p>
+            <br/>
+            <p>Atte, el equipo de HOME.</p>
+          `,
+      });
+
+      return new Response(JSON.stringify({ message: "Emails de registro enviados" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // CASO 2: Llamada manual desde Frontend (Bienvenida al Curso)
+    else if (payload.type === 'COURSE_WELCOME') {
+      const { email, firstName, cycleName, startDate, endDate } = payload.data;
+
+      await resend.emails.send({
+        from: "HOME Experience <hola@mail.siendohome.com>",
+        to: [email],
+        subject: "¡Bienvenido a HOME Experience!",
+        html: `
+            <h1>¡Felicidades ${firstName}!</h1>
+            <p>Tu inscripción al ciclo <strong>${cycleName}</strong> ha sido confirmada.</p>
+            
+            <div style="background-color: #f3f4f6; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                <p><strong>Fecha de Inicio:</strong> ${startDate}</p>
+                 ${endDate ? `<p><strong>Fecha de Fin:</strong> ${endDate}</p>` : ''}
+            </div>
+
+            <p>Estamos muy felices de que te sumes a esta experiencia.</p>
+            <p>Pronto recibirás más detalles sobre el cursado.</p>
+            <br/>
+            <p>Atte, el equipo de HOME.</p>
+          `,
+      });
+
+      return new Response(JSON.stringify({ message: "Email de bienvenida enviado" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    return new Response(JSON.stringify({ message: "No action performed" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
+
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

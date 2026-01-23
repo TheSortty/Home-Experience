@@ -1,10 +1,26 @@
 import React from 'react';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 
 interface PackagesProps {
     onRegisterClick: () => void;
 }
 
 const Packages: React.FC<PackagesProps> = ({ onRegisterClick }) => {
+    const { getValue, loading } = useSiteSettings();
+
+    // Combos
+    const priceCombo1Cash = getValue('price_combo_1_cash', '340.000');
+    const priceCombo1Card = getValue('price_combo_1_card', '480.000');
+    const priceCombo2Cash = getValue('price_combo_2_cash', '630.000');
+    const priceCombo2Card = getValue('price_combo_2_card', '790.000');
+
+    // Individual
+    const priceInitial = getValue('price_initial', '190.000');
+    const priceAdvanced = getValue('price_advanced', '230.000');
+    const priceLeadership = getValue('price_leadership', '350.000');
+
+    const fmt = (val: string) => val.startsWith('$') ? val : `$${val}`;
+
     return (
         <section id="pricing" className="py-20 px-4 md:px-6 relative overflow-hidden bg-white">
             <div className="w-full max-w-[95%] xl:max-w-[1400px] mx-auto relative z-10">
@@ -36,11 +52,11 @@ const Packages: React.FC<PackagesProps> = ({ onRegisterClick }) => {
                             <div className="space-y-5 mb-8 relative z-10">
                                 <div className="flex justify-between items-baseline border-b border-white/10 pb-3">
                                     <span className="text-grey-pearl">Tarjeta (3 cuotas)</span>
-                                    <span className="text-2xl font-bold">$480.000</span>
+                                    <span className="text-2xl font-bold">{loading ? '...' : fmt(priceCombo1Card)}</span>
                                 </div>
                                 <div className="flex justify-between items-baseline border-b border-white/10 pb-3">
                                     <span className="text-celeste-soft font-bold">Efectivo / Transferencia</span>
-                                    <span className="text-3xl font-bold text-celeste-soft">$340.000</span>
+                                    <span className="text-3xl font-bold text-celeste-soft">{loading ? '...' : fmt(priceCombo1Cash)}</span>
                                 </div>
                             </div>
 
@@ -62,11 +78,11 @@ const Packages: React.FC<PackagesProps> = ({ onRegisterClick }) => {
                             <div className="space-y-5 mb-8 relative z-10">
                                 <div className="flex justify-between items-baseline border-b border-white/10 pb-3">
                                     <span className="text-grey-pearl">Tarjeta (3 cuotas)</span>
-                                    <span className="text-2xl font-bold">$790.000</span>
+                                    <span className="text-2xl font-bold">{loading ? '...' : fmt(priceCombo2Card)}</span>
                                 </div>
                                 <div className="flex justify-between items-baseline border-b border-white/10 pb-3">
                                     <span className="text-celeste-soft font-bold">Efectivo / Transferencia</span>
-                                    <span className="text-3xl font-bold text-celeste-soft">$630.000</span>
+                                    <span className="text-3xl font-bold text-celeste-soft">{loading ? '...' : fmt(priceCombo2Cash)}</span>
                                 </div>
                             </div>
 
@@ -82,9 +98,9 @@ const Packages: React.FC<PackagesProps> = ({ onRegisterClick }) => {
                     <h3 className="text-xl font-bold text-center text-black-soft mb-8 uppercase tracking-widest pl-2">Etapas Individuales</h3>
                     <div className="grid md:grid-cols-3 gap-6">
                         {[
-                            { name: 'INICIAL', price: '$190.000', parts: '4 días', desc: 'El despertar.' },
-                            { name: 'AVANZADO', price: '$230.000', parts: '5 días', desc: 'La transformación.' },
-                            { name: 'LIDERAZGO', price: '$350.000', parts: '3 meses', desc: 'La consolidación.' }
+                            { name: 'INICIAL', price: priceInitial, parts: '4 días', desc: 'El despertar.' },
+                            { name: 'AVANZADO', price: priceAdvanced, parts: '5 días', desc: 'La transformación.' },
+                            { name: 'LIDERAZGO', price: priceLeadership, parts: '3 meses', desc: 'La consolidación.' }
                         ].map((pkg, idx) => (
                             <div key={idx} className="bg-sand-light/20 p-8 rounded-[2rem] border border-sand-medium/40 hover:border-celeste-strong/30 hover:bg-sand-light/40 transition-all duration-300 group">
                                 <div className="mb-4">
@@ -93,7 +109,7 @@ const Packages: React.FC<PackagesProps> = ({ onRegisterClick }) => {
                                 </div>
 
                                 <div className="flex flex-col items-start gap-1 mb-4">
-                                    <span className="text-3xl font-bold text-celeste-strong">{pkg.price}</span>
+                                    <span className="text-3xl font-bold text-celeste-strong">{loading ? '...' : fmt(pkg.price)}</span>
                                     <span className="text-xs text-grey-smoke uppercase tracking-wide bg-white px-2 py-1 rounded-md border border-sand-medium/30">{pkg.parts}</span>
                                 </div>
 
@@ -109,6 +125,7 @@ const Packages: React.FC<PackagesProps> = ({ onRegisterClick }) => {
                         ))}
                     </div>
                 </div>
+
 
             </div>
         </section>

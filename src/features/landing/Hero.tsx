@@ -10,17 +10,13 @@ const Hero: React.FC<HeroProps> = ({ onRegisterClick }) => {
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-white">
 
       <div className="container mx-auto px-6 relative z-10 text-center w-full flex flex-col items-center">
-        <div className="inline-block mb-4 px-3 py-1 rounded-full bg-celeste-strong/10 text-celeste-strong text-xs font-bold tracking-widest uppercase animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          Un antes y un después en tu vida
-        </div>
-
-        <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold tracking-tight text-slate-900 mb-8 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-          HOME <br />
-          <span className="text-celeste-strong">Experience</span>
+        <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold tracking-tight text-slate-900 mb-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          EXPERIENCIA <br />
+          <span className="text-celeste-strong">HOME</span>
         </h1>
 
-        <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          Una experiencia inmersiva diseñada para transformar tu liderazgo y conectar con tu propósito más profundo.
+        <p className="text-xl md:text-2xl text-slate-600 max-w-3xl mx-auto mb-12 leading-relaxed animate-fade-in-up font-light" style={{ animationDelay: '0.2s' }}>
+          Procesos de transformación que marcan un antes y un después en tu vida.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>

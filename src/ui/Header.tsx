@@ -4,9 +4,10 @@ import logoHome from '../assets/logo_home.jpg';
 
 interface HeaderProps {
   onLoginClick: () => void;
+  onStartClick: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onLoginClick }) => {
+const Header: React.FC<HeaderProps> = ({ onLoginClick, onStartClick }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -19,10 +20,11 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick }) => {
   }, []);
 
   const navLinks = [
-    { href: '#methodology', label: 'El Viaje' },
-    { href: '#voices', label: 'Voces' },
-    { href: '#pricing', label: 'Planes' },
-    { href: '#location', label: 'Ubicación' },
+    { href: '#coaching', label: 'Coaching' },
+    { href: '#programs', label: 'Programas' },
+    { href: '#retreats', label: 'Retiros' },
+    { href: '#impact', label: 'Impacto' },
+    { href: '#voices', label: 'Testimonios' },
   ];
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -52,7 +54,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick }) => {
         <a href="#home" className="flex items-center gap-3 group" onClick={handleSmoothScroll} data-interactive="true">
           <img src={logoHome} alt="Home Experience" className="w-10 h-10 rounded-full object-cover shadow-sm group-hover:scale-105 transition-transform" />
           <span className="text-xl font-bold tracking-widest text-slate-900">
-            HOME
+            HOME<span className="text-blue-600">.</span>
           </span>
         </a>
 
@@ -80,14 +82,13 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick }) => {
             <span className="text-sm font-medium">Admin</span>
             <UserIcon className="w-5 h-5" />
           </button>
-          <a
-            href="#pricing"
-            onClick={handleSmoothScroll}
-            className="btn-join flex items-center justify-center text-sm px-6 py-2.5" /* Added btn-join and adjusted flex/sizing */
+          <button
+            onClick={onStartClick}
+            className="btn-join flex items-center justify-center text-sm px-6 py-2.5"
             data-interactive="true"
           >
             Empezar
-          </a>
+          </button>
         </div>
 
         {/* Mobile Menu Button */}

@@ -1,125 +1,174 @@
 import React, { useState, useEffect } from 'react';
-import { MockDataService, Registration, CycleEvent } from '../../../services/mockDataService';
 import { supabase } from '../../../services/supabaseClient';
 import ArrowRightIcon from '../../../ui/icons/ArrowRightIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 
+// Types (simplified for this file)
+interface Registration {
+    id: string;
+    name: string;
+    email: string;
+    date: string;
+    status: 'PENDING_REVIEW' | 'PENDING_PAYMENT' | 'APPROVED' | 'DELETED';
+    selectedPackage: string; // "INICIAL", "AVANZADO", "COMBO", etc.
+    answers: { question: string; answer: string }[];
+}
+
+interface Cycle {
+    id: string;
+    name: string;
+    start_date: string;
+    type: string;
+    capacity: number;
+    enrolled_count: number;
+}
+
 const AdminAdmissions: React.FC = () => {
     const [registrations, setRegistrations] = useState<Registration[]>([]);
-    const [cycles, setCycles] = useState<CycleEvent[]>([]);
+    const [cycles, setCycles] = useState<Cycle[]>([]);
     const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'active' | 'trash'>('active');
 
+    // Confirm Modal State
+    const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState('MERCADO_PAGO'); // 'MERCADO_PAGO', 'TRANSFER', 'CASH'
+    const [selectedCycleId, setSelectedCycleId] = useState('');
+    const [selectedCycleId2, setSelectedCycleId2] = useState(''); // For Combos
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     useEffect(() => {
-        const fetchRealData = async () => {
-            // 1. Pedimos las inscripciones a Supabase
-            const { data, error } = await supabase
-                .from('registrations')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (error) {
-                console.error('Error cargando admisiones:', error);
-                return;
-            }
-
-            if (data) {
-                // 2. Transformamos los datos de Supabase a tu formato visual
-                const realRegistrations = data.map((item: any) => ({
-                    id: item.id,
-                    name: item.data.firstName + ' ' + item.data.lastName,
-                    email: item.data.email,
-                    date: new Date(item.created_at).toISOString().split('T')[0],
-                    status: item.status || 'PENDING_REVIEW', // Usamos el estado real
-                    selectedPackage: 'INICIAL', // Default por ahora
-                    answers: [
-                        { question: 'Ciudad', answer: item.data.city || '-' },
-                        { question: 'Teléfono', answer: item.data.phone || '-' },
-                        { question: 'Fecha de Nacimiento', answer: item.data.birthDate || '-' },
-                        { question: 'Intención', answer: item.data.intention || '-' },
-                        { question: 'Alergias', answer: item.data.allergies || '-' },
-                        { question: 'Medicación', answer: item.data.medication || '-' },
-                        { question: 'Bajo Tratamiento', answer: item.data.underTreatment || '-' },
-                        { question: 'Detalles Tratamiento', answer: item.data.treatmentDetails || '-' },
-                        { question: 'Contacto Emergencia', answer: item.data.emergencyName || '-' },
-                        { question: 'Teléfono Emergencia', answer: item.data.emergencyPhone || '-' },
-                        { question: 'Referido Por', answer: item.data.referredBy || '-' },
-                    ]
-                }));
-
-                setRegistrations(realRegistrations);
-            }
-        };
-
-        fetchRealData();
-        // Cargamos los ciclos mockeados por ahora para que no rompa
-        setCycles(MockDataService.getCycles().filter(c => c.status === 'UPCOMING'));
+        fetchRegistrations();
+        fetchCycles();
     }, []);
+
+    const fetchRegistrations = async () => {
+        const { data, error } = await supabase
+            .from('form_submissions')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching registrations:', error);
+            return;
+        }
+
+        if (data) {
+            const realRegistrations = data.map((item: any) => ({
+                id: item.id,
+                name: (item.data.firstName || '') + ' ' + (item.data.lastName || ''),
+                email: item.data.email,
+                date: new Date(item.created_at).toISOString().split('T')[0],
+                status: item.status === 'pending' ? 'PENDING_REVIEW' :
+                    (item.status === 'approved' ? 'PENDING_PAYMENT' :
+                        (item.status === 'enrolled' ? 'APPROVED' : item.status)),
+                selectedPackage: (item.data.intention?.includes('COMBO') ? 'COMBO' : 'INICIAL').toUpperCase(), // Simple logic for now, ideally mapped from form
+                answers: Object.entries(item.data).map(([key, val]) => ({ question: key, answer: String(val) }))
+            }));
+            setRegistrations(realRegistrations);
+        }
+    };
+
+    const fetchCycles = async () => {
+        const { data, error } = await supabase
+            .from('cycles')
+            .select('*')
+            .eq('status', 'active')
+            .order('start_date', { ascending: true });
+
+        if (!error && data) {
+            setCycles(data);
+        }
+    };
+
+    const handleStatusUpdate = async (reg: Registration, newStatus: string) => {
+        // Map UI status back to DB status
+        let dbStatus = 'pending';
+        if (newStatus === 'PENDING_REVIEW') dbStatus = 'pending';
+        if (newStatus === 'PENDING_PAYMENT') dbStatus = 'approved';
+        if (newStatus === 'APPROVED') dbStatus = 'enrolled';
+        if (newStatus === 'DELETED') dbStatus = 'rejected';
+
+        const { error } = await supabase
+            .from('form_submissions')
+            .update({ status: dbStatus })
+            .eq('id', reg.id);
+
+        if (error) {
+            alert('Error updating status');
+        } else {
+            fetchRegistrations();
+            setSelectedRegistration(null);
+        }
+    };
+
+    const handleConfirmEnrollment = async () => {
+        if (!selectedRegistration || !paymentConfirmed || !selectedCycleId) return;
+
+        setIsSubmitting(true);
+        try {
+            // Call RPC function V2
+            const { data, error } = await supabase.rpc('confirm_submission_enrollment', {
+                p_submission_id: selectedRegistration.id,
+                p_cycle_id: selectedCycleId,
+                p_payment_method: paymentMethod,
+                p_is_total_payment: true // Simplified for now
+            });
+
+            if (error) throw error;
+
+            if (data.success) {
+                // Handle Combo (Second Cycle) if needed
+                if (isCombo(selectedRegistration.selectedPackage) && selectedCycleId2) {
+                    const { error: error2 } = await supabase.from('enrollments').insert({
+                        user_id: data.user_id,
+                        cycle_id: selectedCycleId2,
+                        status: 'active',
+                        payment_method: paymentMethod,
+                        is_fully_paid: true
+                    });
+                    if (error2) console.error('Error second enrollment', error2);
+                }
+
+                alert('✅ Alumno confirmado exitosamente!');
+
+                // Enviar Email de Bienvenida
+                const selectedCycle = cycles.find(c => c.id === selectedCycleId);
+                if (selectedCycle) {
+                    supabase.functions.invoke('send-email', {
+                        body: {
+                            type: 'COURSE_WELCOME',
+                            data: {
+                                email: selectedRegistration.email,
+                                firstName: selectedRegistration.name.split(' ')[0],
+                                cycleName: selectedCycle.name,
+                                startDate: selectedCycle.start_date
+                            }
+                        }
+                    }).then(({ error }) => {
+                        if (error) console.error('Error enviando email:', error);
+                    });
+                }
+
+                setIsAssignModalOpen(false);
+                setSelectedRegistration(null);
+                fetchRegistrations();
+            } else {
+                alert('Error en confirmación: ' + (data.error || 'Unknown'));
+            }
+        } catch (err: any) {
+            console.error(err);
+            alert('Error crítico: ' + err.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const isCombo = (pkg: string) => pkg.includes('COMBO') || pkg.includes('+');
 
     const pendingReview = registrations.filter(r => r.status === 'PENDING_REVIEW');
     const pendingPayment = registrations.filter(r => r.status === 'PENDING_PAYMENT');
     const deletedRegistrations = registrations.filter(r => r.status === 'DELETED');
-
-    const handleStatusUpdate = async (reg: Registration, newStatus: string) => {
-        const { error } = await supabase
-            .from('registrations')
-            .update({ status: newStatus })
-            .eq('id', reg.id);
-
-        if (error) {
-            console.error('Error updating status:', error);
-            return;
-        }
-
-        const updated = { ...reg, status: newStatus as any };
-        const newRegs = registrations.map(r => r.id === reg.id ? updated : r);
-        setRegistrations(newRegs);
-        MockDataService.saveRegistrations(newRegs);
-        setSelectedRegistration(null);
-    };
-
-    const handleApprove = (reg: Registration) => handleStatusUpdate(reg, 'PENDING_PAYMENT');
-    const handleDelete = (reg: Registration) => handleStatusUpdate(reg, 'DELETED');
-    const handleRestore = (reg: Registration) => handleStatusUpdate(reg, 'PENDING_REVIEW');
-
-    const handleConfirmPayment = (reg: Registration, cycleId: string) => {
-        // 1. Create Student
-        const cycle = cycles.find(c => c.id === cycleId);
-        if (!cycle) return;
-
-        // Add student via service (we'd need to export addStudent or just use get/save)
-        const students = MockDataService.getStudents();
-        const newStudent = {
-            id: `student_${Date.now()}`,
-            name: reg.name,
-            email: reg.email,
-            phone: '+54 9 ...', // Placeholder
-            pl: Math.floor(Math.random() * 100),
-            cycleId: cycle.id,
-            currentPackage: cycle.level,
-            purchasedPackage: reg.selectedPackage,
-            status: 'ACTIVE' as const,
-            progress: 0,
-            attendance: [false, false, false, false],
-            nextPackageLocked: true,
-            notes: 'Ingresado desde Admisiones'
-        };
-        students.push(newStudent);
-        MockDataService.saveStudents(students);
-
-        // 2. Remove Registration
-        const newRegs = registrations.filter(r => r.id !== reg.id);
-        setRegistrations(newRegs);
-        MockDataService.saveRegistrations(newRegs);
-
-        // 3. Update Cycle Count
-        cycle.enrolledCount++;
-        MockDataService.saveCycles(MockDataService.getCycles().map(c => c.id === cycle.id ? cycle : c));
-
-        setIsAssignModalOpen(false);
-        setSelectedRegistration(null);
-    };
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in-up h-[calc(100vh-200px)]">
@@ -190,7 +239,7 @@ const AdminAdmissions: React.FC = () => {
                             <div key={reg.id} className="bg-white border border-slate-100 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4">
                                 <div>
                                     <h4 className="font-bold text-slate-800">{reg.name}</h4>
-                                    <span className="text-xs font-bold text-emerald-600">Aprobado</span>
+                                    <span className="text-xs font-bold text-emerald-600">Aprobado (Esperando Pago)</span>
                                     <p className="text-xs text-slate-400 mt-1">{reg.selectedPackage}</p>
                                 </div>
                                 <button
@@ -222,7 +271,7 @@ const AdminAdmissions: React.FC = () => {
                             {selectedRegistration.answers.map((qa, idx) => (
                                 <div key={idx}>
                                     <p className="text-xs font-bold text-slate-400 uppercase mb-1">{qa.question}</p>
-                                    <p className="text-slate-700 bg-slate-50 p-3 rounded-lg">{qa.answer}</p>
+                                    <p className="text-slate-700 bg-slate-50 p-3 rounded-lg overflow-auto">{qa.answer}</p>
                                 </div>
                             ))}
                         </div>
@@ -230,18 +279,18 @@ const AdminAdmissions: React.FC = () => {
                             <button onClick={() => setSelectedRegistration(null)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">Cerrar</button>
 
                             {selectedRegistration.status === 'DELETED' ? (
-                                <button onClick={() => handleRestore(selectedRegistration)} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg transition-colors">
+                                <button onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_REVIEW')} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg transition-colors">
                                     Restaurar Solicitud
                                 </button>
                             ) : (
                                 <>
                                     {selectedRegistration.status === 'PENDING_REVIEW' && (
-                                        <button onClick={() => handleDelete(selectedRegistration)} className="px-4 py-2 text-red-500 hover:bg-red-50 font-bold rounded-lg transition-colors border border-transparent hover:border-red-100">
+                                        <button onClick={() => handleStatusUpdate(selectedRegistration, 'DELETED')} className="px-4 py-2 text-red-500 hover:bg-red-50 font-bold rounded-lg transition-colors border border-transparent hover:border-red-100">
                                             Eliminar
                                         </button>
                                     )}
                                     {selectedRegistration.status === 'PENDING_REVIEW' && (
-                                        <button onClick={() => handleApprove(selectedRegistration)} className="px-4 py-2 bg-slate-900 text-white font-bold rounded-lg">
+                                        <button onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_PAYMENT')} className="px-4 py-2 bg-slate-900 text-white font-bold rounded-lg">
                                             Aprobar Solicitud
                                         </button>
                                     )}
@@ -252,30 +301,106 @@ const AdminAdmissions: React.FC = () => {
                 </div>
             )}
 
-            {/* Assignment Modal */}
+            {/* Assignment & Confirmation Modal ("The Brain") */}
             {isAssignModalOpen && selectedRegistration && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setIsAssignModalOpen(false)}>
-                    <div className="bg-white rounded-2xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-xl font-bold text-slate-900 mb-4">Asignar a Ciclo</h3>
-                        <p className="text-sm text-slate-500 mb-6">Selecciona el ciclo para inscribir a <strong>{selectedRegistration.name}</strong>.</p>
+                    <div className="bg-white rounded-2xl max-w-lg w-full p-6" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-xl font-bold text-slate-900 mb-2">Confirmar Alumno</h3>
+                        <p className="text-sm text-slate-500 mb-6">Verifica el pago y asigna las fechas de cursada para <strong>{selectedRegistration.name}</strong>.</p>
 
-                        <div className="space-y-2 mb-6 max-h-[40vh] overflow-y-auto">
-                            {cycles.map(cycle => (
-                                <button
-                                    key={cycle.id}
-                                    onClick={() => handleConfirmPayment(selectedRegistration, cycle.id)}
-                                    className="w-full p-3 border border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
-                                >
-                                    <div className="flex justify-between items-center">
-                                        <span className="font-bold text-slate-800">{cycle.level}</span>
-                                        <span className="text-xs bg-white border px-2 py-1 rounded">{cycle.startDate}</span>
+                        <div className="space-y-6">
+                            {/* 1. Payment Verification */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h4 className="font-bold text-sm text-slate-700 mb-3 uppercase tracking-wider">1. Verificación de Pago</h4>
+                                <div className="space-y-3">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={paymentConfirmed}
+                                            onChange={e => setPaymentConfirmed(e.target.checked)}
+                                            className="w-5 h-5 text-emerald-500 rounded focus:ring-emerald-500"
+                                        />
+                                        <span className="font-medium text-slate-700">Confirmar recepción del pago</span>
+                                    </label>
+
+                                    {paymentConfirmed && (
+                                        <div className="animate-fade-in">
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">Método de Pago</label>
+                                            <select
+                                                value={paymentMethod}
+                                                onChange={e => setPaymentMethod(e.target.value)}
+                                                className="w-full p-2 border rounded-lg text-sm bg-white"
+                                            >
+                                                <option value="MERCADO_PAGO">Mercado Pago (Tarjeta/Link)</option>
+                                                <option value="TRANSFER">Transferencia Bancaria</option>
+                                                <option value="CASH">Efectivo</option>
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 2. Cycle Assignment */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h4 className="font-bold text-sm text-slate-700 mb-3 uppercase tracking-wider">2. Asignación de Fechas</h4>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">
+                                            {isCombo(selectedRegistration.selectedPackage) ? 'Ciclo Inicial (1º Parte)' : 'Seleccionar Ciclo'}
+                                        </label>
+                                        <select
+                                            value={selectedCycleId}
+                                            onChange={e => setSelectedCycleId(e.target.value)}
+                                            className="w-full p-2 border rounded-lg text-sm bg-white"
+                                        >
+                                            <option value="">-- Seleccionar Fecha --</option>
+                                            {cycles.filter(c => !isCombo(selectedRegistration.selectedPackage) || c.type === 'initial').map(cycle => (
+                                                <option key={cycle.id} value={cycle.id}>
+                                                    {cycle.name} ({cycle.start_date}) - {cycle.enrolled_count}/{cycle.capacity}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-1">{cycle.enrolledCount} / {cycle.capacity} cupos ocupados</p>
-                                </button>
-                            ))}
+
+                                    {/* Combo Logic */}
+                                    {isCombo(selectedRegistration.selectedPackage) && (
+                                        <div className="animate-fade-in">
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">Ciclo Avanzado (2º Parte)</label>
+                                            <select
+                                                value={selectedCycleId2}
+                                                onChange={e => setSelectedCycleId2(e.target.value)}
+                                                className="w-full p-2 border rounded-lg text-sm bg-white"
+                                            >
+                                                <option value="">-- A definir / Pendiente --</option>
+                                                {cycles.filter(c => c.type === 'advanced').map(cycle => (
+                                                    <option key={cycle.id} value={cycle.id}>
+                                                        {cycle.name} ({cycle.start_date})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
 
-                        <button onClick={() => setIsAssignModalOpen(false)} className="w-full py-3 text-slate-500 font-bold">Cancelar</button>
+                        <div className="flex gap-3 mt-8">
+                            <button
+                                onClick={() => setIsAssignModalOpen(false)}
+                                className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl"
+                                disabled={isSubmitting}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmEnrollment}
+                                disabled={!paymentConfirmed || !selectedCycleId || isSubmitting}
+                                className={`flex-1 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg shadow-blue-900/10 transition-all ${(!paymentConfirmed || !selectedCycleId) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] hover:bg-slate-800'}`}
+                            >
+                                {isSubmitting ? 'Procesando...' : 'CONFIRMAR ALUMNO'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

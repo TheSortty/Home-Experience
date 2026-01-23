@@ -443,6 +443,8 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [errors, setErrors] = useState<Record<string, boolean>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isLoadingSchema, setIsLoadingSchema] = useState(false);
+    const [formId, setFormId] = useState<string | null>(null);
 
     // Modals
     const [showTerms, setShowTerms] = useState(false);
@@ -453,29 +455,43 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
 
     // --- Init ---
     useEffect(() => {
-        const FORM_VERSION = 'v3'; // Increment to force reset
-        const storedVersion = localStorage.getItem('form_version');
-
-        if (storedVersion !== FORM_VERSION) {
-            console.log('Resetting form fields to new version...');
-            localStorage.removeItem('home_form_fields');
-            localStorage.setItem('form_version', FORM_VERSION);
-        }
-
-        const loadedFields = MockDatabase.getFormFields();
-        setFields(loadedFields);
-
-        // Initialize data only for keys that don't exist
-        setFormData(prev => {
-            const initialData = { ...prev };
-            loadedFields.forEach(field => {
-                if (initialData[field.id] === undefined) {
-                    initialData[field.id] = '';
-                }
-            });
-            return initialData;
-        });
+        fetchFormSchema();
     }, []);
+
+    const fetchFormSchema = async () => {
+        setIsLoadingSchema(true);
+        try {
+            const { data, error } = await supabase
+                .from('forms')
+                .select('id, schema')
+                .eq('slug', 'inscripcion-creser')
+                .single();
+
+            if (data && data.schema) {
+                const schema = Array.isArray(data.schema) ? data.schema : JSON.parse(data.schema);
+                setFields(schema);
+                setFormId(data.id);
+
+                // Initialize data for new fields
+                setFormData(prev => {
+                    const initialData = { ...prev };
+                    schema.forEach((field: FormField) => {
+                        if (initialData[field.id] === undefined) {
+                            initialData[field.id] = '';
+                        }
+                    });
+                    return initialData;
+                });
+            }
+        } catch (err) {
+            console.error('Error fetching form schema:', err);
+            // Fallback to mock if database fails
+            const loadedFields = MockDatabase.getFormFields();
+            setFields(loadedFields);
+        } finally {
+            setIsLoadingSchema(false);
+        }
+    };
 
     // --- Helpers ---
     const scrollToTop = () => {
@@ -484,7 +500,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
 
     const getStepProgress = () => {
         const index = STEPS_ORDER.indexOf(currentStep);
-        const total = STEPS_ORDER.length - 1; // Exclude 'success' ideally, or keep it
+        const total = STEPS_ORDER.length - 1;
         return Math.min(100, Math.round((index / total) * 100));
     };
 
@@ -552,10 +568,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
 
         // Specific Medical Check
         if (section === 'medical') {
-            // honestDeclaration is handled by the generic loop above if it exists in fields.
-            // Removing hardcoded check to avoid "invisible field" blocking bug.
-
-            // Detail fields validation if visible (Safety check, though generic loop is better)
             const details = [
                 'underTreatmentDetails', 'chronicDiseaseDetails', 'medicationDetails',
                 'allergiesDetails', 'psychiatricTreatmentDetails', 'drugConsumptionDetails'
@@ -570,7 +582,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
 
         if (!isValid) {
             setErrors(newErrors);
-            // Scroll to first error
             const firstErrorId = Object.keys(newErrors)[0];
             const el = document.getElementById(firstErrorId);
             if (el) {
@@ -578,7 +589,6 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
             } else {
                 scrollToTop();
             }
-            // Explicit feedback for user
             alert(`Faltan completar campos obligatorios en esta sección (${section}). Por favor revisa las opciones marcadas en rojo.`);
         }
 
@@ -608,7 +618,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
             setCurrentStep(STEPS_ORDER[currIndex - 1]);
             scrollToTop();
         } else {
-            onBack(); // Exit if at start
+            onBack();
         }
     };
 
@@ -617,14 +627,20 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
         setIsSubmitting(true);
 
         try {
+            // Submit to form_submissions table
             const { data, error } = await supabase
-                .from('registrations')
-                .insert([{ data: formData, status: 'PENDING_REVIEW' }])
+                .from('form_submissions')
+                .insert([{
+                    form_id: formId,
+                    data: formData,
+                    status: 'pending'
+                }])
                 .select()
                 .single();
 
             if (error) throw error;
 
+            // Optional: send email notification
             await supabase.functions.invoke('send-email', { body: { record: data } });
 
             setCurrentStep('success');

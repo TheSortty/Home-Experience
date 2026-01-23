@@ -26,8 +26,29 @@ const Location: React.FC = () => {
               Un lugar para encontrarte.
             </h2>
             <p className="text-xl text-slate-600 leading-loose mb-8 font-light">
-              Nuestros encuentros se realizan en un espacio diseñado para la calma, el silencio y la introspección. Un refugio en medio de la ciudad donde el tiempo se detiene.
+              Ubicado en el emblemático Pasaje Belgrano, un refugio de silencio y arquitectura histórica en pleno centro porteño. Nuestros encuentros se realizan en un espacio diseñado para la pausa y la introspección.
             </p>
+
+            <div className="space-y-4 mb-8">
+              <div className="flex items-start gap-4">
+                <div className="mt-1 w-8 h-8 rounded-lg bg-celeste-strong/10 flex items-center justify-center text-celeste-strong flex-shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6v6" /><path d="M15 6v6" /><path d="M2 12h19.6" /><path d="M18 18h3s1-1 1-2V7a3 3 0 0 0-3-3H5a3 3 0 0 0-3 3v8c0 1 1 2 1 2h3" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></svg>
+                </div>
+                <div>
+                  <p className="font-bold text-slate-800 text-sm">Colectivos</p>
+                  <p className="text-slate-500 text-xs leading-relaxed">7, 8, 10, 22, 24, 28, 29, 33, 50, 56, 62, 64, 86, 91, 103, 105, 111, 126, 130, 143, 146, 152</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="mt-1 w-8 h-8 rounded-lg bg-celeste-strong/10 flex items-center justify-center text-celeste-strong flex-shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="16" height="16" x="4" y="2" rx="2" /><path d="M4 18h16" /><path d="M8 22l-2-4" /><path d="M16 22l2-4" /><path d="M12 2v16" /></svg>
+                </div>
+                <div>
+                  <p className="font-bold text-slate-800 text-sm">Subte</p>
+                  <p className="text-slate-500 text-xs leading-relaxed">Línea A (Piedras), Línea E (Bolívar/Belgrano)</p>
+                </div>
+              </div>
+            </div>
 
             <div className="inline-block bg-white p-8 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-slate-100 max-w-sm">
               <div className="flex items-center mb-4">

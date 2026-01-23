@@ -6,18 +6,9 @@ import 'swiper/css/effect-cards';
 import { ElegantArrowIcon } from './decorations/ElegantDecorations'; // Added Icon Import
 
 import './MomentsSwiper.css';
-
 import VideoModal from '../../ui/VideoModal';
 
 const facilitators = [
-    {
-        id: 1,
-        name: 'Mariano',
-        image: '/images/facilitators/maru.jpg', // Swapped: Was mariano.jpg
-        title: 'Guía Espiritual',
-        description: '"El viaje hacia adentro es el único que verdaderamente transforma." Mariano te acompañará a descubrir tu propia verdad con herramientas profundas de autoconocimiento.',
-        videoUrl: 'https://www.youtube.com/watch?v=F-yPgKcgIsw' // Placeholder
-    },
     {
         id: 2,
         name: 'Maga',
@@ -27,9 +18,25 @@ const facilitators = [
         videoUrl: 'https://www.youtube.com/watch?v=F-yPgKcgIsw' // Placeholder
     },
     {
+        id: 1,
+        name: 'Mariano',
+        image: '/images/facilitators/mariano.jpg',
+        title: 'Guía Espiritual',
+        description: '"El viaje hacia adentro es el único que verdaderamente transforma." Mariano te acompañará a descubrir tu propia verdad con herramientas profundas de autoconocimiento.',
+        videoUrl: 'https://www.youtube.com/watch?v=F-yPgKcgIsw' // Placeholder
+    },
+    {
+        id: 4,
+        name: 'Vivi',
+        image: '/images/facilitators/vivi.jpg',
+        title: 'Facilitadora de Procesos',
+        description: '"Integrar la experiencia es lo que permite que el cambio sea permanente." Vivi te acompañará a consolidar tu transformación con presencia y calidez.',
+        videoUrl: 'https://www.youtube.com/watch?v=F-yPgKcgIsw' // Placeholder
+    },
+    {
         id: 3,
         name: 'Maru',
-        image: '/images/facilitators/mariano.jpg', // Swapped: Was maru.jpg
+        image: '/images/facilitators/maru.jpg',
         title: 'Guardiana del Corazón',
         description: '"Amarse a uno mismo es el comienzo de un romance eterno." Maru crea un espacio seguro donde la vulnerabilidad se convierte en tu mayor fortaleza.',
         videoUrl: 'https://www.youtube.com/watch?v=F-yPgKcgIsw' // Placeholder
