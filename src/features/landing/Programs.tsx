@@ -10,7 +10,7 @@ const programs = [
         purpose: 'Desarrollar responsabilidad personal, autoconocimiento y una nueva forma de relacionarse con los desafíos de la vida obteniendo resultados extraordinarios.',
         target: 'A personas que sienten que quieren un cambio tangible con resultados sólidos, que están dispuestas a mirarse, desafiarse y asumir un rol activo en la creación de su vida.',
         extra: '(*) Mayores de 18 años',
-        image: '/images/IMAGENES WEB/DSC01681.jpg', // Was Vincularte
+        image: '/images/programs/creser.jpg', // Was Vincularte
         color: '#00A3E0', // Celeste
     },
     {
@@ -21,7 +21,7 @@ const programs = [
         target: 'A personas que desean mejorar la calidad de sus relaciones personales, familiares, laborales o afectivas.',
         duration: '2 meses y medio',
         modality: 'Presencial u Online',
-        image: '/images/IMAGENES WEB/DSC01212.jpg', // Was CreSER
+        image: '/images/programs/vincularte.jpg', // Was CreSER
         color: '#003358', // Dark Blue
     },
     {
@@ -32,7 +32,7 @@ const programs = [
         target: 'A personas que buscan un proceso de crecimiento consciente, sostenido en el tiempo y aplicable a su vida cotidiana.',
         duration: '2 meses - 8 encuentros semanales',
         modality: 'Online o Presencial',
-        image: '/images/IMAGENES WEB/DSC01967.jpg', // Was Coaching Org
+        image: '/images/programs/evolucion.jpg', // Was Coaching Org
         color: '#005596', // Blue
     }
 ];

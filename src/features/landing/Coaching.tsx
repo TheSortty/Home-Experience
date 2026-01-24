@@ -53,7 +53,7 @@ const Coaching: React.FC = () => {
                         </div>
                     </div>
                     <div className="order-1 md:order-2 relative aspect-square rounded-3xl overflow-hidden shadow-2xl">
-                        <img src="/images/IMAGENES WEB/DSC01431.jpg" alt="Coaching Individual" className="w-full h-full object-cover" />
+                        <img src="/images/coaching/individual.jpg" alt="Coaching Individual" className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
                     </div>
                 </div>
@@ -62,7 +62,7 @@ const Coaching: React.FC = () => {
                 <div className="mb-32">
                     <div className="grid md:grid-cols-2 gap-16 items-center mb-16">
                         <div className="relative aspect-video rounded-3xl overflow-hidden shadow-2xl">
-                            <img src="/images/IMAGENES WEB/DSC01509.jpg" alt="Coaching Organizacional" className="w-full h-full object-cover" />
+                            <img src="/images/coaching/organizacional.jpg" alt="Coaching Organizacional" className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
                         </div>
                         <div>

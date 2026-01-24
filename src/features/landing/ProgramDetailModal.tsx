@@ -29,21 +29,21 @@ const PROGRAM_DETAILS: Record<string, ProgramDetail> = {
                 title: "1. Sembrar el Ser",
                 description: "En la quietud de la tierra fértil, plantamos la intención más pura. No es solo crecer, es florecer desde la esencia, rompiendo etiquetas para tocar el cielo con raíces profundas.",
                 quote: "Tu verdad florece desde adentro.",
-                image: "/images/etapa1.jpg"
+                image: "/images/steps/step_1.jpg"
             },
             {
                 id: 2,
                 title: "2. El Espejo del Nombre",
                 description: "Más allá de las formas, nos encontramos en la mirada del otro. Un nombre no es solo un sonido, es el mantra que nos ancla al presente y nos abre la puerta a la pertenencia.",
                 quote: "Reconocerse es el primer acto de amor.",
-                image: "/images/etapa2.jpg"
+                image: "/images/steps/step_2.jpg"
             },
             {
                 id: 3,
                 title: "3. El Calor del Encuentro",
                 description: "El ritual sagrado de compartir. Donde el tiempo se detiene y las almas conversan sin prisa, mano a mano, tejiendo la red invisible que nos sostiene a todos.",
                 quote: "En cada gesto, somos uno.",
-                image: "/images/etapa3.jpg"
+                image: "/images/steps/step_3.jpg"
             }
         ]
     },
@@ -58,14 +58,14 @@ const PROGRAM_DETAILS: Record<string, ProgramDetail> = {
                 title: "1. Despertar",
                 description: "Observar los patrones que nos limitan y empezar a ver lo que antes era invisible. Un salto hacia la lucidez.",
                 quote: "El primer paso es ver.",
-                image: "/images/IMAGENES WEB/DSC01510.jpg"
+                image: "/images/programs/placeholder.jpg"
             },
             {
                 id: 2,
                 title: "2. Alquimia",
                 description: "Transformar el lenguaje y las emociones para crear una nueva realidad. Rediseñando el SER.",
                 quote: "Tus palabras crean mundos.",
-                image: "/images/IMAGENES WEB/DSC01681.jpg"
+                image: "/images/programs/creser.jpg"
             }
         ]
     },
@@ -80,14 +80,14 @@ const PROGRAM_DETAILS: Record<string, ProgramDetail> = {
                 title: "1. Conexión",
                 description: "Entender que somos en relación. Sanar el vínculo con uno mismo para abrirse genuinamente al otro.",
                 quote: "Soy porque somos.",
-                image: "/images/IMAGENES WEB/DSC01212.jpg"
+                image: "/images/programs/vincularte.jpg"
             },
             {
                 id: 2,
                 title: "2. 共鳴 (Resonancia)",
                 description: "Crear sintonía y empatía profunda. Escuchar lo que no se dice y hablar desde el corazón.",
                 quote: "Escuchar es un acto sagrado.",
-                image: "/images/IMAGENES WEB/DSC01947.jpg"
+                image: "/images/impact/social.jpg"
             }
         ]
     }
