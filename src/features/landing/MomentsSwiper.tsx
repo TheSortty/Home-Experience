@@ -124,7 +124,7 @@ const MomentsSwiper: React.FC = () => {
                     >
                         {facilitators.map((person) => (
                             <SwiperSlide key={person.id} className="relative group cursor-pointer" onClick={() => handlePlayClick(person.videoUrl)}>
-                                <img src={person.image} alt={person.name} />
+                                <img src={person.image} alt={person.name} loading="lazy" />
                                 <div className="slide-overlay transition-opacity duration-300">
                                     {/* Play Button Overlay - Simplified/Removed text per request */}
                                     <div className="absolute inset-0 flex items-center justify-center z-20 opacity-0 group-hover:opacity-100 transition-all duration-300 bg-black/10">

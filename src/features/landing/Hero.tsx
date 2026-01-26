@@ -5,7 +5,7 @@ interface HeroProps {
   onRegisterClick?: () => void;
 }
 
-const Hero: React.FC<HeroProps> = ({ onRegisterClick }) => {
+const Hero: React.FC<HeroProps> = React.memo(({ onRegisterClick }) => {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-white">
 
@@ -42,6 +42,6 @@ const Hero: React.FC<HeroProps> = ({ onRegisterClick }) => {
       </div>
     </section>
   );
-};
+});
 
 export default Hero;

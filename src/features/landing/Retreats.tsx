@@ -1,11 +1,11 @@
 import React from 'react';
 
-const Retreats: React.FC = () => {
+const Retreats: React.FC = React.memo(() => {
     return (
         <section id="retreats" className="py-32 bg-slate-50 text-slate-900 overflow-hidden relative">
             {/* Background decoration */}
             <div className="absolute top-0 right-0 w-1/2 h-full opacity-10 pointer-events-none">
-                <img src="/images/retreats/patagonia.jpg" alt="" className="w-full h-full object-cover grayscale" />
+                <img src="/images/retreats/patagonia.jpg" alt="" className="w-full h-full object-cover grayscale" loading="lazy" />
             </div>
 
             <div className="container mx-auto px-6 relative z-10">
@@ -23,7 +23,7 @@ const Retreats: React.FC = () => {
                     {/* Retiro 2025 */}
                     <div className="group">
                         <div className="aspect-[16/10] rounded-[2rem] overflow-hidden mb-8 shadow-2xl relative">
-                            <img src="/images/retreats/patagonia.jpg" alt="Retiro San Martín de los Andes" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                            <img src="/images/retreats/patagonia.jpg" alt="Retiro San Martín de los Andes" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
                             <div className="absolute top-6 left-6 bg-celeste-strong text-white text-xs font-bold px-4 py-2 rounded-full uppercase tracking-widest">
                                 Próximo retiro
                             </div>
@@ -38,7 +38,7 @@ const Retreats: React.FC = () => {
                     {/* Retiro 2024 */}
                     <div className="group lg:mt-24">
                         <div className="aspect-[16/10] rounded-[2rem] overflow-hidden mb-8 shadow-2xl relative">
-                            <img src="/images/retreats/uruguay.jpg" alt="Retiro Uruguay" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-80" />
+                            <img src="/images/retreats/uruguay.jpg" alt="Retiro Uruguay" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-80" loading="lazy" />
                             <div className="absolute top-6 left-6 bg-slate-700 text-white text-xs font-bold px-4 py-2 rounded-full uppercase tracking-widest">
                                 Finalizado
                             </div>
@@ -53,6 +53,6 @@ const Retreats: React.FC = () => {
             </div>
         </section>
     );
-};
+});
 
 export default Retreats;

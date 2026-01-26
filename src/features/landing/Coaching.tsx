@@ -11,7 +11,7 @@ const logos = [
     { name: 'RABADON CAPITAL', url: 'https://via.placeholder.com/150?text=RABADON+CAPITAL' },
 ];
 
-const Coaching: React.FC = () => {
+const Coaching: React.FC = React.memo(() => {
     return (
         <section id="coaching" className="py-24 bg-transparent overflow-hidden">
             <div className="container mx-auto px-6">
@@ -53,7 +53,7 @@ const Coaching: React.FC = () => {
                         </div>
                     </div>
                     <div className="order-1 md:order-2 relative aspect-square rounded-3xl overflow-hidden shadow-2xl">
-                        <img src="/images/coaching/individual.jpg" alt="Coaching Individual" className="w-full h-full object-cover" />
+                        <img src="/images/coaching/individual.jpg" alt="Coaching Individual" className="w-full h-full object-cover" loading="lazy" />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
                     </div>
                 </div>
@@ -62,7 +62,7 @@ const Coaching: React.FC = () => {
                 <div className="mb-32">
                     <div className="grid md:grid-cols-2 gap-16 items-center mb-16">
                         <div className="relative aspect-video rounded-3xl overflow-hidden shadow-2xl">
-                            <img src="/images/coaching/organizacional.jpg" alt="Coaching Organizacional" className="w-full h-full object-cover" />
+                            <img src="/images/coaching/organizacional.jpg" alt="Coaching Organizacional" className="w-full h-full object-cover" loading="lazy" />
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
                         </div>
                         <div>
@@ -135,6 +135,6 @@ const Coaching: React.FC = () => {
             </div>
         </section>
     );
-};
+});
 
 export default Coaching;

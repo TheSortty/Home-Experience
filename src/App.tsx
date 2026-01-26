@@ -6,29 +6,33 @@ import Footer from './ui/Footer';
 import TestimonialModal from './ui/TestimonialModal';
 import { Testimonial } from './core/types';
 
-// Landing Features
-import Hero from './features/landing/Hero';
-import WhoWeAre from './features/landing/WhoWeAre';
-import Coaching from './features/landing/Coaching';
-import Programs from './features/landing/Programs';
-import Retreats from './features/landing/Retreats';
-import Impact from './features/landing/Impact';
-import ProgramDetailModal from './features/landing/ProgramDetailModal';
-import ProgramSelectionModal from './features/landing/ProgramSelectionModal';
-import MomentsSwiper from './features/landing/MomentsSwiper';
-import Testimonials from './features/landing/Testimonials';
-import About from './features/landing/About';
-import Contact from './features/landing/Contact';
+// Landing Features (Lazy Loaded)
+const Hero = lazy(() => import('./features/landing/Hero'));
+const WhoWeAre = lazy(() => import('./features/landing/WhoWeAre'));
+const Coaching = lazy(() => import('./features/landing/Coaching'));
+const Programs = lazy(() => import('./features/landing/Programs'));
+const Retreats = lazy(() => import('./features/landing/Retreats'));
+const Impact = lazy(() => import('./features/landing/Impact'));
+const MomentsSwiper = lazy(() => import('./features/landing/MomentsSwiper'));
+const Testimonials = lazy(() => import('./features/landing/Testimonials'));
+const About = lazy(() => import('./features/landing/About'));
+const Contact = lazy(() => import('./features/landing/Contact'));
 
 // Utility & Decorative Landing Features
-import VideoSection from './features/landing/VideoSection';
-import IconWave from './features/landing/IconWave';
-import InteractivePoints from './features/landing/InteractivePoints';
-import Packages from './features/landing/Packages';
-import Location from './features/landing/Location';
+const VideoSection = lazy(() => import('./features/landing/VideoSection'));
+const InteractivePoints = lazy(() => import('./features/landing/InteractivePoints'));
+const Location = lazy(() => import('./features/landing/Location'));
+
+// Essential UI and Modals
+import ProgramDetailModal from './features/landing/ProgramDetailModal';
+import ProgramSelectionModal from './features/landing/ProgramSelectionModal';
 import InteractiveBg from './features/landing/InteractiveBg';
 import { FloatingShapes } from './features/landing/decorations/FloatingShapes';
 import { ElegantDecorations } from './features/landing/decorations/ElegantDecorations';
+
+// Essential UI (Static)
+import IconWave from './features/landing/IconWave';
+import Packages from './features/landing/Packages';
 
 // Lazy Loaded Features
 const Login = lazy(() => import('./features/auth/Login'));
@@ -36,6 +40,8 @@ const RegistrationForm = lazy(() => import('./features/auth/RegistrationForm'));
 const AdminDashboard = lazy(() => import('./features/dashboard/AdminDashboard'));
 const AddTestimonial = lazy(() => import('./features/dashboard/AddTestimonial'));
 const TestimonialListModal = lazy(() => import('./ui/TestimonialListModal'));
+const ProgramDetailModalLazy = lazy(() => import('./features/landing/ProgramDetailModal'));
+const ProgramSelectionModalLazy = lazy(() => import('./features/landing/ProgramSelectionModal'));
 
 type ViewState = 'landing' | 'login' | 'dashboard' | 'register';
 
@@ -57,19 +63,30 @@ const App: React.FC = () => {
   const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
 
-  // Navigation Handlers
-  const handleLoginClick = () => setCurrentView('login');
-  const handleLoginSuccess = () => setCurrentView('dashboard');
-  const handleBackToHome = () => setCurrentView('landing');
-  const handleLogout = () => setCurrentView('landing');
+  // Navigation Handlers (Memoized)
+  const handleLoginClick = React.useCallback(() => setCurrentView('login'), []);
+  const handleLoginSuccess = React.useCallback(() => setCurrentView('dashboard'), []);
+  const handleBackToHome = React.useCallback(() => setCurrentView('landing'), []);
+  const handleLogout = React.useCallback(() => setCurrentView('landing'), []);
 
-  const handleRegisterClick = () => {
+  const handleRegisterClick = React.useCallback(() => {
     setCurrentView('register');
     setIsSelectionModalOpen(false);
     setSelectedProgramId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  const handleRegisterTest = () => setCurrentView('register');
+  }, []);
+
+  const handleRegisterTest = React.useCallback(() => setCurrentView('register'), []);
+
+  const handleOpenSelection = React.useCallback(() => setIsSelectionModalOpen(true), []);
+  const handleCloseSelection = React.useCallback(() => setIsSelectionModalOpen(false), []);
+  const handleSelectProgram = React.useCallback((id: string) => {
+    setIsSelectionModalOpen(false);
+    setSelectedProgramId(id);
+  }, []);
+  const handleCloseDetail = React.useCallback(() => setSelectedProgramId(null), []);
+  const handleViewAllTestimonials = React.useCallback(() => setIsViewAllTestimonialsOpen(true), []);
+  const handleCloseAllTestimonials = React.useCallback(() => setIsViewAllTestimonialsOpen(false), []);
 
   // Body Scroll Lock
   useEffect(() => {
@@ -90,15 +107,29 @@ const App: React.FC = () => {
         if (entry.isIntersecting) {
           entry.target.classList.add('animate-fade-in-up');
           entry.target.classList.remove('opacity-0');
+          // Once animated, we don't need to observe anymore
+          observer.unobserve(entry.target);
         }
       });
-    }, { threshold: 0.1 });
+    }, { threshold: 0.1, rootMargin: '50px' });
 
-    const animatedElements = document.querySelectorAll('.reveal-on-scroll');
-    animatedElements.forEach(el => observer.observe(el));
+    // Function to observe elements
+    const observeElements = () => {
+      const animatedElements = document.querySelectorAll('.reveal-on-scroll');
+      animatedElements.forEach(el => observer.observe(el));
+    };
 
-    return () => observer.disconnect();
-  }, [currentView]);
+    // Initial observation
+    observeElements();
+
+    // Re-scan after a short delay to catch lazy-loaded components
+    const timeoutId = setTimeout(observeElements, 1000);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeoutId);
+    };
+  }, [currentView, isSelectionModalOpen, selectedProgramId]);
 
   if (currentView === 'login') {
     return (
@@ -134,75 +165,77 @@ const App: React.FC = () => {
         {!(isSelectionModalOpen || selectedProgramId) && (
           <div className="fixed top-0 left-0 right-0 z-[9999] flex flex-col">
             <DemoBanner />
-            <Header onLoginClick={() => setCurrentView('login')} onStartClick={() => setIsSelectionModalOpen(true)} />
+            <Header onLoginClick={handleLoginClick} onStartClick={handleOpenSelection} />
           </div>
         )}
 
-        <main>
-          {/* 1. EXPERIENCIA HOME (Hero) */}
-          <div className="reveal-on-scroll opacity-0">
-            <Hero onRegisterClick={() => setIsSelectionModalOpen(true)} />
-          </div>
+        <Suspense fallback={<LoadingFallback />}>
+          <main>
+            {/* 1. EXPERIENCIA HOME (Hero) */}
+            <div className="reveal-on-scroll">
+              <Hero onRegisterClick={handleOpenSelection} />
+            </div>
 
-          {/* 2. VIDEO HIGHLIGHT */}
-          <div className="reveal-on-scroll opacity-0">
-            <VideoSection />
-          </div>
+            {/* 2. VIDEO HIGHLIGHT */}
+            <div className="reveal-on-scroll">
+              <VideoSection />
+            </div>
 
-          {/* 3. QUIENES SOMOS */}
-          <div className="reveal-on-scroll opacity-0">
-            <WhoWeAre onConfioClick={() => { }} />
-          </div>
+            {/* 3. QUIENES SOMOS */}
+            <div className="reveal-on-scroll">
+              <WhoWeAre onConfioClick={() => { }} />
+            </div>
 
-          {/* 4. COACHING */}
-          <div className="reveal-on-scroll opacity-0">
-            <Coaching />
-          </div>
+            {/* 4. COACHING */}
+            <div className="reveal-on-scroll">
+              <Coaching />
+            </div>
 
-          {/* 5. PROGRAMAS */}
-          <div className="reveal-on-scroll opacity-0">
-            <Programs onLearnMore={(id) => setSelectedProgramId(id)} />
-          </div>
+            {/* 5. PROGRAMAS */}
+            <div className="reveal-on-scroll">
+              <Programs onLearnMore={(id) => setSelectedProgramId(id)} />
+            </div>
 
-          {/* 6. VIAJES & RETIROS (User requested no changes here) */}
-          <div className="reveal-on-scroll opacity-0">
-            <Retreats />
-          </div>
+            {/* 6. VIAJES & RETIROS */}
+            <div className="reveal-on-scroll">
+              <Retreats />
+            </div>
 
-          {/* Interactive/Logic Carousels (Swiper) */}
-          <div className="reveal-on-scroll opacity-0">
-            <MomentsSwiper />
-          </div>
+            {/* Interactive/Logic Carousels (Swiper) */}
+            <div className="reveal-on-scroll">
+              <MomentsSwiper />
+            </div>
 
-          {/* 7. TESTIMONIOS */}
-          <div className="relative reveal-on-scroll opacity-0">
-            <InteractivePoints />
-            <div className="relative z-10 pointer-events-none">
-              <div className="pointer-events-auto">
-                <Testimonials
-                  onTestimonialClick={setSelectedTestimonial}
-                  onViewAllClick={() => setIsViewAllTestimonialsOpen(true)}
-                />
+            {/* 7. TESTIMONIOS */}
+            <div className="relative reveal-on-scroll">
+              <InteractivePoints />
+              <div className="relative z-10 pointer-events-none">
+                <div className="pointer-events-auto">
+                  <Testimonials
+                    onTestimonialClick={setSelectedTestimonial}
+                    onViewAllClick={handleViewAllTestimonials}
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* 8. IMPACTOS */}
-          <div className="reveal-on-scroll opacity-0">
-            <Impact />
-          </div>
+            {/* 8. IMPACTOS */}
+            <div className="reveal-on-scroll">
+              <Impact />
+            </div>
 
-          {/* 9. UBICACIÓN (Moved here as requested: "arriba de contacto") */}
-          <div className="reveal-on-scroll opacity-0">
-            <Location />
-          </div>
+            {/* 9. UBICACIÓN */}
+            <div className="reveal-on-scroll">
+              <Location />
+            </div>
 
-          {/* 10. CONTACTO & Footer */}
-          <div className="bg-white pt-20 reveal-on-scroll opacity-0">
-            <Contact />
-            <Footer onEasterEggClick={() => { }} />
-          </div>
-        </main>
+            {/* 10. CONTACTO & Footer */}
+            <div className="bg-white pt-20 reveal-on-scroll">
+              <Contact />
+              <Footer onEasterEggClick={() => { }} />
+            </div>
+          </main>
+        </Suspense>
 
         {/* Modals */}
         <TestimonialModal
@@ -212,7 +245,7 @@ const App: React.FC = () => {
         <Suspense fallback={null}>
           <TestimonialListModal
             isVisible={isViewAllTestimonialsOpen}
-            onClose={() => setIsViewAllTestimonialsOpen(false)}
+            onClose={handleCloseAllTestimonials}
             onTestimonialClick={(t) => {
               setIsViewAllTestimonialsOpen(false);
               setSelectedTestimonial(t);
@@ -220,25 +253,24 @@ const App: React.FC = () => {
           />
         </Suspense>
 
-        {/* Program Modals */}
-        {isSelectionModalOpen && (
-          <ProgramSelectionModal
-            onClose={() => setIsSelectionModalOpen(false)}
-            onSelectProgram={(id) => {
-              setIsSelectionModalOpen(false);
-              setSelectedProgramId(id);
-            }}
-            onStartRegistration={handleRegisterClick}
-          />
-        )}
+        {/* Program Modals (Suspense Loaded) */}
+        <Suspense fallback={null}>
+          {isSelectionModalOpen && (
+            <ProgramSelectionModalLazy
+              onClose={handleCloseSelection}
+              onSelectProgram={handleSelectProgram}
+              onStartRegistration={handleRegisterClick}
+            />
+          )}
 
-        {selectedProgramId && (
-          <ProgramDetailModal
-            programId={selectedProgramId}
-            onClose={() => setSelectedProgramId(null)}
-            onStartRegistration={handleRegisterClick}
-          />
-        )}
+          {selectedProgramId && (
+            <ProgramDetailModalLazy
+              programId={selectedProgramId}
+              onClose={handleCloseDetail}
+              onStartRegistration={handleRegisterClick}
+            />
+          )}
+        </Suspense>
       </div >
     </>
   );

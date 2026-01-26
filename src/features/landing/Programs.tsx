@@ -41,7 +41,7 @@ interface ProgramsProps {
     onLearnMore: (id: string) => void;
 }
 
-const Programs: React.FC<ProgramsProps> = ({ onLearnMore }) => {
+const Programs: React.FC<ProgramsProps> = React.memo(({ onLearnMore }) => {
     return (
         <section id="programs" className="py-24 bg-transparent">
             <div className="container mx-auto px-6">
@@ -71,7 +71,7 @@ const Programs: React.FC<ProgramsProps> = ({ onLearnMore }) => {
                     {programs.map((program) => (
                         <div key={program.id} className="bg-white rounded-[2.5rem] overflow-hidden shadow-xl shadow-slate-200/50 flex flex-col h-full group hover:-translate-y-2 transition-transform duration-500">
                             <div className="h-64 relative overflow-hidden">
-                                <img src={program.image} alt={program.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                                <img src={program.image} alt={program.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                                 <div className="absolute bottom-6 left-8 right-8">
                                     <h3 className="text-2xl font-bold text-white mb-1">{program.name}</h3>
@@ -130,6 +130,6 @@ const Programs: React.FC<ProgramsProps> = ({ onLearnMore }) => {
             </div>
         </section>
     );
-};
+});
 
 export default Programs;

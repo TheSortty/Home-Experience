@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-const Impact: React.FC = () => {
+const Impact: React.FC = React.memo(() => {
     return (
         <section id="impact" className="py-24 bg-transparent">
             <div className="container mx-auto px-6">
@@ -42,7 +42,7 @@ const Impact: React.FC = () => {
                     </div>
 
                     <div className="relative aspect-video rounded-3xl overflow-hidden shadow-2xl">
-                        <img src="/images/impact/social.jpg" alt="Impacto Social" className="w-full h-full object-cover" />
+                        <img src="/images/impact/social.jpg" alt="Impacto Social" className="w-full h-full object-cover" loading="lazy" />
                         <div className="absolute inset-0 bg-slate-900/10 group-hover:bg-transparent transition-colors"></div>
                     </div>
                 </div>
@@ -52,7 +52,7 @@ const Impact: React.FC = () => {
                     <div className="order-2 lg:order-1 relative aspect-video rounded-3xl overflow-hidden shadow-2xl">
                         {/* Placeholder for drone video mentioned by client */}
                         <div className="w-full h-full bg-slate-100 flex items-center justify-center relative">
-                            <img src="/images/impact/ecological.jpg" alt="Limpieza de ríos" className="w-full h-full object-cover" />
+                            <img src="/images/impact/ecological.jpg" alt="Limpieza de ríos" className="w-full h-full object-cover" loading="lazy" />
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center">
                                     <svg className="w-10 h-10 text-white fill-current" viewBox="0 0 24 24">
@@ -81,6 +81,6 @@ const Impact: React.FC = () => {
             </div>
         </section>
     );
-};
+});
 
 export default Impact;

@@ -13,9 +13,10 @@ const DynamicLines: React.FC = () => {
         let animationFrameId: number;
         let width: number;
         let height: number;
+        let dpr = window.devicePixelRatio || 1;
 
         const lineColors = ['#94A3B8', '#00A9CE', '#CBD5E1', '#8BD8DF'];
-        const lineCount = 25;
+        const lineCount = 20; // Reduced for performance
 
         class Line {
             startX: number;
@@ -31,7 +32,6 @@ const DynamicLines: React.FC = () => {
 
             constructor() {
                 this.reset();
-                // Randomize initial progress so they don't all start at once
                 this.progress = Math.random();
             }
 
@@ -51,14 +51,14 @@ const DynamicLines: React.FC = () => {
                 }
 
                 this.color = lineColors[Math.floor(Math.random() * lineColors.length)];
-                this.thickness = Math.random() * 2 + 1;
+                this.thickness = (Math.random() * 1.5 + 0.5); // Slightly thinner
                 this.progress = 0;
-                this.speed = 0.001 + Math.random() * 0.002; // Very slow
-                this.delay = Math.random() * 100;
+                this.speed = 0.0005 + Math.random() * 0.001; // Slower speed
+                this.delay = Math.random() * 200;
                 this.opacity = 0;
             }
 
-            draw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+            draw(ctx: CanvasRenderingContext2D, w: number, h: number, dpr: number) {
                 if (this.delay > 0) {
                     this.delay--;
                     return;
@@ -70,24 +70,22 @@ const DynamicLines: React.FC = () => {
                     return;
                 }
 
-                // Smooth opacity fade in/out
                 if (this.progress < 0.2) this.opacity = this.progress * 5;
                 else if (this.progress > 0.8) this.opacity = (1 - this.progress) * 5;
                 else this.opacity = 1;
 
-                // Radial mask effect (center-based fading)
                 const currentX = this.startX + (this.endX - this.startX) * this.progress;
                 const currentY = this.startY + (this.endY - this.startY) * this.progress;
 
                 const distFromCenter = Math.sqrt(Math.pow(currentX - 0.5, 2) + Math.pow(currentY - 0.5, 2));
-                const radialFade = Math.max(0, 1 - (distFromCenter / 0.5));
+                const radialFade = Math.max(0, 1 - (distFromCenter / 0.6));
 
-                const finalOpacity = this.opacity * radialFade * 0.3; // 0.3 matches the original opacity-30
+                const finalOpacity = this.opacity * radialFade * 0.25;
 
                 if (finalOpacity <= 0) return;
 
-                const x1 = (this.startX + (this.endX - this.startX) * Math.max(0, this.progress - 0.2)) * w;
-                const y1 = (this.startY + (this.endY - this.startY) * Math.max(0, this.progress - 0.2)) * h;
+                const x1 = (this.startX + (this.endX - this.startX) * Math.max(0, this.progress - 0.25)) * w;
+                const y1 = (this.startY + (this.endY - this.startY) * Math.max(0, this.progress - 0.25)) * h;
                 const x2 = currentX * w;
                 const y2 = currentY * h;
 
@@ -95,7 +93,7 @@ const DynamicLines: React.FC = () => {
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
                 ctx.strokeStyle = this.color;
-                ctx.lineWidth = this.thickness;
+                ctx.lineWidth = this.thickness * dpr;
                 ctx.globalAlpha = finalOpacity;
                 ctx.stroke();
             }
@@ -104,23 +102,45 @@ const DynamicLines: React.FC = () => {
         const lines = Array.from({ length: lineCount }, () => new Line());
 
         const handleResize = () => {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
+            dpr = window.devicePixelRatio || 1;
+            width = window.innerWidth;
+            height = window.innerHeight;
+
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+
+            ctx.scale(dpr, dpr);
+        };
+
+        // Throttled resize
+        let resizeTimeout: any;
+        const throttledResize = () => {
+            if (!resizeTimeout) {
+                resizeTimeout = setTimeout(() => {
+                    handleResize();
+                    resizeTimeout = null;
+                }, 200);
+            }
         };
 
         const render = () => {
-            ctx.clearRect(0, 0, width, height);
-            lines.forEach(line => line.draw(ctx, width, height));
+            if (document.visibilityState === 'visible') {
+                ctx.clearRect(0, 0, width, height);
+                lines.forEach(line => line.draw(ctx, width, height, dpr));
+            }
             animationFrameId = requestAnimationFrame(render);
         };
 
-        window.addEventListener('resize', handleResize);
+        window.addEventListener('resize', throttledResize);
         handleResize();
         render();
 
         return () => {
-            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('resize', throttledResize);
             cancelAnimationFrame(animationFrameId);
+            clearTimeout(resizeTimeout);
         };
     }, []);
 
