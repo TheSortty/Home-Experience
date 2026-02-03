@@ -65,64 +65,88 @@ const AdminTestimonials: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 animate-fade-in-up">
-            <div className="bg-white/80 border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-slate-900">Moderación de Testimonios</h3>
-                    {loading && <span className="text-sm text-slate-500">Cargando...</span>}
+        <div className="space-y-8 animate-fade-in-up pb-20">
+            <div className="flex justify-between items-center bg-white p-6 formal-card">
+                <div>
+                    <h2 className="text-xl font-bold text-slate-800 uppercase tracking-tight">Gestión de Testimonios</h2>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-2">Moderación y aprobación de historias de alumnos</p>
+                </div>
+                {loading && (
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sincronizando...</span>
+                    </div>
+                )}
+            </div>
+
+            <div className="formal-card overflow-hidden bg-white">
+                <div className="bg-slate-50 px-8 py-5 border-b border-slate-100">
+                    <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Bandeja de Entrada / Testimonios</h3>
                 </div>
 
-                <div className="space-y-4">
+                <div className="p-10 space-y-6">
                     {testimonials.length === 0 && !loading ? (
-                        <p className="text-slate-500 text-center py-8">No hay testimonios aún.</p>
+                        <div className="py-20 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-sm">
+                            <p className="text-slate-400 font-bold text-sm italic">No hay testimonios pendientes de revisión.</p>
+                        </div>
                     ) : (
                         testimonials.map(t => (
-                            <div key={t.id} className="bg-slate-50 p-6 rounded-xl border border-slate-100 flex flex-col md:flex-row gap-6">
+                            <div key={t.id} className="p-8 bg-white border border-slate-100 rounded-sm flex flex-col lg:flex-row gap-8 hover:border-blue-100 transition-all">
                                 <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${t.status === 'approved' ? 'bg-green-100 text-green-700' :
-                                            t.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                                'bg-red-100 text-red-700'
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <span className={`px-3 py-1 rounded-sm text-[9px] font-bold uppercase tracking-[0.15em] border ${t.status === 'approved' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                            t.status === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                                'bg-red-50 text-red-600 border-red-100'
                                             }`}>
-                                            {t.status === 'approved' ? 'Aprobado' : t.status === 'pending' ? 'Pendiente' : 'Rechazado'}
+                                            {t.status === 'approved' ? 'Aprobado' : t.status === 'pending' ? 'En Revisión' : 'Oculto'}
                                         </span>
-                                        <span className="text-slate-400 text-xs">{t.created_at ? new Date(t.created_at).toLocaleDateString() : 'Fecha desc.'}</span>
+                                        <span className="text-slate-300 text-[10px] font-bold uppercase tracking-widest">
+                                            {t.created_at ? new Date(t.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'S/F'}
+                                        </span>
                                     </div>
-                                    <p className="text-slate-800 italic mb-4">"{t.quote}"</p>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-xs overflow-hidden">
+
+                                    <div className="relative pl-6 mb-6">
+                                        <div className="absolute left-0 top-0 text-3xl text-slate-100 font-serif leading-none italic pointer-events-none">"</div>
+                                        <p className="text-slate-700 text-sm leading-relaxed italic">
+                                            {t.quote}
+                                        </p>
+                                    </div>
+
+                                    <div className="flex items-center gap-4 border-t border-slate-50 pt-6">
+                                        <div className="w-10 h-10 rounded-sm bg-slate-100 flex items-center justify-center font-bold text-slate-400 text-xs overflow-hidden border border-slate-100">
                                             {t.photoUrl ? (
                                                 <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
                                             ) : (
-                                                t.name ? t.name.charAt(0) : '?'
+                                                t.name ? t.name.charAt(0).toUpperCase() : '?'
                                             )}
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-slate-900">{t.name}</p>
-                                            <p className="text-xs text-slate-500">{t.role} {t.cycle && `• ${t.cycle}`}</p>
+                                            <p className="text-xs font-bold text-slate-800 uppercase tracking-tight">{t.name}</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{t.role} {t.cycle && <span className="text-blue-500/50 mx-1">•</span>} {t.cycle}</p>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex flex-row md:flex-col gap-2 justify-center border-t md:border-t-0 md:border-l border-slate-200 pt-4 md:pt-0 md:pl-6">
+
+                                <div className="flex flex-row lg:flex-col gap-3 justify-center lg:min-w-[160px] border-t lg:border-t-0 lg:border-l border-slate-50 pt-6 lg:pt-0 lg:pl-8">
                                     {t.status !== 'approved' && (
                                         <button
                                             onClick={() => handleStatusUpdate(t.id, 'approved')}
-                                            className="px-4 py-2 bg-green-600 text-white rounded-lg font-bold text-sm hover:bg-green-700 transition-colors"
+                                            className="flex-1 py-2.5 bg-slate-900 text-white rounded-sm font-bold text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-slate-200"
                                         >
-                                            Aprobar
+                                            Publicar
                                         </button>
                                     )}
                                     {t.status !== 'rejected' && (
                                         <button
                                             onClick={() => handleStatusUpdate(t.id, 'rejected')}
-                                            className="px-4 py-2 bg-slate-600 text-white rounded-lg font-bold text-sm hover:bg-slate-700 transition-colors"
+                                            className="flex-1 py-2.5 border border-slate-200 text-slate-500 rounded-sm font-bold text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
                                         >
-                                            Rechazar
+                                            Archivar
                                         </button>
                                     )}
                                     <button
                                         onClick={() => handleDelete(t.id)}
-                                        className="px-4 py-2 bg-red-100 text-red-600 rounded-lg font-bold text-sm hover:bg-red-200 transition-colors"
+                                        className="flex-1 py-2.5 text-red-400 hover:text-red-600 font-bold text-[10px] uppercase tracking-widest transition-all"
                                     >
                                         Eliminar
                                     </button>

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
 import ArrowRightIcon from '../../../ui/icons/ArrowRightIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
+import DocumentIcon from '../../../ui/icons/DocumentIcon';
+import ChartIcon from '../../../ui/icons/ChartIcon';
 
 // Types (simplified for this file)
 interface Registration {
@@ -35,6 +38,7 @@ const AdminAdmissions: React.FC = () => {
     const [paymentMethod, setPaymentMethod] = useState('MERCADO_PAGO'); // 'MERCADO_PAGO', 'TRANSFER', 'CASH'
     const [selectedCycleId, setSelectedCycleId] = useState('');
     const [selectedCycleId2, setSelectedCycleId2] = useState(''); // For Combos
+    const [detailTab, setDetailTab] = useState('PERSONAL');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
@@ -118,14 +122,24 @@ const AdminAdmissions: React.FC = () => {
             if (error) throw error;
 
             if (data.success) {
-                // Handle Combo (Second Cycle) if needed
+                // 1. Record the Payment
+                const { error: paymentError } = await supabase.from('payments').insert({
+                    submission_id: selectedRegistration.id,
+                    enrollment_id: data.enrollment_id,
+                    amount: 0, // Should ideally be fetched or passed, putting 0 as placeholder or fetch from site_settings
+                    method: paymentMethod.toLowerCase(),
+                    status: 'paid',
+                    paid_at: new Date().toISOString()
+                });
+                if (paymentError) console.error('Error recording payment', paymentError);
+
+                // 2. Handle Combo (Second Cycle) if needed
                 if (isCombo(selectedRegistration.selectedPackage) && selectedCycleId2) {
                     const { error: error2 } = await supabase.from('enrollments').insert({
                         user_id: data.user_id,
                         cycle_id: selectedCycleId2,
                         status: 'active',
-                        payment_method: paymentMethod,
-                        is_fully_paid: true
+                        payment_status: 'paid'
                     });
                     if (error2) console.error('Error second enrollment', error2);
                 }
@@ -171,169 +185,347 @@ const AdminAdmissions: React.FC = () => {
     const deletedRegistrations = registrations.filter(r => r.status === 'DELETED');
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in-up h-[calc(100vh-200px)]">
-            {/* Pending Review Column */}
-            <div className="bg-white/80 border border-slate-200/60 rounded-2xl shadow-sm p-6 flex flex-col">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <h3 className="text-xl font-bold text-slate-900">
-                            {viewMode === 'active' ? 'Solicitudes Nuevas' : 'Papelera de Reciclaje'}
-                        </h3>
-                        {viewMode === 'active' && (
-                            <button
-                                onClick={() => setViewMode('trash')}
-                                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Ver Papelera"
-                            >
-                                <TrashIcon className="w-5 h-5" />
-                            </button>
-                        )}
-                        {viewMode === 'trash' && (
-                            <button
-                                onClick={() => setViewMode('active')}
-                                className="px-3 py-1 text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
-                            >
-                                Volver a Activas
-                            </button>
-                        )}
-                    </div>
-                    <span className={`${viewMode === 'active' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'} text-xs font-bold px-2 py-1 rounded-full`}>
-                        {viewMode === 'active' ? pendingReview.length : deletedRegistrations.length}
-                    </span>
-                </div>
-                <div className="space-y-4 flex-1 overflow-y-auto">
-                    {(viewMode === 'active' ? pendingReview : deletedRegistrations).length === 0 ? (
-                        <p className="text-slate-400 text-center py-8 italic">
-                            {viewMode === 'active' ? 'No hay solicitudes pendientes.' : 'No hay elementos en la papelera.'}
-                        </p>
-                    ) : (
-                        (viewMode === 'active' ? pendingReview : deletedRegistrations).map(reg => (
-                            <div key={reg.id} className={`bg-white border ${viewMode === 'active' ? 'border-slate-100' : 'border-red-100 bg-red-50/30'} p-4 rounded-xl hover:shadow-md hover:border-blue-200 transition-all group cursor-pointer`} onClick={() => setSelectedRegistration(reg)}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h4 className="font-bold text-slate-800">{reg.name}</h4>
-                                        <p className="text-xs text-slate-500 mb-2">{reg.date}</p>
-                                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{reg.selectedPackage}</span>
-                                    </div>
-                                    <div className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <ArrowRightIcon className="h-5 w-5" />
-                                    </div>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-
-            {/* Pending Payment / Assignment Column */}
-            <div className="bg-white/80 border border-slate-200/60 rounded-2xl shadow-sm p-6 flex flex-col">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-bold text-slate-900">Pagos y Asignación</h3>
-                    <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{pendingPayment.length}</span>
-                </div>
-                <div className="space-y-4 flex-1 overflow-y-auto">
-                    {pendingPayment.length === 0 ? (
-                        <p className="text-slate-400 text-center py-8 italic">No hay pagos pendientes.</p>
-                    ) : (
-                        pendingPayment.map(reg => (
-                            <div key={reg.id} className="bg-white border border-slate-100 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4">
-                                <div>
-                                    <h4 className="font-bold text-slate-800">{reg.name}</h4>
-                                    <span className="text-xs font-bold text-emerald-600">Aprobado (Esperando Pago)</span>
-                                    <p className="text-xs text-slate-400 mt-1">{reg.selectedPackage}</p>
-                                </div>
+        <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in-up h-full">
+                {/* Pending Review Column */}
+                <div className="formal-card p-8 flex flex-col h-full bg-white">
+                    <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-lg font-bold text-slate-800">
+                                {viewMode === 'active' ? 'Solicitudes Nuevas' : 'Papelera de Reciclaje'}
+                            </h3>
+                            {viewMode === 'active' && (
                                 <button
-                                    onClick={() => { setSelectedRegistration(reg); setIsAssignModalOpen(true); }}
-                                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-lg transition-colors shadow-sm"
+                                    onClick={() => setViewMode('trash')}
+                                    className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                    title="Ver Papelera"
                                 >
-                                    Confirmar y Asignar
+                                    <TrashIcon className="w-4 h-4" />
                                 </button>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-
-            {/* Detail Modal */}
-            {selectedRegistration && !isAssignModalOpen && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedRegistration(null)}>
-                    <div className="bg-white rounded-2xl max-w-2xl w-full p-6" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-start mb-6">
-                            <div>
-                                <h3 className="text-xl font-bold text-slate-900">{selectedRegistration.name}</h3>
-                                <p className="text-slate-500">{selectedRegistration.email}</p>
-                            </div>
-                            <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
-                                {selectedRegistration.selectedPackage}
-                            </span>
-                        </div>
-                        <div className="space-y-4 mb-8 max-h-[50vh] overflow-y-auto">
-                            {selectedRegistration.answers.map((qa, idx) => (
-                                <div key={idx}>
-                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">{qa.question}</p>
-                                    <p className="text-slate-700 bg-slate-50 p-3 rounded-lg overflow-auto">{qa.answer}</p>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => setSelectedRegistration(null)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">Cerrar</button>
-
-                            {selectedRegistration.status === 'DELETED' ? (
-                                <button onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_REVIEW')} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg transition-colors">
-                                    Restaurar Solicitud
+                            )}
+                            {viewMode === 'trash' && (
+                                <button
+                                    onClick={() => setViewMode('active')}
+                                    className="px-3 py-1 text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-sm transition-colors uppercase tracking-wider"
+                                >
+                                    Volver a Activas
                                 </button>
-                            ) : (
-                                <>
-                                    {selectedRegistration.status === 'PENDING_REVIEW' && (
-                                        <button onClick={() => handleStatusUpdate(selectedRegistration, 'DELETED')} className="px-4 py-2 text-red-500 hover:bg-red-50 font-bold rounded-lg transition-colors border border-transparent hover:border-red-100">
-                                            Eliminar
-                                        </button>
-                                    )}
-                                    {selectedRegistration.status === 'PENDING_REVIEW' && (
-                                        <button onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_PAYMENT')} className="px-4 py-2 bg-slate-900 text-white font-bold rounded-lg">
-                                            Aprobar Solicitud
-                                        </button>
-                                    )}
-                                </>
                             )}
                         </div>
+                        <span className={`${viewMode === 'active' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'} text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider`}>
+                            {viewMode === 'active' ? pendingReview.length : deletedRegistrations.length}
+                        </span>
+                    </div>
+
+                    <div className="space-y-3 flex-1 overflow-y-auto pr-2">
+                        {(viewMode === 'active' ? pendingReview : deletedRegistrations).length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-slate-300">
+                                <DocumentIcon className="w-12 h-12 mb-4 opacity-20" />
+                                <p className="text-sm font-medium">
+                                    {viewMode === 'active' ? 'No hay solicitudes pendientes.' : 'No hay elementos en la papelera.'}
+                                </p>
+                            </div>
+                        ) : (
+                            (viewMode === 'active' ? pendingReview : deletedRegistrations).map(reg => (
+                                <div
+                                    key={reg.id}
+                                    className={`group p-4 bg-white border ${viewMode === 'active' ? 'border-slate-100' : 'border-red-50 bg-red-50/20'} rounded-sm hover:border-blue-200 cursor-pointer transition-all`}
+                                    onClick={() => setSelectedRegistration(reg)}
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h4 className="font-bold text-slate-800 text-sm">{reg.name}</h4>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-[10px] font-bold text-slate-400 border border-slate-100 px-1.5 py-0.5 uppercase">{reg.selectedPackage}</span>
+                                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity">Ver detalle &rarr;</p>
+                                            </div>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{reg.date}</p>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
+
+                {/* Pending Payment / Assignment Column */}
+                <div className="formal-card p-8 flex flex-col h-full bg-white">
+                    <div className="flex items-center justify-between mb-8">
+                        <h3 className="text-lg font-bold text-slate-800">Pagos y Asignación</h3>
+                        <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider">{pendingPayment.length}</span>
+                    </div>
+
+                    <div className="space-y-3 flex-1 overflow-y-auto pr-2">
+                        {pendingPayment.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-slate-300">
+                                <ChartIcon className="w-12 h-12 mb-4 opacity-20" />
+                                <p className="text-sm font-medium">No hay pagos pendientes por procesar.</p>
+                            </div>
+                        ) : (
+                            pendingPayment.map(reg => (
+                                <div key={reg.id} className="p-4 bg-slate-50 border border-slate-100 rounded-sm flex flex-col sm:flex-row justify-between items-center gap-4 hover:border-emerald-200 transition-all">
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm">{reg.name}</h4>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Esperando Pago</span>
+                                            <span className="text-slate-300 text-xs">|</span>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase">{reg.selectedPackage}</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => { setSelectedRegistration(reg); setIsAssignModalOpen(true); }}
+                                        className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-[10px] font-bold uppercase tracking-widest rounded-sm transition-all shadow-sm"
+                                    >
+                                        Confirmar Alumno
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Detail Modal Portal */}
+            {selectedRegistration && !isAssignModalOpen && createPortal(
+                <div className="full-screen-modal-overlay" onClick={() => setSelectedRegistration(null)}>
+                    <div className="formal-modal max-w-5xl w-full p-0 flex flex-col h-[85vh] animate-scale-in shadow-2xl" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="p-8 border-b border-slate-100 bg-white flex justify-between items-center relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-full -mr-32 -mt-32 opacity-50"></div>
+                            <div className="relative z-10">
+                                <h3 className="text-3xl font-bold text-slate-900 tracking-tight leading-none">{selectedRegistration.name}</h3>
+                                <div className="flex items-center gap-4 mt-3">
+                                    <p className="text-xs font-bold text-blue-600 uppercase tracking-[0.2em]">{selectedRegistration.email}</p>
+                                    <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">ID: {selectedRegistration.id.substring(0, 8)}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-6 relative z-10">
+                                <div className="text-right">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Programa Seleccionado</p>
+                                    <span className="px-4 py-1.5 bg-slate-900 text-white text-[11px] font-bold rounded-sm uppercase tracking-[0.1em]">
+                                        {selectedRegistration.selectedPackage}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedRegistration(null)}
+                                    className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:text-slate-900 transition-all border border-slate-100"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Body with Sidebar */}
+                        <div className="flex flex-1 overflow-hidden bg-slate-50/30">
+                            {/* Left Tabs Sidebar */}
+                            <div className="w-64 bg-slate-50 border-r border-slate-100 p-6 flex flex-col justify-between">
+                                <div className="space-y-1.5">
+                                    {[
+                                        {
+                                            id: 'PERSONAL',
+                                            label: 'Perfil & Contacto',
+                                            icon: (
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                            )
+                                        },
+                                        {
+                                            id: 'MOTIVACIÓN',
+                                            label: 'Propósito & Sueños',
+                                            icon: (
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                                </svg>
+                                            )
+                                        },
+                                        {
+                                            id: 'SALUD',
+                                            label: 'Ficha Médica',
+                                            icon: (
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                                </svg>
+                                            )
+                                        },
+                                        {
+                                            id: 'OTROS',
+                                            label: 'Información Extra',
+                                            icon: (
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                                                </svg>
+                                            )
+                                        }
+                                    ].map(section => (
+                                        <button
+                                            key={section.id}
+                                            onClick={() => setDetailTab(section.id)}
+                                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all ${detailTab === section.id
+                                                ? 'bg-white text-blue-600 shadow-md shadow-slate-200/50 border border-slate-100 translate-x-1'
+                                                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                                                }`}
+                                        >
+                                            {section.icon}
+                                            {section.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="p-4 bg-white border border-slate-100 rounded-sm">
+                                    <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-2">Estado de Revisión</p>
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-2 h-2 rounded-full ${selectedRegistration.status === 'PENDING_REVIEW' ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
+                                        <span className="text-[10px] font-bold text-slate-600 uppercase">{selectedRegistration.status === 'PENDING_REVIEW' ? 'Pendiente' : 'Aprobado'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right Content Area */}
+                            <div className="flex-1 overflow-y-auto p-12 bg-white">
+                                <div className="max-w-4xl mx-auto">
+                                    <div className="mb-12">
+                                        <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-3">
+                                            {detailTab === 'PERSONAL' && 'Sección 01'}
+                                            {detailTab === 'MOTIVACIÓN' && 'Sección 02'}
+                                            {detailTab === 'SALUD' && 'Sección 03'}
+                                            {detailTab === 'OTROS' && 'Sección 04'}
+                                        </h4>
+                                        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+                                            {detailTab === 'PERSONAL' && 'Información de Contacto y Perfil'}
+                                            {detailTab === 'MOTIVACIÓN' && 'Propósito, Sueños y Metas'}
+                                            {detailTab === 'SALUD' && 'Historial Médico y Emergencias'}
+                                            {detailTab === 'OTROS' && 'Información Adicional Recopilada'}
+                                        </h2>
+                                        <div className="h-1 w-12 bg-blue-600 mt-6 rounded-full"></div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
+                                        {selectedRegistration.answers
+                                            .filter(qa => {
+                                                const personal = ['firstName', 'lastName', 'email', 'phone', 'age', 'dni', 'city', 'address', 'occupation', 'birthDate', 'gender', 'instagram'];
+                                                const motivation = ['dream1', 'dream2', 'dream3', 'dreams', 'expectations', 'whyNow', 'intention', 'referral', 'goals', 'qualities', 'context', 'referredBy', 'referralChannel'];
+                                                const medical = ['healthIssue', 'medication', 'allergies', 'emergencyContact', 'medicalNotes', 'specialConditions', 'pregnant', 'medicalInfo', 'bloodType'];
+
+                                                if (detailTab === 'PERSONAL') return personal.includes(qa.question);
+                                                if (detailTab === 'MOTIVACIÓN') return motivation.includes(qa.question);
+                                                if (detailTab === 'SALUD') return medical.includes(qa.question);
+                                                if (detailTab === 'OTROS') return !personal.includes(qa.question) && !motivation.includes(qa.question) && !medical.includes(qa.question);
+                                                return false;
+                                            })
+                                            .map((qa, idx) => (
+                                                <div key={idx} className={`group ${qa.answer?.length > 70 ? 'md:col-span-2' : ''}`}>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5 group-hover:text-blue-600 transition-colors">
+                                                        {qa.question.replace(/([A-Z])/g, ' $1').toUpperCase().trim()}
+                                                    </p>
+                                                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-sm group-hover:bg-white group-hover:border-blue-100 transition-all">
+                                                        <p className="text-sm text-slate-700 leading-relaxed font-medium">
+                                                            {qa.answer || <span className="text-slate-300 italic">No especificado</span>}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+
+                                        {selectedRegistration.answers.filter(qa => {
+                                            const personal = ['firstName', 'lastName', 'email', 'phone', 'age', 'dni', 'city', 'address', 'occupation', 'birthDate', 'gender', 'instagram'];
+                                            const motivation = ['dream1', 'dream2', 'dream3', 'dreams', 'expectations', 'whyNow', 'intention', 'referral', 'goals', 'qualities', 'context', 'referredBy', 'referralChannel'];
+                                            const medical = ['healthIssue', 'medication', 'allergies', 'emergencyContact', 'medicalNotes', 'specialConditions', 'pregnant', 'medicalInfo', 'bloodType'];
+                                            if (detailTab === 'PERSONAL') return personal.includes(qa.question);
+                                            if (detailTab === 'MOTIVACIÓN') return motivation.includes(qa.question);
+                                            if (detailTab === 'SALUD') return medical.includes(qa.question);
+                                            return !personal.includes(qa.question) && !motivation.includes(qa.question) && !medical.includes(qa.question);
+                                        }).length === 0 && (
+                                                <div className="md:col-span-2 py-24 text-center flex flex-col items-center border border-dashed border-slate-100 rounded-sm">
+                                                    <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mb-6">
+                                                        <svg className="w-6 h-6 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                        </svg>
+                                                    </div>
+                                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Sin datos registrados en esta sección</p>
+                                                </div>
+                                            )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-8 bg-slate-50 flex justify-between items-center border-t border-slate-100 z-10">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Fecha de Registro</p>
+                                    <p className="text-xs font-bold text-slate-700">{selectedRegistration.date}</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-4">
+                                <button onClick={() => setSelectedRegistration(null)} className="px-8 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all">Cerrar</button>
+
+                                {selectedRegistration.status === 'DELETED' ? (
+                                    <button onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_REVIEW')} className="px-8 py-3 bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all">
+                                        Restaurar Solicitud
+                                    </button>
+                                ) : (
+                                    <>
+                                        {selectedRegistration.status === 'PENDING_REVIEW' && (
+                                            <button onClick={() => handleStatusUpdate(selectedRegistration, 'DELETED')} className="px-8 py-3 text-red-500 hover:bg-red-50 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100">
+                                                Eliminar
+                                            </button>
+                                        )}
+                                        {selectedRegistration.status === 'PENDING_REVIEW' && (
+                                            <button onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_PAYMENT')} className="px-10 py-3 bg-slate-900 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-2xl shadow-slate-900/10 hover:bg-black transition-all">
+                                                Aprobar para pago
+                                            </button>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
             )}
 
-            {/* Assignment & Confirmation Modal ("The Brain") */}
-            {isAssignModalOpen && selectedRegistration && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setIsAssignModalOpen(false)}>
-                    <div className="bg-white rounded-2xl max-w-lg w-full p-6" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-xl font-bold text-slate-900 mb-2">Confirmar Alumno</h3>
-                        <p className="text-sm text-slate-500 mb-6">Verifica el pago y asigna las fechas de cursada para <strong>{selectedRegistration.name}</strong>.</p>
+            {/* Assignment Portal ("The Brain") */}
+            {isAssignModalOpen && selectedRegistration && createPortal(
+                <div className="full-screen-modal-overlay" onClick={() => setIsAssignModalOpen(false)}>
+                    <div className="formal-modal max-w-xl w-full p-0 flex flex-col animate-scale-in" onClick={e => e.stopPropagation()}>
+                        <div className="p-10 border-b border-slate-100 bg-slate-50">
+                            <h3 className="text-2xl font-bold text-slate-900 mb-2 leading-none">Confirmar ingreso</h3>
+                            <p className="text-sm text-slate-500">Asignación de cupo y verificación final para <strong>{selectedRegistration.name}</strong>.</p>
+                        </div>
 
-                        <div className="space-y-6">
+                        <div className="p-10 space-y-10 bg-white">
                             {/* 1. Payment Verification */}
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                <h4 className="font-bold text-sm text-slate-700 mb-3 uppercase tracking-wider">1. Verificación de Pago</h4>
-                                <div className="space-y-3">
-                                    <label className="flex items-center gap-3 cursor-pointer">
+                            <div>
+                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">1. Verificación de Cobro</h4>
+                                <div className="space-y-4">
+                                    <label className="flex items-center gap-4 cursor-pointer group">
                                         <input
                                             type="checkbox"
                                             checked={paymentConfirmed}
                                             onChange={e => setPaymentConfirmed(e.target.checked)}
-                                            className="w-5 h-5 text-emerald-500 rounded focus:ring-emerald-500"
+                                            className="w-5 h-5 text-blue-600 rounded-sm border-slate-300 focus:ring-blue-500"
                                         />
-                                        <span className="font-medium text-slate-700">Confirmar recepción del pago</span>
+                                        <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">Confirmar recepción de fondos</span>
                                     </label>
 
                                     {paymentConfirmed && (
-                                        <div className="animate-fade-in">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Método de Pago</label>
+                                        <div className="animate-fade-in pl-9">
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Canal de pago</label>
                                             <select
                                                 value={paymentMethod}
                                                 onChange={e => setPaymentMethod(e.target.value)}
-                                                className="w-full p-2 border rounded-lg text-sm bg-white"
+                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
                                             >
-                                                <option value="MERCADO_PAGO">Mercado Pago (Tarjeta/Link)</option>
-                                                <option value="TRANSFER">Transferencia Bancaria</option>
-                                                <option value="CASH">Efectivo</option>
+                                                <option value="MERCADO_PAGO">Mercado Pago</option>
+                                                <option value="TRANSFER">Transferencia Directa</option>
+                                                <option value="CASH">Efectivo / Manual</option>
                                             </select>
                                         </div>
                                     )}
@@ -341,41 +533,39 @@ const AdminAdmissions: React.FC = () => {
                             </div>
 
                             {/* 2. Cycle Assignment */}
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                <h4 className="font-bold text-sm text-slate-700 mb-3 uppercase tracking-wider">2. Asignación de Fechas</h4>
-
-                                <div className="space-y-4">
+                            <div>
+                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">2. Asignación de Calendario</h4>
+                                <div className="space-y-6">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 mb-1">
-                                            {isCombo(selectedRegistration.selectedPackage) ? 'Ciclo Inicial (1º Parte)' : 'Seleccionar Ciclo'}
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
+                                            {isCombo(selectedRegistration.selectedPackage) ? 'Tramo 1 (Ciclo Inicial)' : 'Ciclo de cursada'}
                                         </label>
                                         <select
                                             value={selectedCycleId}
                                             onChange={e => setSelectedCycleId(e.target.value)}
-                                            className="w-full p-2 border rounded-lg text-sm bg-white"
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
                                         >
-                                            <option value="">-- Seleccionar Fecha --</option>
+                                            <option value="">Seleccionar fecha...</option>
                                             {cycles.filter(c => !isCombo(selectedRegistration.selectedPackage) || c.type === 'initial').map(cycle => (
                                                 <option key={cycle.id} value={cycle.id}>
-                                                    {cycle.name} ({cycle.start_date}) - {cycle.enrolled_count}/{cycle.capacity}
+                                                    {cycle.name} | {cycle.start_date} ({cycle.enrolled_count}/{cycle.capacity})
                                                 </option>
                                             ))}
                                         </select>
                                     </div>
 
-                                    {/* Combo Logic */}
                                     {isCombo(selectedRegistration.selectedPackage) && (
                                         <div className="animate-fade-in">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Ciclo Avanzado (2º Parte)</label>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Tramo 2 (Ciclo Avanzado)</label>
                                             <select
                                                 value={selectedCycleId2}
                                                 onChange={e => setSelectedCycleId2(e.target.value)}
-                                                className="w-full p-2 border rounded-lg text-sm bg-white"
+                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
                                             >
-                                                <option value="">-- A definir / Pendiente --</option>
+                                                <option value="">A definir según calendario...</option>
                                                 {cycles.filter(c => c.type === 'advanced').map(cycle => (
                                                     <option key={cycle.id} value={cycle.id}>
-                                                        {cycle.name} ({cycle.start_date})
+                                                        {cycle.name} | {cycle.start_date}
                                                     </option>
                                                 ))}
                                             </select>
@@ -385,10 +575,10 @@ const AdminAdmissions: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="flex gap-3 mt-8">
+                        <div className="p-8 bg-slate-50 flex gap-4 border-t border-slate-100">
                             <button
                                 onClick={() => setIsAssignModalOpen(false)}
-                                className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl"
+                                className="flex-1 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
                                 disabled={isSubmitting}
                             >
                                 Cancelar
@@ -396,15 +586,16 @@ const AdminAdmissions: React.FC = () => {
                             <button
                                 onClick={handleConfirmEnrollment}
                                 disabled={!paymentConfirmed || !selectedCycleId || isSubmitting}
-                                className={`flex-1 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg shadow-blue-900/10 transition-all ${(!paymentConfirmed || !selectedCycleId) ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] hover:bg-slate-800'}`}
+                                className={`flex-1 py-3 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-[0.2em] rounded-sm shadow-xl shadow-blue-500/20 transition-all ${(!paymentConfirmed || !selectedCycleId) ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-700 hover:scale-[1.01]'}`}
                             >
-                                {isSubmitting ? 'Procesando...' : 'CONFIRMAR ALUMNO'}
+                                {isSubmitting ? 'Procesando...' : 'FINALIZAR INSCRIPCIÓN'}
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
-        </div>
+        </>
     );
 };
 
