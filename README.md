@@ -99,7 +99,7 @@ La admin consume Supabase y queda preparada para extenderse a panel de alumno (e
 
 ## 🗄️ Base de datos
 
-Las migraciones viven en `supabase/migrations` y se consolidaron en un único archivo (`000000_init.sql`). La documentación actualizada del modelo está en `database-schema.md`.
+Las migraciones viven en `supabase/migrations` y se consolidaron en un único archivo (`000000_init.sql`). Para pruebas con permisos abiertos existe `000001_open_access.sql` (NO usar en producción). La documentación actualizada del modelo está en `database-schema.md`.
 
 El flujo clave se apoya en:
 
