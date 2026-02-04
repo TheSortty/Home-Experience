@@ -1,0 +1,117 @@
+/* Admin Reboot - Formal & Premium Styles */
+
+:root {
+    --admin-sidebar-w: 260px;
+    --admin-header-h: 64px;
+    --admin-bg: #f4f5f8;
+    --admin-sidebar-bg: #1c1c2b;
+    --admin-accent: #3366ff;
+    --admin-border: #e2e8f0;
+    --admin-text-main: #1e293b;
+    --admin-text-light: #64748b;
+    --radius-formal: 2px;
+}
+
+.admin-reboot-container {
+    background-color: var(--admin-bg);
+    color: var(--admin-text-main);
+    font-family: 'Inter', sans-serif;
+}
+
+/* Sidebar Styling */
+.formal-sidebar {
+    width: var(--admin-sidebar-w);
+    background-color: var(--admin-sidebar-bg);
+    border-right: 1px solid rgba(255,255,255,0.05);
+}
+
+.formal-nav-item {
+    border-radius: var(--radius-formal);
+    margin: 4px 12px;
+    padding: 10px 16px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.formal-nav-item.active {
+    background-color: var(--admin-accent);
+    color: white;
+}
+
+/* Modal Fix - Absolute Override */
+.full-screen-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(15, 23, 42, 0.75);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.formal-modal {
+    background: white;
+    border-radius: var(--radius-formal);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--admin-border);
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+/* Card Styling */
+.formal-card {
+    background: white;
+    border: 1px solid var(--admin-border);
+    border-radius: var(--radius-formal);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+/* Search Bar */
+.formal-search-container {
+    background: #f8fafc;
+    border: 1px solid var(--admin-border);
+    border-radius: var(--radius-formal);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    width: 100%;
+    max-width: 400px;
+}
+
+.formal-search-input {
+    background: transparent;
+    border: none;
+    padding: 8px;
+    font-size: 0.875rem;
+    width: 100%;
+    outline: none;
+}
+
+/* Table Style */
+.formal-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.formal-table th {
+    text-align: left;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-bottom: 2px solid var(--admin-border);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--admin-text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.formal-table td {
+    padding: 16px;
+    border-bottom: 1px solid var(--admin-border);
+    font-size: 0.875rem;
+}

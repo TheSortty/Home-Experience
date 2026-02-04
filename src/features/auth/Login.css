@@ -1,0 +1,358 @@
+@import url('https://fonts.googleapis.com/css?family=Poppins:400,500,600,700,800,900');
+
+.login-page {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 300;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #c4c3ca;
+    background-color: transparent;
+    overflow-x: hidden;
+}
+
+.login-page a {
+    cursor: pointer;
+    transition: all 200ms linear;
+}
+
+.login-page a:hover {
+    text-decoration: none;
+}
+
+.login-link {
+    color: #c4c3ca;
+}
+
+.login-link:hover {
+    color: #8BD8DF;
+    /* Home celeste light */
+}
+
+.login-page p {
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.login-page h4 {
+    font-weight: 600;
+    color: white;
+}
+
+.login-page h6 span {
+    padding: 0 20px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: white;
+}
+
+.login-section {
+    position: relative;
+    width: 100%;
+    display: block;
+}
+
+.full-height {
+    min-height: 100vh;
+}
+
+/* Checkbox and Toggle */
+[type="checkbox"]:checked,
+[type="checkbox"]:not(:checked) {
+    position: absolute;
+    left: -9999px;
+}
+
+.checkbox:checked+label,
+.checkbox:not(:checked)+label {
+    position: relative;
+    display: block;
+    text-align: center;
+    width: 60px;
+    height: 16px;
+    border-radius: 8px;
+    padding: 0;
+    margin: 10px auto;
+    cursor: pointer;
+    background-color: #00A9CE;
+    /* Home Celeste */
+}
+
+.checkbox:checked+label:before,
+.checkbox:not(:checked)+label:before {
+    position: absolute;
+    display: block;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: #8BD8DF;
+    /* Home Celeste light */
+    background-color: #0F172A;
+    /* Home darkest */
+    z-index: 20;
+    top: -10px;
+    left: -10px;
+    line-height: 36px;
+    text-align: center;
+    font-size: 24px;
+    transition: all 0.5s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.checkbox:checked+label:before {
+    transform: translateX(44px) rotate(-270deg);
+}
+
+
+.card-3d-wrap {
+    position: relative;
+    width: 440px;
+    max-width: 100%;
+    height: 480px;
+    /* Increased height for better spacing */
+    -webkit-transform-style: preserve-3d;
+    transform-style: preserve-3d;
+    perspective: 800px;
+    margin-top: 60px;
+}
+
+.card-3d-wrapper {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    -webkit-transform-style: preserve-3d;
+    transform-style: preserve-3d;
+    transition: all 600ms ease-out;
+}
+
+.card-front,
+.card-back {
+    width: 100%;
+    height: 100%;
+    background-color: #1E293B;
+    /* Home dark slate */
+    background-image: url('https://s3-us-west-2.amazonaws.com/s.cdpn.io/1462889/pat.svg');
+    background-position: bottom center;
+    background-repeat: no-repeat;
+    background-size: 300%;
+    position: absolute;
+    border-radius: 6px;
+    left: 0;
+    top: 0;
+    -webkit-transform-style: preserve-3d;
+    transform-style: preserve-3d;
+    -webkit-backface-visibility: hidden;
+    -moz-backface-visibility: hidden;
+    -o-backface-visibility: hidden;
+    backface-visibility: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.card-back {
+    transform: rotateY(180deg);
+}
+
+.checkbox:checked~.card-3d-wrap .card-3d-wrapper {
+    transform: rotateY(180deg);
+}
+
+.center-wrap {
+    position: absolute;
+    width: 100%;
+    padding: 0 35px;
+    top: 50%;
+    left: 0;
+    transform: translate3d(0, -50%, 35px) perspective(100px);
+    z-index: 20;
+    display: block;
+}
+
+
+.form-group-login {
+    position: relative;
+    display: block;
+    margin: 0;
+    padding: 0;
+}
+
+.form-style {
+    padding: 13px 20px;
+    padding-left: 55px;
+    height: 52px;
+    /* Slightly taller */
+    width: 100%;
+    font-weight: 500;
+    border-radius: 8px;
+    /* Rounder corners */
+    font-size: 14px;
+    line-height: 22px;
+    letter-spacing: 0.5px;
+    outline: none;
+    color: #c4c3ca;
+    background-color: #0F172A;
+    /* Home darkest */
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    -webkit-transition: all 200ms linear;
+    transition: all 200ms linear;
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, .2);
+}
+
+.form-style:focus,
+.form-style:active {
+    border: 1px solid #00A9CE;
+    /* Focus border */
+    outline: none;
+    box-shadow: 0 4px 12px 0 rgba(0, 169, 206, 0.2);
+    background-color: #162238;
+}
+
+/* Fix browser autofill yellow background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px #0F172A inset !important;
+    -webkit-text-fill-color: #c4c3ca !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+.input-icon {
+    position: absolute;
+    top: 0;
+    left: 18px;
+    height: 48px;
+    font-size: 24px;
+    line-height: 48px;
+    text-align: left;
+    color: #00A9CE;
+    /* Home Celeste */
+    -webkit-transition: all 200ms linear;
+    transition: all 200ms linear;
+    display: flex;
+    align-items: center;
+}
+
+.form-group-login input:-ms-input-placeholder {
+    color: #c4c3ca;
+    opacity: 0.7;
+    -webkit-transition: all 200ms linear;
+    transition: all 200ms linear;
+}
+
+.form-group-login input::-moz-placeholder {
+    color: #c4c3ca;
+    opacity: 0.7;
+    -webkit-transition: all 200ms linear;
+    transition: all 200ms linear;
+}
+
+.form-group-login input:-moz-placeholder {
+    color: #c4c3ca;
+    opacity: 0.7;
+    -webkit-transition: all 200ms linear;
+    transition: all 200ms linear;
+}
+
+.form-group-login input::-webkit-input-placeholder {
+    color: #c4c3ca;
+    opacity: 0.7;
+    -webkit-transition: all 200ms linear;
+    transition: all 200ms linear;
+}
+
+.login-btn {
+    border-radius: 4px;
+    height: 44px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    -webkit-transition: all 200ms linear;
+    transition: all 200ms linear;
+    padding: 0 30px;
+    letter-spacing: 1px;
+    display: -webkit-inline-flex;
+    display: -ms-inline-flexbox;
+    display: inline-flex;
+    -webkit-align-items: center;
+    -moz-align-items: center;
+    -ms-align-items: center;
+    align-items: center;
+    -webkit-justify-content: center;
+    -moz-justify-content: center;
+    -ms-justify-content: center;
+    justify-content: center;
+    -ms-flex-pack: center;
+    text-align: center;
+    border: none;
+    background-color: #00A9CE;
+    /* Home Celeste */
+    color: #0F172A;
+    /* Home darkest */
+    box-shadow: 0 8px 24px 0 rgba(0, 169, 206, 0.2);
+    width: 100%;
+    cursor: pointer;
+}
+
+.login-btn:active,
+.login-btn:focus {
+    background-color: #0F172A;
+    color: #00A9CE;
+    box-shadow: 0 8px 24px 0 rgba(15, 23, 42, 0.2);
+}
+
+.login-btn:hover {
+    background-color: #0F172A;
+    color: #00A9CE;
+    box-shadow: 0 8px 24px 0 rgba(15, 23, 42, 0.2);
+}
+
+.toggle-icon-wrap {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 25;
+    color: #0F172A;
+    /* Home darkest */
+    pointer-events: none;
+    transition: all 0.5s ease;
+    font-size: 18px;
+}
+
+.checkbox:checked+label .toggle-icon-wrap {
+    transform: translateX(44px) rotate(-270deg);
+}
+
+.logo-link {
+    position: absolute;
+    top: 30px;
+    right: 30px;
+    display: block;
+    z-index: 100;
+    transition: all 250ms linear;
+}
+
+.logo-link img {
+    height: 26px;
+    width: auto;
+    display: block;
+}
+
+.error-message {
+    color: #F87171;
+    font-size: 12px;
+    margin-top: 10px;
+    text-align: center;
+    background: rgba(248, 113, 113, 0.1);
+    padding: 8px;
+    border-radius: 4px;
+}

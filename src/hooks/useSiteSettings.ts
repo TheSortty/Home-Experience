@@ -7,7 +7,7 @@ export interface SiteSetting {
     label: string;
     description: string;
     category: 'general' | 'pricing' | 'contact' | 'links';
-    input_type: 'text' | 'number' | 'email' | 'url' | 'longtext';
+    input_type: 'text' | 'number' | 'email' | 'url' | 'longtext' | 'tel' | 'textarea';
 }
 
 export const useSiteSettings = () => {
