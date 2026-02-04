@@ -42,17 +42,19 @@ Available course packages.
 - `level_rank` (INT) - For prerequisite logic
 - `is_active` (BOOLEAN)
 
-#### `purchases`
-Transaction records.
+#### `payments`
+Transaction records (manual + MercadoPago).
 - `id` (UUID, PK)
-- `user_id` (UUID, FK -> users.id)
+- `submission_id` (UUID, FK -> form_submissions.id)
+- `enrollment_id` (UUID, FK -> enrollments.id)
 - `package_id` (INT, FK -> packages.id)
 - `amount` (DECIMAL)
 - `currency` (VARCHAR)
-- `status` (ENUM: 'PENDING', 'COMPLETED', 'REFUNDED')
-- `transaction_id` (VARCHAR)
-- `purchase_date` (TIMESTAMP)
-- `payment_method` (VARCHAR)
+- `status` (ENUM: 'PENDING', 'PAID', 'FAILED')
+- `method` (VARCHAR) - `mercadopago`, `transfer`, `cash`, `manual`
+- `external_id` (VARCHAR) - MercadoPago/processor id
+- `paid_at` (TIMESTAMP)
+- `created_at` (TIMESTAMP)
 
 ### 3. Events & Scheduling
 
@@ -72,16 +74,26 @@ Student registration in specific cycles.
 - `id` (UUID, PK)
 - `user_id` (UUID, FK -> users.id)
 - `cycle_id` (INT, FK -> cycles.id)
-- `purchase_id` (UUID, FK -> purchases.id)
-- `status` (ENUM: 'ACTIVE', 'COMPLETED', 'DROPPED', 'CONFLICT')
+- `package_id` (INT, FK -> packages.id)
+- `status` (ENUM: 'PENDING', 'ACTIVE', 'COMPLETED', 'RESET_REQUIRED')
+- `payment_status` (ENUM: 'UNPAID', 'PENDING', 'PAID')
 - `enrollment_date` (TIMESTAMP)
 - `pl_number` (INT) - Personal Leadership number
+
+#### `cycle_sessions`
+Per-day schedule for each cycle.
+- `id` (UUID, PK)
+- `cycle_id` (UUID, FK -> cycles.id)
+- `session_date` (DATE)
+- `label` (VARCHAR)
+- `is_mandatory` (BOOLEAN)
 
 #### `attendance`
 Daily attendance tracking.
 - `id` (BIGINT, PK)
 - `enrollment_id` (UUID, FK -> enrollments.id)
-- `date` (DATE)
+- `cycle_session_id` (UUID, FK -> cycle_sessions.id)
+- `date` (DATE) - Legacy support for pre-session attendance
 - `status` (ENUM: 'PRESENT', 'ABSENT', 'LATE', 'EXCUSED')
 - `notes` (TEXT)
 
@@ -130,13 +142,14 @@ User settings for notifications.
 ```mermaid
 erDiagram
     users ||--|| user_profiles : has
-    users ||--o{ purchases : makes
+    users ||--o{ payments : makes
     users ||--o{ enrollments : has
     users ||--o{ goals : sets
     users ||--o{ notifications : receives
-    packages ||--o{ purchases : includes
+    packages ||--o{ payments : includes
     packages ||--o{ cycles : defines
     cycles ||--o{ enrollments : contains
+    cycles ||--o{ cycle_sessions : schedules
     enrollments ||--o{ attendance : tracks
     goals ||--o{ goal_progress : has
 ```
