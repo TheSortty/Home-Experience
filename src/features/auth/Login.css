@@ -74,8 +74,8 @@
     padding: 0;
     margin: 10px auto;
     cursor: pointer;
-    background-color: #00A9CE;
-    /* Home Celeste */
+    background-color: #ffeba7;
+    /* Yellow from goal image */
 }
 
 .checkbox:checked+label:before,
@@ -85,10 +85,12 @@
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    color: #8BD8DF;
-    /* Home Celeste light */
+    color: #ffeba7;
+    /* Yellow from goal image */
     background-color: #0F172A;
     /* Home darkest */
+    font-family: 'unicons';
+    content: '\eb4f';
     z-index: 20;
     top: -10px;
     left: -10px;
@@ -173,7 +175,7 @@
 }
 
 
-.form-group-login {
+.form-group {
     position: relative;
     display: block;
     margin: 0;
@@ -225,9 +227,10 @@ input:-webkit-autofill:active {
     position: absolute;
     top: 0;
     left: 18px;
-    height: 48px;
+    height: 52px;
+    /* Match taller input */
     font-size: 24px;
-    line-height: 48px;
+    line-height: 52px;
     text-align: left;
     color: #00A9CE;
     /* Home Celeste */
@@ -235,6 +238,7 @@ input:-webkit-autofill:active {
     transition: all 200ms linear;
     display: flex;
     align-items: center;
+    justify-content: center;
 }
 
 .form-group-login input:-ms-input-placeholder {
@@ -311,27 +315,6 @@ input:-webkit-autofill:active {
     box-shadow: 0 8px 24px 0 rgba(15, 23, 42, 0.2);
 }
 
-.toggle-icon-wrap {
-    position: absolute;
-    top: -10px;
-    left: -10px;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 25;
-    color: #0F172A;
-    /* Home darkest */
-    pointer-events: none;
-    transition: all 0.5s ease;
-    font-size: 18px;
-}
-
-.checkbox:checked+label .toggle-icon-wrap {
-    transform: translateX(44px) rotate(-270deg);
-}
-
 .logo-link {
     position: absolute;
     top: 30px;
@@ -340,6 +323,7 @@ input:-webkit-autofill:active {
     z-index: 100;
     transition: all 250ms linear;
 }
+
 
 .logo-link img {
     height: 26px;

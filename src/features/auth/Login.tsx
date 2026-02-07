@@ -46,11 +46,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
       </button>
 
       <div className="section">
-        <div className="container mx-auto">
-          <div className="row full-height justify-center content-center flex">
+        <div className="container">
+          <div className="row full-height justify-content-center flex">
             <div className="col-12 text-center align-self-center py-5">
               <div className="section pb-5 pt-5 pt-sm-2 text-center">
-                <h6 className="mb-0 pb-3"><span>Log In </span><span>Sign Up</span></h6>
+                <h6 className="mb-0 pb-3"><span>INGRESAR </span><span>REGISTRARSE</span></h6>
                 <input
                   className="checkbox"
                   type="checkbox"
@@ -62,20 +62,16 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
                     setError('');
                   }}
                 />
-                <label htmlFor="reg-log">
-                  <span className="toggle-icon-wrap">
-                    <HiOutlineArrowRight />
-                  </span>
-                </label>
+                <label htmlFor="reg-log"></label>
                 <div className="card-3d-wrap mx-auto">
                   <div className="card-3d-wrapper">
                     {/* Log In Card */}
                     <div className="card-front">
                       <div className="center-wrap">
                         <div className="section text-center">
-                          <h4 className="mb-4 pb-3">Log In</h4>
+                          <h4 className="mb-4 pb-3">Ingresar</h4>
                           <form onSubmit={handleLoginSubmit}>
-                            <div className="form-group-login">
+                            <div className="form-group">
                               <input
                                 type="text"
                                 className="form-style"
@@ -88,11 +84,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
                                 autoComplete="off"
                                 required
                               />
-                              <div className="input-icon">
-                                <HiOutlineMail />
-                              </div>
+                              <i className="input-icon uil uil-at"></i>
                             </div>
-                            <div className="form-group-login mt-4">
+                            <div className="form-group mt-4">
                               <input
                                 type="password"
                                 className="form-style"
@@ -105,9 +99,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
                                 autoComplete="off"
                                 required
                               />
-                              <div className="input-icon">
-                                <HiOutlineLockClosed />
-                              </div>
+                              <i className="input-icon uil uil-lock-alt"></i>
                             </div>
 
                             {error && !isSignUp && (
@@ -117,10 +109,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
                             )}
 
                             <button type="submit" className="login-btn mt-10">
-                              SUBMIT
+                              ENVIAR
                             </button>
                             <p className="mb-0 mt-6 text-center">
-                              <a href="#0" className="login-link">Forgot your password?</a>
+                              <a href="#0" className="login-link">¿Olvidaste tu contraseña?</a>
                             </p>
                           </form>
                         </div>
@@ -131,42 +123,36 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
                     <div className="card-back">
                       <div className="center-wrap">
                         <div className="section text-center">
-                          <h4 className="mb-4 pb-3">Sign Up</h4>
+                          <h4 className="mb-4 pb-3">Registrarse</h4>
                           <form onSubmit={handleSignUpSubmit}>
-                            <div className="form-group-login">
+                            <div className="form-group">
                               <input
                                 type="text"
                                 className="form-style"
-                                placeholder="Full Name"
+                                placeholder="Nombre Completo"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 autoComplete="off"
                               />
-                              <div className="input-icon">
-                                <HiOutlineUser />
-                              </div>
+                              <i className="input-icon uil uil-user"></i>
                             </div>
-                            <div className="form-group-login mt-4">
+                            <div className="form-group mt-4">
                               <input
                                 type="email"
                                 className="form-style"
-                                placeholder="Email"
+                                placeholder="Correo Electrónico"
                                 autoComplete="off"
                               />
-                              <div className="input-icon">
-                                <HiOutlineMail />
-                              </div>
+                              <i className="input-icon uil uil-at"></i>
                             </div>
-                            <div className="form-group-login mt-4">
+                            <div className="form-group mt-4">
                               <input
                                 type="password"
                                 className="form-style"
-                                placeholder="Password"
+                                placeholder="Contraseña"
                                 autoComplete="off"
                               />
-                              <div className="input-icon">
-                                <HiOutlineLockClosed />
-                              </div>
+                              <i className="input-icon uil uil-lock-alt"></i>
                             </div>
 
                             {error && isSignUp && (
@@ -176,7 +162,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
                             )}
 
                             <button type="submit" className="login-btn mt-10">
-                              SUBMIT
+                              ENVIAR
                             </button>
                           </form>
                         </div>
