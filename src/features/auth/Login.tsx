@@ -32,7 +32,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
   return (
     <div className="login-page">
       <div className="logo-link">
-        <div className="text-3xl font-black tracking-tighter text-white">HOME<span className="text-blue-500">.</span></div>
+        <div className="text-3xl font-black tracking-tighter text-[#00A9CE]">HOME<span className="text-white">.</span></div>
       </div>
 
       <button
