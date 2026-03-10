@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
 import CheckIcon from '../../../ui/icons/CheckIcon';
+import TrashIcon from '../../../ui/icons/TrashIcon';
+import UsersIcon from '../../../ui/icons/UsersIcon';
 
 interface Student {
     id: string;
@@ -9,10 +11,11 @@ interface Student {
     email: string;
     phone: string;
     currentPackage: string;
+    packageType: 'initial' | 'advanced' | 'plan_lider' | string;
     status: 'ACTIVE' | 'CONFLICT' | 'GRADUATED';
-    progress: number;
-    pl: number;
-    notes: string;
+    attendanceCount: number;
+    formData: any;
+    is_deleted?: boolean;
 }
 
 interface Goal {
@@ -29,6 +32,10 @@ const AdminStudents: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [activeTab, setActiveTab] = useState<'info' | 'goals'>('info');
+    const [viewMode, setViewMode] = useState<'active' | 'trash'>('active');
+    const [trashCount, setTrashCount] = useState(0);
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+    const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
 
     // Goals State
     const [studentGoals, setStudentGoals] = useState<Goal[]>([]);
@@ -36,7 +43,20 @@ const AdminStudents: React.FC = () => {
 
     useEffect(() => {
         fetchStudents();
-    }, []);
+        fetchTrashCount();
+    }, [viewMode]);
+
+    const fetchTrashCount = async () => {
+        const { count, error } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'student')
+            .eq('is_deleted', true);
+
+        if (!error && count !== null) {
+            setTrashCount(count);
+        }
+    };
 
     useEffect(() => {
         if (selectedStudent && activeTab === 'goals') {
@@ -45,7 +65,7 @@ const AdminStudents: React.FC = () => {
     }, [selectedStudent, activeTab]);
 
     const fetchStudents = async () => {
-        // Fetch profiles joined with enrollments
+        // Fetch profiles joined with enrollments, cycles, and attendance
         const { data, error } = await supabase
             .from('profiles')
             .select(`
@@ -55,22 +75,38 @@ const AdminStudents: React.FC = () => {
                 email,
                 phone,
                 role,
+                is_deleted,
                 enrollments (
+                    id,
                     status,
                     payment_status,
-                    cycle:cycles ( name, type )
+                    cycle:cycles ( name, type ),
+                    attendance ( id, status )
                 )
             `)
-            .eq('role', 'student');
+            .eq('role', 'student')
+            .eq('is_deleted', viewMode === 'trash');
 
         if (error) {
             console.error('Error fetching students:', error);
             return;
         }
 
+        // Fetch form submissions to get detail data
+        const emails = data.map((p: any) => p.email);
+        const { data: submissions } = await supabase
+            .from('form_submissions')
+            .select('email, data')
+            .in('email', emails);
+
+        const submissionsMap = (submissions || []).reduce((acc: any, curr: any) => {
+            acc[curr.email] = curr.data;
+            return acc;
+        }, {});
+
         const formatted: Student[] = data.map((p: any) => {
-            // Determine active enrollment/package
-            const activeEnrollment = p.enrollments?.[0]; // Simplified: grab first
+            const activeEnrollment = p.enrollments?.[0]; // Best guess: first enrollment
+            const attendanceCount = activeEnrollment?.attendance?.filter((a: any) => a.status === 'present').length || 0;
 
             return {
                 id: p.id,
@@ -78,13 +114,127 @@ const AdminStudents: React.FC = () => {
                 email: p.email,
                 phone: p.phone || '-',
                 currentPackage: activeEnrollment?.cycle?.name || 'Sin Asignar',
-                status: activeEnrollment?.status === 'active' ? 'ACTIVE' : 'GRADUATED', // Simplified logic
-                progress: 0, // Placeholder
-                pl: 0, // Placeholder
-                notes: ''
+                packageType: activeEnrollment?.cycle?.type || 'initial',
+                status: activeEnrollment?.status === 'active' ? 'ACTIVE' : (activeEnrollment?.status === 'conflict' ? 'CONFLICT' : 'GRADUATED'),
+                attendanceCount: attendanceCount,
+                formData: submissionsMap[p.email] || {},
+                is_deleted: p.is_deleted
             };
         });
         setStudents(formatted);
+        fetchTrashCount();
+    };
+
+    const AttendanceCircles = ({ type, count }: { type: string, count: number }) => {
+        let total = 4;
+        let blocks = 1;
+        if (type === 'advanced') total = 5;
+        if (type === 'plan_lider') {
+            total = 9;
+            blocks = 3;
+        }
+
+        const items = Array.from({ length: total });
+
+        if (blocks === 1) {
+            return (
+                <div className="flex gap-1 justify-center">
+                    {items.map((_, i) => (
+                        <div
+                            key={i}
+                            className={`w-2 h-2 rounded-full border ${i < count ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-100 border-slate-200'}`}
+                        />
+                    ))}
+                </div>
+            );
+        }
+
+        // PL Grouping
+        return (
+            <div className="flex gap-2 justify-center">
+                {[0, 1, 2].map(b => (
+                    <div key={b} className="flex gap-1">
+                        {[0, 1, 2].map(i => {
+                            const idx = b * 3 + i;
+                            return (
+                                <div
+                                    key={idx}
+                                    className={`w-2 h-2 rounded-full border ${idx < count ? 'bg-emerald-500 border-emerald-600' : 'bg-slate-100 border-slate-200'}`}
+                                />
+                            );
+                        })}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    const handleSoftDelete = async (id: string) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error } = await supabase
+            .from('profiles')
+            .update({
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                deleted_by: user?.id || null
+            })
+            .eq('id', id);
+
+        if (error) {
+            alert('Error al mover a la papelera');
+        } else {
+            fetchStudents();
+            setSelectedStudent(null);
+        }
+    };
+
+    const handleRestore = async (id: string) => {
+        const { error } = await supabase
+            .from('profiles')
+            .update({
+                is_deleted: false,
+                deleted_at: null,
+                deleted_by: null
+            })
+            .eq('id', id);
+
+        if (error) {
+            alert('Error al restaurar');
+        } else {
+            fetchStudents();
+            setSelectedStudent(null);
+        }
+    };
+
+    const handlePermanentDelete = async () => {
+        if (!studentToDelete) return;
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+        if (profile?.role !== 'admin') {
+            alert('No tienes permisos suficientes (Admin) para eliminar permanentemente.');
+            return;
+        }
+
+        const { error } = await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', studentToDelete.id);
+
+        if (error) {
+            alert('Error al eliminar definitivamente');
+        } else {
+            setIsConfirmDeleteOpen(false);
+            setStudentToDelete(null);
+            fetchStudents();
+        }
     };
 
     const fetchGoals = async (studentId: string) => {
@@ -124,7 +274,33 @@ const AdminStudents: React.FC = () => {
         <>
             <div className="formal-card overflow-hidden animate-fade-in-up h-full flex flex-col">
                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-white gap-4">
-                    <h3 className="text-lg font-bold text-slate-800">Gestión de Alumnos</h3>
+                    <div className="flex items-center gap-4">
+                        <h3 className="text-lg font-bold text-slate-800">
+                            {viewMode === 'active' ? 'Gestión de Alumnos' : 'Papelera de Alumnos'}
+                        </h3>
+                        {viewMode === 'active' && (
+                            <button
+                                onClick={() => setViewMode('trash')}
+                                className="p-2 text-slate-300 hover:text-red-500 transition-colors relative"
+                                title="Ver Papelera"
+                            >
+                                <TrashIcon className="w-4 h-4" />
+                                {trashCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
+                                        {trashCount}
+                                    </span>
+                                )}
+                            </button>
+                        )}
+                        {viewMode === 'trash' && (
+                            <button
+                                onClick={() => setViewMode('active')}
+                                className="px-3 py-1 text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-sm transition-colors uppercase tracking-wider"
+                            >
+                                Volver a Activos
+                            </button>
+                        )}
+                    </div>
                     <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
                         <div className="formal-search-container">
                             <input
@@ -178,9 +354,7 @@ const AdminStudents: React.FC = () => {
                                         </span>
                                     </td>
                                     <td className="text-center">
-                                        <div className="w-24 bg-slate-100 rounded-full h-1.5 mx-auto overflow-hidden">
-                                            <div className="bg-blue-600 h-1.5" style={{ width: `${student.progress}%` }}></div>
-                                        </div>
+                                        <AttendanceCircles type={student.packageType} count={student.attendanceCount} />
                                     </td>
                                     <td className="text-right">
                                         <button
@@ -227,28 +401,84 @@ const AdminStudents: React.FC = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                                     <div className="space-y-8">
                                         <div>
-                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Detalles de contacto</h4>
-                                            <div className="grid grid-cols-1 gap-6">
+                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Información del Formulario</h4>
+                                            <div className="space-y-6">
+                                                {/* Personal Section */}
                                                 <div>
-                                                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Correo Electrónico</label>
-                                                    <p className="text-sm font-medium text-slate-900">{selectedStudent.email}</p>
+                                                    <h5 className="text-[10px] font-bold text-slate-800 uppercase mb-3 border-b border-slate-100 pb-1">Datos Personales</h5>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase block">Nombre Completo</label>
+                                                            <p className="text-xs text-slate-700">{selectedStudent.formData.full_name || selectedStudent.name}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase block">Fecha Nacimiento</label>
+                                                            <p className="text-xs text-slate-700">{selectedStudent.formData.birth_date || '-'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase block">DNI / ID</label>
+                                                            <p className="text-xs text-slate-700">{selectedStudent.formData.dni_id || '-'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase block">Ocupación</label>
+                                                            <p className="text-xs text-slate-700">{selectedStudent.formData.occupation || '-'}</p>
+                                                        </div>
+                                                    </div>
                                                 </div>
+
+                                                {/* Medical Section */}
                                                 <div>
-                                                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Teléfono</label>
-                                                    <p className="text-sm font-medium text-slate-900">{selectedStudent.phone}</p>
+                                                    <h5 className="text-[10px] font-bold text-slate-800 uppercase mb-3 border-b border-slate-100 pb-1">Datos Médicos</h5>
+                                                    <div className="space-y-3">
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase block">Condiciones / Alergias</label>
+                                                            <p className="text-xs text-slate-700">{selectedStudent.formData.medical_conditions || 'Ninguna declarada'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase block">Medicación Actual</label>
+                                                            <p className="text-xs text-slate-700">{selectedStudent.formData.current_medication || 'Ninguna'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase block">Contacto Emergencia</label>
+                                                            <p className="text-xs text-slate-700">{selectedStudent.formData.emergency_contact || '-'}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Extra Section */}
+                                                <div>
+                                                    <h5 className="text-[10px] font-bold text-slate-800 uppercase mb-3 border-b border-slate-100 pb-1">Preguntas Extra</h5>
+                                                    <div className="space-y-3">
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase block">¿Cómo nos conociste?</label>
+                                                            <p className="text-xs text-slate-700">{selectedStudent.formData.how_met || '-'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase block">Motivación</label>
+                                                            <p className="text-xs text-slate-700 line-clamp-3">{selectedStudent.formData.motivation || '-'}</p>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
 
                                         <div>
-                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Programa actual</h4>
-                                            <div className="p-4 bg-slate-50 border border-slate-100 rounded-sm">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <span className="text-xs font-bold text-slate-600">{selectedStudent.currentPackage}</span>
-                                                    <span className="text-[10px] font-bold text-blue-600 uppercase">En curso</span>
+                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Estado de Asistencia y Programa</h4>
+                                            <div className="p-5 bg-slate-50 border border-slate-100 rounded-sm">
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <div>
+                                                        <span className="text-xs font-bold text-slate-800 block">{selectedStudent.currentPackage}</span>
+                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{selectedStudent.packageType}</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm uppercase tracking-tight">Activo</span>
                                                 </div>
-                                                <div className="w-full bg-slate-200 h-1 rounded-full overflow-hidden">
-                                                    <div className="bg-blue-600 h-full" style={{ width: '45%' }}></div>
+
+                                                <div className="mb-4">
+                                                    <label className="text-[9px] font-bold text-slate-400 uppercase block mb-2">Progreso de Asistencia</label>
+                                                    <AttendanceCircles type={selectedStudent.packageType} count={selectedStudent.attendanceCount} />
+                                                    <p className="text-center text-[9px] font-bold text-slate-400 uppercase mt-2 tracking-tighter">
+                                                        {selectedStudent.attendanceCount} días completados
+                                                    </p>
                                                 </div>
                                             </div>
                                         </div>
@@ -256,8 +486,37 @@ const AdminStudents: React.FC = () => {
 
                                     <div>
                                         <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Resumen Académico</h4>
-                                        <div className="p-6 border border-slate-100 rounded-sm bg-slate-50/50 italic text-sm text-slate-500 text-center">
+                                        <div className="p-6 border border-slate-100 rounded-sm bg-slate-50/50 italic text-sm text-slate-500 text-center mb-8">
                                             Historial de asistencias y notas próximamente integrado.
+                                        </div>
+
+                                        <div className="flex flex-col gap-3">
+                                            {selectedStudent.is_deleted ? (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleRestore(selectedStudent.id)}
+                                                        className="w-full py-3 bg-blue-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all"
+                                                    >
+                                                        Restaurar Alumno
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setStudentToDelete(selectedStudent);
+                                                            setIsConfirmDeleteOpen(true);
+                                                        }}
+                                                        className="w-full py-3 text-red-500 hover:bg-red-50 font-bold text-[10px] uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100"
+                                                    >
+                                                        Eliminar Definitivamente
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleSoftDelete(selectedStudent.id)}
+                                                    className="w-full py-3 text-red-500 hover:bg-red-50 font-bold text-[10px] uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100"
+                                                >
+                                                    Mover a la Papelera
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -307,6 +566,37 @@ const AdminStudents: React.FC = () => {
                                     )}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+            {/* Confirm Permanent Delete Modal */}
+            {isConfirmDeleteOpen && studentToDelete && createPortal(
+                <div className="full-screen-modal-overlay" onClick={() => setIsConfirmDeleteOpen(false)}>
+                    <div className="formal-modal max-w-md w-full p-8 animate-scale-in" onClick={e => e.stopPropagation()}>
+                        <div className="flex flex-col items-center text-center">
+                            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
+                                <TrashIcon className="w-8 h-8" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">¿Eliminar definitivamente?</h3>
+                            <p className="text-sm text-slate-500 mb-8">
+                                Estás a punto de borrar permanentemente a <strong>{studentToDelete.name}</strong>. Esta acción no se puede deshacer.
+                            </p>
+                            <div className="flex gap-4 w-full">
+                                <button
+                                    onClick={() => setIsConfirmDeleteOpen(false)}
+                                    className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handlePermanentDelete}
+                                    className="flex-1 py-3 bg-red-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-lg shadow-red-200 hover:bg-red-700 transition-all"
+                                >
+                                    Eliminar Ahora
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>,

@@ -12,9 +12,10 @@ interface Registration {
     name: string;
     email: string;
     date: string;
-    status: 'PENDING_REVIEW' | 'PENDING_PAYMENT' | 'APPROVED' | 'DELETED';
+    status: 'PENDING_REVIEW' | 'PENDING_PAYMENT' | 'APPROVED' | 'REJECTED' | 'DELETED';
     selectedPackage: string; // "INICIAL", "AVANZADO", "COMBO", etc.
     answers: { question: string; answer: string }[];
+    is_deleted?: boolean;
 }
 
 interface Cycle {
@@ -40,16 +41,32 @@ const AdminAdmissions: React.FC = () => {
     const [selectedCycleId2, setSelectedCycleId2] = useState(''); // For Combos
     const [detailTab, setDetailTab] = useState('PERSONAL');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [trashCount, setTrashCount] = useState(0);
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+    const [registrationToDelete, setRegistrationToDelete] = useState<Registration | null>(null);
 
     useEffect(() => {
         fetchRegistrations();
         fetchCycles();
-    }, []);
+        fetchTrashCount();
+    }, [viewMode]);
+
+    const fetchTrashCount = async () => {
+        const { count, error } = await supabase
+            .from('form_submissions')
+            .select('*', { count: 'exact', head: true })
+            .eq('is_deleted', true);
+
+        if (!error && count !== null) {
+            setTrashCount(count);
+        }
+    };
 
     const fetchRegistrations = async () => {
         const { data, error } = await supabase
             .from('form_submissions')
             .select('*')
+            .eq('is_deleted', viewMode === 'trash')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -65,12 +82,15 @@ const AdminAdmissions: React.FC = () => {
                 date: new Date(item.created_at).toISOString().split('T')[0],
                 status: item.status === 'pending' ? 'PENDING_REVIEW' :
                     (item.status === 'approved' ? 'PENDING_PAYMENT' :
-                        (item.status === 'enrolled' ? 'APPROVED' : item.status)),
+                        (item.status === 'enrolled' ? 'APPROVED' :
+                            (item.status === 'rejected' ? 'REJECTED' : item.status))),
                 selectedPackage: (item.data.intention?.includes('COMBO') ? 'COMBO' : 'INICIAL').toUpperCase(), // Simple logic for now, ideally mapped from form
-                answers: Object.entries(item.data).map(([key, val]) => ({ question: key, answer: String(val) }))
+                answers: Object.entries(item.data).map(([key, val]) => ({ question: key, answer: String(val) })),
+                is_deleted: item.is_deleted
             }));
             setRegistrations(realRegistrations);
         }
+        fetchTrashCount();
     };
 
     const fetchCycles = async () => {
@@ -86,12 +106,13 @@ const AdminAdmissions: React.FC = () => {
     };
 
     const handleStatusUpdate = async (reg: Registration, newStatus: string) => {
+        setIsSubmitting(true);
         // Map UI status back to DB status
         let dbStatus = 'pending';
         if (newStatus === 'PENDING_REVIEW') dbStatus = 'pending';
         if (newStatus === 'PENDING_PAYMENT') dbStatus = 'approved';
         if (newStatus === 'APPROVED') dbStatus = 'enrolled';
-        if (newStatus === 'DELETED') dbStatus = 'rejected';
+        if (newStatus === 'REJECTED') dbStatus = 'rejected';
 
         const { error } = await supabase
             .from('form_submissions')
@@ -101,8 +122,79 @@ const AdminAdmissions: React.FC = () => {
         if (error) {
             alert('Error updating status');
         } else {
+            await fetchRegistrations();
+            setSelectedRegistration(null);
+        }
+        setIsSubmitting(false);
+    };
+
+    const handleSoftDelete = async (id: string) => {
+        setIsSubmitting(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error } = await supabase
+            .from('form_submissions')
+            .update({
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                deleted_by: user?.id || null
+            })
+            .eq('id', id);
+
+        if (error) {
+            alert('Error al mover a la papelera');
+        } else {
+            await fetchRegistrations();
+            setSelectedRegistration(null);
+        }
+        setIsSubmitting(false);
+    };
+
+    const handleRestore = async (id: string) => {
+        const { error } = await supabase
+            .from('form_submissions')
+            .update({
+                is_deleted: false,
+                deleted_at: null,
+                deleted_by: null
+            })
+            .eq('id', id);
+
+        if (error) {
+            alert('Error al restaurar');
+        } else {
             fetchRegistrations();
             setSelectedRegistration(null);
+        }
+    };
+
+    const handlePermanentDelete = async () => {
+        if (!registrationToDelete) return;
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+        if (profile?.role !== 'admin') {
+            alert('No tienes permisos suficientes (Admin) para eliminar permanentemente.');
+            return;
+        }
+
+        const { error } = await supabase
+            .from('form_submissions')
+            .delete()
+            .eq('id', registrationToDelete.id);
+
+        if (error) {
+            alert('Error al eliminar definitivamente');
+        } else {
+            setIsConfirmDeleteOpen(false);
+            setRegistrationToDelete(null);
+            fetchRegistrations();
         }
     };
 
@@ -197,10 +289,15 @@ const AdminAdmissions: React.FC = () => {
                             {viewMode === 'active' && (
                                 <button
                                     onClick={() => setViewMode('trash')}
-                                    className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                    className="p-2 text-slate-300 hover:text-red-500 transition-colors relative"
                                     title="Ver Papelera"
                                 >
                                     <TrashIcon className="w-4 h-4" />
+                                    {trashCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
+                                            {trashCount}
+                                        </span>
+                                    )}
                                 </button>
                             )}
                             {viewMode === 'trash' && (
@@ -213,12 +310,12 @@ const AdminAdmissions: React.FC = () => {
                             )}
                         </div>
                         <span className={`${viewMode === 'active' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'} text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider`}>
-                            {viewMode === 'active' ? pendingReview.length : deletedRegistrations.length}
+                            {viewMode === 'active' ? pendingReview.length : registrations.length}
                         </span>
                     </div>
 
                     <div className="space-y-3 flex-1 overflow-y-auto pr-2">
-                        {(viewMode === 'active' ? pendingReview : deletedRegistrations).length === 0 ? (
+                        {(viewMode === 'active' ? pendingReview : registrations).length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-slate-300">
                                 <DocumentIcon className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-sm font-medium">
@@ -226,7 +323,7 @@ const AdminAdmissions: React.FC = () => {
                                 </p>
                             </div>
                         ) : (
-                            (viewMode === 'active' ? pendingReview : deletedRegistrations).map(reg => (
+                            (viewMode === 'active' ? pendingReview : registrations).map(reg => (
                                 <div
                                     key={reg.id}
                                     className={`group p-4 bg-white border ${viewMode === 'active' ? 'border-slate-100' : 'border-red-50 bg-red-50/20'} rounded-sm hover:border-blue-200 cursor-pointer transition-all`}
@@ -237,7 +334,9 @@ const AdminAdmissions: React.FC = () => {
                                             <h4 className="font-bold text-slate-800 text-sm">{reg.name}</h4>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className="text-[10px] font-bold text-slate-400 border border-slate-100 px-1.5 py-0.5 uppercase">{reg.selectedPackage}</span>
-                                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity">Ver detalle &rarr;</p>
+                                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {reg.status === 'PENDING_REVIEW' ? 'Auditar Respuesta' : 'Ver detalle'} &rarr;
+                                                </p>
                                             </div>
                                         </div>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{reg.date}</p>
@@ -466,20 +565,54 @@ const AdminAdmissions: React.FC = () => {
                             <div className="flex gap-4">
                                 <button onClick={() => setSelectedRegistration(null)} className="px-8 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all">Cerrar</button>
 
-                                {selectedRegistration.status === 'DELETED' ? (
-                                    <button onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_REVIEW')} className="px-8 py-3 bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all">
-                                        Restaurar Solicitud
-                                    </button>
+                                {selectedRegistration.is_deleted ? (
+                                    <div className="flex gap-4">
+                                        <button
+                                            onClick={() => {
+                                                setRegistrationToDelete(selectedRegistration);
+                                                setIsConfirmDeleteOpen(true);
+                                            }}
+                                            className="px-8 py-3 text-red-500 hover:bg-red-50 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100"
+                                        >
+                                            Eliminar Definitivamente
+                                        </button>
+                                        <button onClick={() => handleRestore(selectedRegistration.id)} className="px-8 py-3 bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all">
+                                            Restaurar Solicitud
+                                        </button>
+                                    </div>
                                 ) : (
                                     <>
                                         {selectedRegistration.status === 'PENDING_REVIEW' && (
-                                            <button onClick={() => handleStatusUpdate(selectedRegistration, 'DELETED')} className="px-8 py-3 text-red-500 hover:bg-red-50 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100">
-                                                Eliminar
-                                            </button>
+                                            <>
+                                                <button
+                                                    onClick={() => handleSoftDelete(selectedRegistration.id)}
+                                                    disabled={isSubmitting}
+                                                    className="px-6 py-3 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100 disabled:opacity-50"
+                                                >
+                                                    Enviar a Papelera
+                                                </button>
+                                                <button
+                                                    onClick={() => handleStatusUpdate(selectedRegistration, 'REJECTED')}
+                                                    disabled={isSubmitting}
+                                                    className="px-6 py-3 text-red-500 hover:bg-red-50 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100 disabled:opacity-50"
+                                                >
+                                                    Rechazar
+                                                </button>
+                                                <button
+                                                    onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_PAYMENT')}
+                                                    disabled={isSubmitting}
+                                                    className="px-10 py-3 bg-slate-900 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-2xl shadow-slate-900/10 hover:bg-black transition-all disabled:opacity-50 flex items-center gap-2"
+                                                >
+                                                    {isSubmitting ? 'Procesando...' : 'Aprobar Solicitud'}
+                                                </button>
+                                            </>
                                         )}
-                                        {selectedRegistration.status === 'PENDING_REVIEW' && (
-                                            <button onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_PAYMENT')} className="px-10 py-3 bg-slate-900 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-2xl shadow-slate-900/10 hover:bg-black transition-all">
-                                                Aprobar para pago
+                                        {selectedRegistration.status !== 'PENDING_REVIEW' && (
+                                            <button
+                                                onClick={() => setSelectedRegistration(null)}
+                                                className="px-8 py-3 bg-slate-100 text-slate-600 font-bold text-xs uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all"
+                                            >
+                                                Cerrar Vista
                                             </button>
                                         )}
                                     </>
@@ -590,6 +723,37 @@ const AdminAdmissions: React.FC = () => {
                             >
                                 {isSubmitting ? 'Procesando...' : 'FINALIZAR INSCRIPCIÓN'}
                             </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+            {/* Confirm Permanent Delete Modal */}
+            {isConfirmDeleteOpen && registrationToDelete && createPortal(
+                <div className="full-screen-modal-overlay" onClick={() => setIsConfirmDeleteOpen(false)}>
+                    <div className="formal-modal max-w-md w-full p-8 animate-scale-in" onClick={e => e.stopPropagation()}>
+                        <div className="flex flex-col items-center text-center">
+                            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
+                                <TrashIcon className="w-8 h-8" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">¿Eliminar definitivamente?</h3>
+                            <p className="text-sm text-slate-500 mb-8">
+                                Estás a punto de borrar permanentemente a <strong>{registrationToDelete.name}</strong>. Esta acción no se puede deshacer.
+                            </p>
+                            <div className="flex gap-4 w-full">
+                                <button
+                                    onClick={() => setIsConfirmDeleteOpen(false)}
+                                    className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handlePermanentDelete}
+                                    className="flex-1 py-3 bg-red-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-lg shadow-red-200 hover:bg-red-700 transition-all"
+                                >
+                                    Eliminar Ahora
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>,

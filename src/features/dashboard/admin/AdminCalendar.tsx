@@ -14,6 +14,7 @@ export interface Cycle {
     type: 'initial' | 'advanced' | 'plan_lider';
     capacity: number;
     enrolled_count: number;
+    is_deleted?: boolean;
 }
 
 interface Enrollment {
@@ -37,16 +38,36 @@ const AdminCalendar: React.FC = () => {
     const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
     const [cycleStudents, setCycleStudents] = useState<Enrollment[]>([]);
     const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+    const [viewMode, setViewMode] = useState<'active' | 'trash'>('active');
+    const [trashCount, setTrashCount] = useState(0);
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+    const [cycleToDelete, setCycleToDelete] = useState<Cycle | null>(null);
+    const [cycleSessions, setCycleSessions] = useState<any[]>([]);
+    const [attendanceData, setAttendanceData] = useState<Record<string, Record<string, string>>>({}); // { enrollmentId: { sessionId: status } }
+    const [isAttendanceLoading, setIsAttendanceLoading] = useState(false);
 
     useEffect(() => {
         fetchCycles();
-    }, []);
+        fetchTrashCount();
+    }, [viewMode]);
+
+    const fetchTrashCount = async () => {
+        const { count, error } = await supabase
+            .from('cycles')
+            .select('*', { count: 'exact', head: true })
+            .eq('is_deleted', true);
+
+        if (!error && count !== null) {
+            setTrashCount(count);
+        }
+    };
 
     const fetchCycles = async () => {
         setLoading(true);
         const { data, error } = await supabase
             .from('cycles')
             .select('*')
+            .eq('is_deleted', viewMode === 'trash')
             .order('start_date', { ascending: true });
 
         if (error) {
@@ -55,6 +76,7 @@ const AdminCalendar: React.FC = () => {
             setCycles(data || []);
         }
         setLoading(false);
+        fetchTrashCount();
     };
 
     const handleCreateCycle = async (e: React.FormEvent) => {
@@ -84,26 +106,78 @@ const AdminCalendar: React.FC = () => {
         }
     };
 
-    const handleDeleteCycle = async (id: string) => {
-        if (!confirm('¿Estás seguro de eliminar este ciclo?')) return;
+    const handleSoftDelete = async (id: string) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error } = await supabase
+            .from('cycles')
+            .update({
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                deleted_by: user?.id || null
+            })
+            .eq('id', id);
+
+        if (error) {
+            alert('Error al mover a la papelera');
+        } else {
+            fetchCycles();
+        }
+    };
+
+    const handleRestore = async (id: string) => {
+        const { error } = await supabase
+            .from('cycles')
+            .update({
+                is_deleted: false,
+                deleted_at: null,
+                deleted_by: null
+            })
+            .eq('id', id);
+
+        if (error) {
+            alert('Error al restaurar');
+        } else {
+            fetchCycles();
+        }
+    };
+
+    const handlePermanentDelete = async () => {
+        if (!cycleToDelete) return;
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+        if (profile?.role !== 'admin') {
+            alert('No tienes permisos suficientes (Admin) para eliminar permanentemente.');
+            return;
+        }
 
         const { error } = await supabase
             .from('cycles')
             .delete()
-            .eq('id', id);
+            .eq('id', cycleToDelete.id);
 
         if (error) {
-            alert('Error deleting cycle: ' + error.message);
+            alert('Error al eliminar definitivamente: ' + error.message);
         } else {
+            setIsConfirmDeleteOpen(false);
+            setCycleToDelete(null);
             fetchCycles();
         }
     };
 
     const fetchStudentsForCycle = async (cycleId: string) => {
         setIsLoadingStudents(true);
-        // We need to join with profiles. Note: 'user:profiles(...)' depends on foreign key name
-        // Assuming enrollments has user_id FK to profiles(id)
-        const { data, error } = await supabase
+        setIsAttendanceLoading(true);
+
+        // 1. Fetch Students
+        const { data: enrollments, error: enrollError } = await supabase
             .from('enrollments')
             .select(`
                 id,
@@ -116,19 +190,76 @@ const AdminCalendar: React.FC = () => {
             `)
             .eq('cycle_id', cycleId);
 
-        if (error) {
-            console.error('Error fetching students:', error);
+        if (enrollError) {
+            console.error('Error fetching students:', enrollError);
             setCycleStudents([]);
         } else {
-            // Cast the result to shape it correctly if needed, or just use as is
-            const formatted = (data as any[]).map(item => ({
-                id: item.id,
-                user: item.user,
-                attendance: [false, false, false, false] // Placeholder for now
-            }));
-            setCycleStudents(formatted);
+            setCycleStudents(enrollments as any[]);
+
+            // 2. Fetch Sessions for this cycle
+            const { data: sessions, error: sessError } = await supabase
+                .from('cycle_sessions')
+                .select('*')
+                .eq('cycle_id', cycleId)
+                .order('session_date', { ascending: true });
+
+            if (!sessError && sessions) {
+                setCycleSessions(sessions);
+
+                // 3. Fetch Attendance for these enrollments and sessions
+                const enrollmentIds = (enrollments as any[]).map(e => e.id);
+                if (enrollmentIds.length > 0) {
+                    const { data: attendance, error: attError } = await supabase
+                        .from('attendance')
+                        .select('*')
+                        .in('enrollment_id', enrollmentIds);
+
+                    if (!attError && attendance) {
+                        const attMap: Record<string, Record<string, string>> = {};
+                        attendance.forEach(item => {
+                            if (!attMap[item.enrollment_id]) attMap[item.enrollment_id] = {};
+                            attMap[item.enrollment_id][item.cycle_session_id] = item.status;
+                        });
+                        setAttendanceData(attMap);
+                    }
+                }
+            }
         }
         setIsLoadingStudents(false);
+        setIsAttendanceLoading(false);
+    };
+
+    const handleAttendanceToggle = async (enrollmentId: string, sessionId: string, currentStatus: string | undefined) => {
+        const statuses = ['present', 'absent', 'late'];
+        const currentIndex = currentStatus ? statuses.indexOf(currentStatus) : -1;
+        const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+
+        // Optimistic update
+        setAttendanceData(prev => ({
+            ...prev,
+            [enrollmentId]: {
+                ...(prev[enrollmentId] || {}),
+                [sessionId]: nextStatus
+            }
+        }));
+
+        // Upsert to DB
+        const { error } = await supabase
+            .from('attendance')
+            .upsert({
+                enrollment_id: enrollmentId,
+                cycle_session_id: sessionId,
+                status: nextStatus,
+                recorded_at: new Date().toISOString()
+            }, {
+                onConflict: 'enrollment_id, cycle_session_id'
+            });
+
+        if (error) {
+            console.error('Error updating attendance:', error);
+            // Revert optimistic update
+            fetchStudentsForCycle(selectedCycle?.id || '');
+        }
     };
 
     const filteredCycles = cycles.filter(c =>
@@ -149,19 +280,48 @@ const AdminCalendar: React.FC = () => {
         if (type === 'plan_lider') return 'PROGRAMA LIDER';
         return type.toUpperCase();
     };
+
     return (
         <>
             <div className="flex flex-col lg:flex-row gap-8 h-full animate-fade-in-up">
                 {/* Left: Cycle List */}
                 <div className="flex-1 formal-card overflow-hidden flex flex-col">
                     <div className="p-6 border-b border-slate-100 bg-white sticky top-0 z-10 flex justify-between items-center">
-                        <h3 className="text-lg font-bold text-slate-800">Programación de Ciclos</h3>
-                        <button
-                            onClick={() => setIsCreateModalOpen(true)}
-                            className="px-4 py-2 bg-blue-600 text-white text-xs font-bold uppercase tracking-wider rounded-sm hover:bg-blue-700 transition-colors"
-                        >
-                            + Nuevo Ciclo
-                        </button>
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-lg font-bold text-slate-800">
+                                {viewMode === 'active' ? 'Programación de Ciclos' : 'Papelera de Ciclos'}
+                            </h3>
+                            {viewMode === 'active' && (
+                                <button
+                                    onClick={() => setViewMode('trash')}
+                                    className="p-2 text-slate-300 hover:text-red-500 transition-colors relative"
+                                    title="Ver Papelera"
+                                >
+                                    <TrashIcon className="w-4 h-4" />
+                                    {trashCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
+                                            {trashCount}
+                                        </span>
+                                    )}
+                                </button>
+                            )}
+                            {viewMode === 'trash' && (
+                                <button
+                                    onClick={() => setViewMode('active')}
+                                    className="px-3 py-1 text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-sm transition-colors uppercase tracking-wider"
+                                >
+                                    Volver a Activos
+                                </button>
+                            )}
+                        </div>
+                        {viewMode === 'active' && (
+                            <button
+                                onClick={() => setIsCreateModalOpen(true)}
+                                className="px-4 py-2 bg-blue-600 text-white text-xs font-bold uppercase tracking-wider rounded-sm hover:bg-blue-700 transition-colors"
+                            >
+                                + Nuevo Ciclo
+                            </button>
+                        )}
                     </div>
 
                     <div className="p-4 bg-slate-50 border-b border-slate-100">
@@ -181,7 +341,14 @@ const AdminCalendar: React.FC = () => {
                             <p className="text-center text-slate-400">No hay ciclos encontrados.</p>
                         ) : (
                             filteredCycles.map(cycle => (
-                                <div key={cycle.id} className="bg-white border border-slate-100 rounded-sm p-4 hover:border-blue-200 transition-all flex items-center justify-between">
+                                <div
+                                    key={cycle.id}
+                                    className="bg-white border border-slate-100 rounded-sm p-4 hover:border-blue-200 transition-all flex items-center justify-between cursor-pointer group"
+                                    onClick={() => {
+                                        setSelectedCycle(cycle);
+                                        fetchStudentsForCycle(cycle.id);
+                                    }}
+                                >
                                     <div className="flex items-center gap-4">
                                         <div className={`w-12 h-12 rounded-sm flex items-center justify-center text-white font-bold shadow-sm ${getLevelColor(cycle.type)}`}>
                                             <span className="text-lg">{new Date(cycle.start_date).getDate()}</span>
@@ -216,21 +383,49 @@ const AdminCalendar: React.FC = () => {
                                                 }`}>
                                                 {cycle.status === 'active' ? 'Activo' : 'Finalizado'}
                                             </span>
-                                            <button
-                                                className="text-blue-600 text-xs font-bold uppercase hover:underline"
-                                                onClick={() => {
-                                                    setSelectedCycle(cycle);
-                                                    fetchStudentsForCycle(cycle.id);
-                                                }}
-                                            >
-                                                Alumnos
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteCycle(cycle.id)}
-                                                className="text-slate-300 hover:text-red-500 transition-colors"
-                                            >
-                                                <TrashIcon className="w-4 h-4" />
-                                            </button>
+                                            {viewMode === 'active' ? (
+                                                <>
+                                                    <button
+                                                        className="text-blue-600 text-[10px] font-bold uppercase border border-blue-50 px-2 py-1 rounded-sm hover:bg-blue-50 transition-colors"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedCycle(cycle);
+                                                            fetchStudentsForCycle(cycle.id);
+                                                        }}
+                                                    >
+                                                        Alumnos
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleSoftDelete(cycle.id);
+                                                        }}
+                                                        className="text-slate-300 hover:text-red-500 transition-colors p-1"
+                                                        title="Mover a papelera"
+                                                    >
+                                                        <TrashIcon className="w-4 h-4" />
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <div className="flex items-center gap-4">
+                                                    <button
+                                                        onClick={() => handleRestore(cycle.id)}
+                                                        className="text-blue-600 text-[10px] font-bold uppercase hover:underline"
+                                                    >
+                                                        Restaurar
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setCycleToDelete(cycle);
+                                                            setIsConfirmDeleteOpen(true);
+                                                        }}
+                                                        className="text-red-500 hover:text-red-700 transition-colors"
+                                                        title="Eliminar definitivamente"
+                                                    >
+                                                        <TrashIcon className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -315,11 +510,69 @@ const AdminCalendar: React.FC = () => {
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{enrollment.user?.email}</p>
                                                 </div>
                                             </div>
-                                            <button className="text-[10px] font-bold text-blue-600 uppercase border border-blue-100 px-3 py-1 hover:bg-blue-50 transition-colors">Detalle</button>
+                                            <div className="flex items-center gap-6">
+                                                {/* Attendance Circles */}
+                                                <div className="flex items-center gap-1.5">
+                                                    {cycleSessions.length === 0 ? (
+                                                        <span className="text-[9px] font-bold text-slate-300 uppercase tracking-tighter">Sin calendario</span>
+                                                    ) : (
+                                                        cycleSessions.map((session) => {
+                                                            const status = attendanceData[enrollment.id]?.[session.id];
+                                                            let colorClass = 'bg-slate-100 border-slate-200';
+                                                            if (status === 'present') colorClass = 'bg-emerald-500 border-emerald-600';
+                                                            if (status === 'absent') colorClass = 'bg-rose-500 border-rose-600';
+                                                            if (status === 'late') colorClass = 'bg-amber-400 border-amber-500';
+
+                                                            return (
+                                                                <button
+                                                                    key={session.id}
+                                                                    onClick={() => handleAttendanceToggle(enrollment.id, session.id, status)}
+                                                                    disabled={isAttendanceLoading}
+                                                                    className={`w-3.5 h-3.5 rounded-full border transition-all hover:scale-110 ${colorClass}`}
+                                                                    title={`${new Date(session.session_date).toLocaleDateString()}: ${status || 'Sin registrar'}`}
+                                                                />
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                                <button className="text-[10px] font-bold text-blue-600 uppercase border border-blue-100 px-3 py-1 hover:bg-blue-50 transition-colors">Detalle</button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Confirm Permanent Delete Modal Portal */}
+            {isConfirmDeleteOpen && cycleToDelete && createPortal(
+                <div className="full-screen-modal-overlay" onClick={() => setIsConfirmDeleteOpen(false)}>
+                    <div className="formal-modal max-w-md w-full p-8 animate-scale-in" onClick={e => e.stopPropagation()}>
+                        <div className="flex flex-col items-center text-center">
+                            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
+                                <TrashIcon className="w-8 h-8" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">¿Eliminar ciclo definitivamente?</h3>
+                            <p className="text-sm text-slate-500 mb-8">
+                                Estás a punto de borrar permanentemente el ciclo <strong>{cycleToDelete.name}</strong>. Esta acción no se puede deshacer y podría afectar a los alumnos inscritos.
+                            </p>
+                            <div className="flex gap-4 w-full">
+                                <button
+                                    onClick={() => setIsConfirmDeleteOpen(false)}
+                                    className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handlePermanentDelete}
+                                    className="flex-1 py-3 bg-red-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-lg shadow-red-200 hover:bg-red-700 transition-all"
+                                >
+                                    Eliminar Ahora
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>,

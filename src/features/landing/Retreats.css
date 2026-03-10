@@ -1,0 +1,263 @@
+/* Retreats Carousel Styles */
+.retreats-carousel-container {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100vh;
+    min-height: 600px;
+    max-height: 900px;
+    overflow: hidden;
+    position: relative;
+    background: #0f172a;
+    /* Slate 900 */
+}
+
+.retreats-slider {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.retreats-item {
+    width: 200px;
+    height: 300px;
+    list-style-type: none;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+    background-position: center;
+    background-size: cover;
+    border-radius: 20px;
+    box-shadow: 0 20px 30px rgba(0, 0, 0, 0.5);
+    transition: transform 0.1s, left 0.75s, top 0.75s, width 0.75s, height 0.75s, opacity 0.75s;
+    cursor: pointer;
+}
+
+/* Contrast enhancement: vignette/overlay for items */
+.retreats-item::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
+    border-radius: inherit;
+    transition: opacity 0.3s;
+}
+
+.retreats-item:nth-child(1),
+.retreats-item:nth-child(2) {
+    top: 0;
+    left: 0;
+    transform: none;
+    border-radius: 0;
+    width: 100%;
+    height: 100%;
+    box-shadow: none;
+    opacity: 1;
+    cursor: default;
+}
+
+.retreats-item:nth-child(1)::after,
+.retreats-item:nth-child(2)::after {
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.2) 60%, transparent 100%);
+}
+
+.retreats-item:nth-child(3) {
+    left: 50%;
+}
+
+.retreats-item:nth-child(4) {
+    left: calc(50% + 220px);
+}
+
+.retreats-item:nth-child(5) {
+    left: calc(50% + 440px);
+}
+
+.retreats-item:nth-child(n+6) {
+    left: calc(50% + 660px);
+    opacity: 0;
+}
+
+.retreats-item .content {
+    width: min(40vw, 500px);
+    position: absolute;
+    top: 50%;
+    left: 4rem;
+    transform: translateY(-50%);
+    color: white;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    display: none;
+    z-index: 20;
+}
+
+.retreats-item:nth-child(2) .content {
+    display: block;
+    animation: showContentRev 0.75s ease-in-out 0.3s forwards;
+}
+
+@keyframes showContentRev {
+    0% {
+        filter: blur(10px);
+        transform: translateY(calc(-50% + 50px));
+        opacity: 0;
+    }
+
+    100% {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(-50%);
+    }
+}
+
+.retreats-item .title {
+    font-family: 'serif';
+    font-size: clamp(2rem, 5vw, 4.5rem);
+    font-weight: 800;
+    text-transform: uppercase;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+
+.retreats-item .location {
+    font-size: clamp(0.9rem, 1.5vw, 1.25rem);
+    font-weight: 600;
+    color: #38bdf8;
+    /* Blue 400 */
+    margin-bottom: 1.5rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.retreats-item .description {
+    margin-bottom: 2.5rem;
+    font-size: clamp(0.85rem, 1.25vw, 1.1rem);
+    line-height: 1.7;
+    font-weight: 300;
+    max-width: 450px;
+}
+
+.retreats-item .btn-read-more {
+    width: fit-content;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: white;
+    border: 2px solid white;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s;
+    backdrop-filter: blur(5px);
+}
+
+.retreats-item .btn-read-more:hover {
+    background-color: white;
+    color: black;
+}
+
+.retreats-nav {
+    position: absolute;
+    bottom: 3rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    gap: 1rem;
+    user-select: none;
+}
+
+.retreats-nav button {
+    background-color: rgba(255, 255, 255, 0.7);
+    color: rgba(0, 0, 0, 0.9);
+    border: 2px solid rgba(0, 0, 0, 0.8);
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.3s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.retreats-nav button:hover {
+    background-color: rgba(255, 255, 255, 1);
+    transform: scale(1.1);
+}
+
+.retreats-nav button:active {
+    transform: scale(0.95);
+}
+
+/* Mobile Adjustments */
+@media (max-width: 768px) {
+    .retreats-item .content {
+        left: 2rem;
+        width: calc(100% - 4rem);
+    }
+
+    .retreats-item .title {
+        font-size: 2.5rem;
+    }
+
+    .retreats-item:nth-child(3),
+    .retreats-item:nth-child(4),
+    .retreats-item:nth-child(5) {
+        display: none;
+    }
+}
+
+/* Modal Styles stay the same but ensuring high contrast */
+.retreats-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    backdrop-filter: blur(15px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.retreats-modal-content {
+    background: #fff;
+    color: #0f172a;
+    width: 100%;
+    max-width: 650px;
+    border-radius: 2rem;
+    padding: 3rem;
+    position: relative;
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7);
+}
+
+.retreats-modal-close {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    background: #f1f5f9;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.3s;
+}
+
+.retreats-modal-close:hover {
+    background: #e2e8f0;
+}
