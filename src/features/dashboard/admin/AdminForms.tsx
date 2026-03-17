@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../services/supabaseClient';
-import { FormField, FormSubmission } from '../../../services/mockDatabase'; // Keeping types or redefining them? Let's use simplified types here.
+import { FormField, FormSubmission } from '../../../services/mockDatabase';
+import TrashIcon from '../../../ui/icons/TrashIcon';
+import { createPortal } from 'react-dom';
 
 // Simplified types matching DB JSON structure
 interface Form {
@@ -8,6 +10,7 @@ interface Form {
     slug: string;
     title: string;
     schema: FormField[];
+    is_deleted?: boolean;
 }
 
 const AdminForms: React.FC = () => {
@@ -17,10 +20,27 @@ const AdminForms: React.FC = () => {
     const [formSubmissions, setFormSubmissions] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<'editor' | 'submissions'>('editor');
     const [isLoading, setIsLoading] = useState(false);
+    const [viewMode, setViewMode] = useState<'active' | 'trash'>('active');
+    const [trashCount, setTrashCount] = useState(0);
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+    const [formToDelete, setFormToDelete] = useState<Form | null>(null);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     useEffect(() => {
         fetchForms();
-    }, []);
+        fetchTrashCount();
+    }, [viewMode]);
+
+    const fetchTrashCount = async () => {
+        const { count, error } = await supabase
+            .from('forms')
+            .select('*', { count: 'exact', head: true })
+            .eq('is_deleted', true);
+
+        if (!error && count !== null) {
+            setTrashCount(count);
+        }
+    };
 
     useEffect(() => {
         if (selectedFormId) {
@@ -34,19 +54,26 @@ const AdminForms: React.FC = () => {
     const fetchForms = async () => {
         setIsLoading(true);
         console.log('Fetching forms...');
-        const { data, error } = await supabase.from('forms').select('*');
+        const { data, error } = await supabase
+            .from('forms')
+            .select('*')
+            .eq('is_deleted', viewMode === 'trash');
 
         if (error) {
             console.error('Error fetching forms:', error);
             alert('Error al cargar formularios: ' + error.message);
         } else if (data) {
-            console.log('Forms fetched:', data);
             setForms(data);
-            if (data.length > 0 && !selectedFormId) {
-                setSelectedFormId(data[0].id);
+            if (data.length > 0) {
+                if (!selectedFormId || !data.find(f => f.id === selectedFormId)) {
+                    setSelectedFormId(data[0].id);
+                }
+            } else {
+                setSelectedFormId(null);
             }
         }
         setIsLoading(false);
+        fetchTrashCount();
     };
 
     const fetchFormFields = async (formId: string) => {
@@ -88,6 +115,89 @@ const AdminForms: React.FC = () => {
         }
     };
 
+    const handleSoftDeleteForm = async (id: string) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { error } = await supabase
+            .from('forms')
+            .update({
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                deleted_by: user?.id || null
+            })
+            .eq('id', id);
+
+        if (error) {
+            alert('Error al mover a la papelera');
+        } else {
+            fetchForms();
+        }
+    };
+
+    const handleRestoreForm = async (id: string) => {
+        const { error } = await supabase
+            .from('forms')
+            .update({
+                is_deleted: false,
+                deleted_at: null,
+                deleted_by: null
+            })
+            .eq('id', id);
+
+        if (error) {
+            alert('Error al restaurar');
+        } else {
+            fetchForms();
+        }
+    };
+
+    const handlePermanentDeleteForm = async () => {
+        if (!formToDelete) return;
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+        if (profile?.role !== 'admin') {
+            setDeleteError('No tienes permisos suficientes (Admin) para eliminar permanentemente.');
+            return;
+        }
+
+        // Protection: Check for submissions
+        const { count, error: countError } = await supabase
+            .from('form_submissions')
+            .select('*', { count: 'exact', head: true })
+            .eq('form_id', formToDelete.id);
+
+        if (countError) {
+            setDeleteError('Error al verificar respuestas existentes');
+            return;
+        }
+
+        if (count && count > 0) {
+            setDeleteError(`No se puede eliminar: Este formulario tiene ${count} respuestas asociadas. Debes borrarlas primero para mantener la integridad de los datos.`);
+            return;
+        }
+
+        const { error } = await supabase
+            .from('forms')
+            .delete()
+            .eq('id', formToDelete.id);
+
+        if (error) {
+            setDeleteError('Error al eliminar definitivamente: ' + error.message);
+        } else {
+            setIsConfirmDeleteOpen(false);
+            setFormToDelete(null);
+            setDeleteError(null);
+            fetchForms();
+        }
+    };
+
     const handleAddField = () => {
         const newField: FormField = {
             id: `field_${Date.now()}`,
@@ -123,17 +233,49 @@ const AdminForms: React.FC = () => {
                     <h2 className="text-xl font-bold text-slate-800">Diseño de Formularios</h2>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configuración de campos y recolección de datos</p>
                 </div>
-                <div className="flex items-center gap-4">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Formulario activo:</label>
-                    <select
-                        className="bg-slate-50 border border-slate-200 rounded-sm px-4 py-2 font-bold text-xs text-slate-600 outline-none focus:ring-1 focus:ring-blue-400"
-                        value={selectedFormId || ''}
-                        onChange={e => setSelectedFormId(e.target.value)}
-                    >
-                        {forms.map(f => (
-                            <option key={f.id} value={f.id}>{f.title}</option>
-                        ))}
-                    </select>
+                <div className="flex items-center gap-6">
+                    <div className="flex gap-2">
+                        {viewMode === 'active' && (
+                            <button
+                                onClick={() => setViewMode('trash')}
+                                className="p-2 text-slate-300 hover:text-red-500 transition-colors relative"
+                                title="Ver Papelera"
+                            >
+                                <TrashIcon className="w-4 h-4" />
+                                {trashCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
+                                        {trashCount}
+                                    </span>
+                                )}
+                            </button>
+                        )}
+                        {viewMode === 'trash' && (
+                            <button
+                                onClick={() => setViewMode('active')}
+                                className="px-3 py-1 text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-sm transition-colors uppercase tracking-wider"
+                            >
+                                Volver a Activos
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            {viewMode === 'active' ? 'Formulario activo:' : 'Seleccionar de papelera:'}
+                        </label>
+                        <select
+                            className="bg-slate-50 border border-slate-200 rounded-sm px-4 py-2 font-bold text-xs text-slate-600 outline-none focus:ring-1 focus:ring-blue-400"
+                            value={selectedFormId || ''}
+                            onChange={e => setSelectedFormId(e.target.value)}
+                        >
+                            {forms.length === 0 ? (
+                                <option value="">No hay formularios</option>
+                            ) : (
+                                forms.map(f => (
+                                    <option key={f.id} value={f.id}>{f.title}</option>
+                                ))
+                            )}
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -157,12 +299,46 @@ const AdminForms: React.FC = () => {
                     {activeTab === 'editor' ? (
                         <div>
                             <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-50">
-                                <h3 className="text-sm font-bold text-slate-800">
-                                    {selectedForm ? `Editar: ${selectedForm.title.toUpperCase()}` : 'Cargando...'}
-                                </h3>
-                                <button onClick={handleAddField} disabled={!selectedForm} className="px-6 py-2 bg-blue-600 text-white rounded-sm font-bold text-[10px] uppercase tracking-widest disabled:opacity-30 shadow-lg shadow-blue-500/10">
-                                    + Agregar Pregunta
-                                </button>
+                                <div className="flex items-center gap-4">
+                                    <h3 className="text-sm font-bold text-slate-800">
+                                        {selectedForm ? `Estructura: ${selectedForm.title.toUpperCase()}` : (isLoading ? 'Cargando...' : 'Sin formulario seleccionado')}
+                                    </h3>
+                                    {selectedForm && (
+                                        viewMode === 'active' ? (
+                                            <button
+                                                onClick={() => handleSoftDeleteForm(selectedForm.id)}
+                                                className="text-red-400 hover:text-red-600 text-[10px] font-bold uppercase tracking-widest px-2"
+                                                title="Mover a papelera"
+                                            >
+                                                <TrashIcon className="w-4 h-4" />
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-4 ml-4">
+                                                <button
+                                                    onClick={() => handleRestoreForm(selectedForm.id)}
+                                                    className="bg-blue-600 text-white text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-sm shadow-lg shadow-blue-100 transition-all hover:bg-blue-700"
+                                                >
+                                                    Restaurar
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setFormToDelete(selectedForm);
+                                                        setIsConfirmDeleteOpen(true);
+                                                    }}
+                                                    className="text-red-500 hover:text-red-700"
+                                                    title="Eliminar definitivamente"
+                                                >
+                                                    <TrashIcon className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        )
+                                    )}
+                                </div>
+                                {viewMode === 'active' && (
+                                    <button onClick={handleAddField} disabled={!selectedForm} className="px-6 py-2 bg-blue-600 text-white rounded-sm font-bold text-[10px] uppercase tracking-widest disabled:opacity-30 shadow-lg shadow-blue-500/10">
+                                        + Agregar Pregunta
+                                    </button>
+                                )}
                             </div>
 
                             {forms.length === 0 && !isLoading && (
@@ -289,6 +465,44 @@ const AdminForms: React.FC = () => {
                     )}
                 </div>
             </div>
+            {/* Confirm Permanent Delete Modal */}
+            {isConfirmDeleteOpen && formToDelete && createPortal(
+                <div className="full-screen-modal-overlay" onClick={() => { setIsConfirmDeleteOpen(false); setDeleteError(null); }}>
+                    <div className="formal-modal max-w-md w-full p-8 animate-scale-in" onClick={e => e.stopPropagation()}>
+                        <div className="flex flex-col items-center text-center">
+                            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6">
+                                <TrashIcon className="w-8 h-8" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">¿Eliminar formulario definitivamente?</h3>
+                            <p className="text-sm text-slate-500 mb-4">
+                                Estás a punto de borrar permanentemente el formulario <strong>{formToDelete.title}</strong>. Esta acción no se puede deshacer.
+                            </p>
+
+                            {deleteError && (
+                                <div className="w-full p-4 bg-red-50 border border-red-100 rounded-sm mb-8 text-xs text-red-700 font-medium">
+                                    {deleteError}
+                                </div>
+                            )}
+
+                            <div className="flex gap-4 w-full">
+                                <button
+                                    onClick={() => { setIsConfirmDeleteOpen(false); setDeleteError(null); }}
+                                    className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handlePermanentDeleteForm}
+                                    className="flex-1 py-3 bg-red-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-lg shadow-red-200 hover:bg-red-700 transition-all"
+                                >
+                                    Eliminar Ahora
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };
