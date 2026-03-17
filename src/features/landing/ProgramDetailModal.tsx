@@ -96,10 +96,11 @@ const PROGRAM_DETAILS: Record<string, ProgramDetail> = {
 interface ProgramDetailModalProps {
     programId: string | null;
     onClose: () => void;
+    onBack?: () => void;
     onStartRegistration?: () => void;
 }
 
-const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({ programId, onClose, onStartRegistration }) => {
+const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({ programId, onClose, onBack, onStartRegistration }) => {
     const [activeStage, setActiveStage] = useState(0);
     const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
     const modalRef = useRef<HTMLDivElement>(null);
@@ -149,9 +150,23 @@ const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({ programId, onCl
             data-lenis-prevent
         >
             <div
-                ref={modalRef}
-                className="relative w-full h-full md:max-w-7xl md:h-[90vh] bg-white md:rounded-[3rem] shadow-2xl overflow-y-auto overflow-x-hidden scrollbar-hide"
+                className="relative w-full h-full md:max-w-7xl md:h-[90vh] bg-white md:rounded-[3rem] shadow-2xl overflow-hidden"
             >
+            <div
+                ref={modalRef}
+                className="w-full h-full overflow-y-auto overflow-x-hidden modal-scrollbar"
+            >
+                {/* Back Button */}
+                {onBack && (
+                    <button
+                        onClick={onBack}
+                        className="fixed top-6 left-6 z-[110] p-4 bg-white/10 hover:bg-white/20 text-white md:text-slate-900 md:bg-slate-100 md:hover:bg-slate-200 rounded-full transition-all backdrop-blur-md group"
+                    >
+                        <svg className="w-6 h-6 transform group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                    </button>
+                )}
                 {/* Close Button */}
                 <button
                     onClick={onClose}
@@ -248,6 +263,7 @@ const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({ programId, onCl
 
                     </div>
                 </div>
+            </div>
             </div>
         </div>
     );

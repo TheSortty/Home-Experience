@@ -140,6 +140,29 @@ body {
   scrollbar-width: none;
 }
 
+/* Sleek Modal Scrollbar */
+.modal-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 1rem 0; /* Add margin to track to avoid hitting rounded corners */
+}
+
+.modal-scrollbar::-webkit-scrollbar-thumb {
+  background: #CBD5E1; /* slate-300 */
+  border-radius: 20px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.modal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8; /* slate-400 */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
 .glass-panel {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px);
