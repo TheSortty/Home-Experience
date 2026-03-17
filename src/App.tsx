@@ -1,6 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { SmoothScroll } from './components/SmoothScroll';
-import { DemoBanner } from './ui/DemoBanner';
 import Header from './ui/Header';
 import Footer from './ui/Footer';
 import TestimonialModal from './ui/TestimonialModal';
@@ -164,7 +163,6 @@ const App: React.FC = () => {
         <InteractiveBg />
         {!(isSelectionModalOpen || selectedProgramId) && (
           <div className="fixed top-0 left-0 right-0 z-[9999] flex flex-col">
-            <DemoBanner />
             <Header onLoginClick={handleLoginClick} onStartClick={handleOpenSelection} />
           </div>
         )}

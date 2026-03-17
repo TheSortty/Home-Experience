@@ -29,6 +29,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [globalSearch, setGlobalSearch] = useState('');
 
+  // Role and User State
+  const [role, setRole] = useState<'admin' | 'super_admin'>('admin');
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [isLoadingRole, setIsLoadingRole] = useState(true);
+
   // Real Data State
   const [stats, setStats] = useState({
     pendingAdmissions: 0,
@@ -46,6 +51,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
   const fetchDashboardData = async () => {
     try {
+      setIsLoadingRole(true);
+      // 0. Fetch User and Role
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email || '');
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('user_id', user.id)
+          .single();
+
+        if (profileError || !profile) {
+          setRole('admin');
+        } else {
+          setRole(profile.role as any);
+        }
+      } else {
+        setRole('admin');
+      }
+
       // 1. Fetch Pending Admissions Count (from form_submissions)
       const { count: pendingCount, error: pendingError } = await supabase
         .from('form_submissions')
@@ -102,7 +127,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
+      setRole('admin'); // Robust fallback
       alert('Error al cargar datos del dashboard: ' + (error.message || 'Error desconocido'));
+    } finally {
+      setIsLoadingRole(false);
     }
   };
 
@@ -208,17 +236,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     </div>
   );
 
+  const isSuper = role === 'super_admin';
+
   const menuItems = [
     { id: 'overview', label: 'Resumen', icon: ChartIcon },
     { id: 'admissions', label: 'Admisiones', icon: DocumentIcon },
     { id: 'students', label: 'Alumnos Registrar', icon: UsersIcon },
     { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
-    { id: 'communications', label: 'Comunicación', icon: MailIcon },
-    { id: 'reports', label: 'Reportes', icon: SettingsIcon },
-    { id: 'forms', label: 'Formulario y Encuestas', icon: DocumentIcon },
+    ...(isSuper ? [
+      { id: 'communications', label: 'Comunicación', icon: MailIcon },
+      { id: 'reports', label: 'Reportes', icon: SettingsIcon },
+      { id: 'forms', label: 'Formulario y Encuestas', icon: DocumentIcon },
+    ] : []),
     { id: 'testimonials', label: 'Testimonios', icon: UsersIcon },
-    { id: 'settings', label: 'Configuración Web', icon: SettingsIcon },
+    ...(isSuper ? [
+      { id: 'settings', label: 'Configuración Web', icon: SettingsIcon },
+    ] : [])
   ];
+
+  const handleLogout = () => {
+    setRole('admin');
+    setUserEmail('');
+    onLogout();
+  };
+
+  if (isLoadingRole) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-900">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+          <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Cargando Sistema...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen admin-reboot-container overflow-hidden">
@@ -247,7 +298,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
         <div className="p-6 border-t border-white/5 bg-black/20">
           <button
-            onClick={onLogout}
+            onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-red-400 transition-colors"
           >
             <LogoutIcon className="w-4 h-4" />
@@ -277,11 +328,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-end">
-              <span className="text-sm font-bold text-slate-900 leading-none">Admin User</span>
-              <span className="text-[10px] font-bold text-blue-600 uppercase mt-1">Super Admin</span>
+              <span className="text-sm font-bold text-slate-900 leading-none">{userEmail || 'Admin User'}</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase mt-1 ${role === 'super_admin'
+                  ? 'bg-blue-100 text-blue-600 border border-blue-200'
+                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                }`}>
+                {role === 'super_admin' ? 'Super Admin' : 'Admin'}
+              </span>
             </div>
-            <div className="w-10 h-10 rounded-sm bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200 shadow-sm">
-              AD
+            <div className="w-10 h-10 rounded-sm bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200 shadow-sm uppercase">
+              {userEmail ? userEmail.substring(0, 2) : 'AD'}
             </div>
           </div>
         </header>
@@ -300,15 +356,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
               </div>
             </div>
 
-            {activeTab === 'overview' && renderOverview()}
-            {activeTab === 'admissions' && <AdminAdmissions />}
-            {activeTab === 'students' && <AdminStudents />}
-            {activeTab === 'calendar' && <AdminCalendar />}
-            {activeTab === 'communications' && renderCommunications()}
-            {activeTab === 'reports' && renderReports()}
-            {activeTab === 'forms' && <AdminForms />}
-            {activeTab === 'testimonials' && <AdminTestimonials />}
-            {activeTab === 'settings' && <AdminSettings />}
+            {(!isSuper && ['reports', 'forms', 'communications', 'settings'].includes(activeTab)) ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-20 bg-[#f8fafc]">
+                <div className="text-center p-8 formal-card inline-block max-w-md w-full border-t-4 border-t-red-500">
+                  <h2 className="text-xl font-bold text-slate-900 mb-2">Acceso Denegado</h2>
+                  <p className="text-sm text-slate-500">No tenés los permisos necesarios para acceder a esta sección. Contactá a un Super Admin para más información.</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {activeTab === 'overview' && renderOverview()}
+                {activeTab === 'admissions' && <AdminAdmissions />}
+                {activeTab === 'students' && <AdminStudents />}
+                {activeTab === 'calendar' && <AdminCalendar />}
+                {activeTab === 'communications' && renderCommunications()}
+                {activeTab === 'reports' && renderReports()}
+                {activeTab === 'forms' && <AdminForms />}
+                {activeTab === 'testimonials' && <AdminTestimonials />}
+                {activeTab === 'settings' && <AdminSettings />}
+              </>
+            )}
           </div>
         </div>
       </main>
