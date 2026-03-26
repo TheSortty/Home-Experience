@@ -3,6 +3,7 @@ import { supabase } from '../../services/supabaseClient';
 import { Testimonial } from '../../core/types';
 import StarIcon from '../../ui/icons/StarIcon';
 import TestimonialFormModal from './TestimonialFormModal';
+import { FcGoogle } from 'react-icons/fc';
 
 interface TestimonialsProps {
   onTestimonialClick: (testimonial: Testimonial) => void;
@@ -43,14 +44,14 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
 
   const renderStars = (rating: number) => {
     return (
-      <div className="flex gap-1 mb-6">
+      <div className="flex gap-0.5 mb-3">
         {[0, 1, 2, 3, 4].map((index) => {
           const filled = rating > index;
           const half = rating > index && rating < index + 1;
           return (
             <StarIcon
               key={index}
-              className={`w-5 h-5 ${filled || half ? 'text-yellow-400' : 'text-slate-200'}`}
+              className={`w-4 h-4 ${filled || half ? 'text-[#fbbc04]' : 'text-slate-200'}`}
               fill={half ? 'half' : (filled ? 'full' : 'none')}
             />
           );
@@ -93,38 +94,37 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
         </div>
 
         {/* Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {testimonials.map((t, index) => (
             <div
               key={t.id}
-              className="group relative bg-white p-8 rounded-3xl border border-slate-100 shadow-sm hover:shadow-2xl transition-all duration-500 flex flex-col justify-between h-full"
+              className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col h-full"
               style={{ transitionDelay: `${index * 100}ms` }}
             >
-              {/* Decorative Quote Mark */}
-              <div className="absolute top-6 right-8 text-slate-100 group-hover:text-blue-50 transition-colors duration-300">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M14.017 21L14.017 18C14.017 16.8954 14.9124 16 16.017 16H19.017C19.5693 16 20.017 15.5523 20.017 15V9C20.017 8.44772 19.5693 8 19.017 8H15.017C14.4647 8 14.017 7.55228 14.017 7V3H19.017C20.6739 3 22.017 4.34315 22.017 6V15C22.017 16.6569 20.6739 18 19.017 18H16.017V21H14.017ZM5.0166 21L5.0166 18C5.0166 16.8954 5.91203 16 7.0166 16H10.0166C10.5689 16 11.0166 15.5523 11.0166 15V9C11.0166 8.44772 10.5689 8 10.0166 8H6.0166C5.46432 8 5.0166 7.55228 5.0166 7V3H10.0166C11.6735 3 13.0166 4.34315 13.0166 6V15C13.0166 16.6569 11.6735 18 10.0166 18H7.0166V21H5.0166Z" />
-                </svg>
-              </div>
-
-              <div>
-                {renderStars(t.rating)}
-
-                <p className="text-lg text-slate-700 leading-relaxed font-serif italic mb-8 relative z-10">
-                  "{t.quote}"
-                </p>
-              </div>
-
-              <div className="flex items-center gap-4 pt-6 border-t border-slate-50">
-                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 uppercase text-sm">
-                  {t.author.charAt(0)}
+              <div className="flex items-start gap-4 mb-3">
+                {t.photoUrl ? (
+                  <img src={t.photoUrl} alt={t.author} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white uppercase text-lg shrink-0">
+                    {t.author.charAt(0)}
+                  </div>
+                )}
+                <div className="flex-1">
+                  <h3 className="font-semibold text-slate-900 text-[15px]">{t.author}</h3>
+                  <div className="text-[13px] text-slate-500 mt-0.5">
+                    {t.roles.length > 0 ? t.roles[0] : 'Alumno/a'} • {new Date(t.createdAt).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">{t.author}</h3>
-                  {t.roles.length > 0 && <p className="text-xs text-slate-500">{t.roles[0]}</p>}
+                <div className="shrink-0 flex items-start justify-end">
+                  <div className="w-6 h-6"><FcGoogle size="100%" /></div>
                 </div>
               </div>
 
+              {renderStars(t.rating)}
+
+              <p className="text-[15px] text-slate-700 leading-relaxed font-sans flex-1 line-clamp-6">
+                {t.quote}
+              </p>
             </div>
           ))}
 
@@ -132,15 +132,13 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
           {testimonials.length < 3 && (
             <div
               onClick={() => setIsModalOpen(true)}
-              className="group relative bg-slate-50 p-8 rounded-3xl border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 flex flex-col justify-center items-center h-full cursor-pointer min-h-[300px]"
+              className="bg-slate-50 p-6 rounded-2xl border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 flex flex-col justify-center items-center h-full cursor-pointer min-h-[250px]"
             >
-              <div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <svg className="w-6 h-6 text-slate-400 group-hover:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
+              <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <div className="w-6 h-6"><FcGoogle size="100%" /></div>
               </div>
-              <h3 className="font-bold text-slate-900 mb-2">Tu historia aquí</h3>
-              <p className="text-slate-500 text-center text-sm">Sé parte de nuestra comunidad compartiendo tu experiencia.</p>
+              <h3 className="font-semibold text-slate-900 mb-1">Dejanos tu reseña</h3>
+              <p className="text-slate-500 text-center text-sm">Tu experiencia ayuda a otros a dar el paso.</p>
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { supabase } from '../../services/supabaseClient';
+import toast from 'react-hot-toast';
 import { MockDatabase, FormField } from '../../services/mockDatabase';
 import ArrowRightIcon from '../../ui/icons/ArrowRightIcon';
 import CheckIcon from '../../ui/icons/CheckIcon';
@@ -589,7 +590,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
             } else {
                 scrollToTop();
             }
-            alert(`Faltan completar campos obligatorios en esta sección (${section}). Por favor revisa las opciones marcadas en rojo.`);
+            toast.error(`Faltan completar campos obligatorios en esta sección (${section}). Por favor revisa las opciones marcadas en rojo.`, { duration: 5000 });
         }
 
         return isValid;
@@ -647,7 +648,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
             scrollToTop();
         } catch (err) {
             console.error(err);
-            alert('Error al guardar. Por favor intenta nuevamente.');
+            toast.error('Error al guardar. Por favor intenta nuevamente.');
         } finally {
             setIsSubmitting(false);
         }

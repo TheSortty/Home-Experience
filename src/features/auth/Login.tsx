@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import './Login.css';
-import { HiOutlineMail, HiOutlineLockClosed, HiOutlineUser, HiOutlineArrowRight } from 'react-icons/hi';
-import { IoClose } from 'react-icons/io5';
+import { IoClose, IoEyeOutline, IoEyeOffOutline } from 'react-icons/io5';
+import { FcGoogle } from 'react-icons/fc';
+import { supabase } from '../../services/supabaseClient';
+import toast from 'react-hot-toast';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -9,28 +11,90 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isForgotView, setIsForgotView] = useState(false);
   const [error, setError] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Email / Password Login
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'admin' && (password === 'home' || password === 'admin123' || password === 'admin')) {
-      onLoginSuccess();
-    } else {
-      setError('Credenciales incorrectas. Intenta de nuevo.');
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        // Traducir los errores más comunes
+        if (error.message.includes('Invalid login credentials')) {
+          setError('Credenciales incorrectas. Verifica tu email y contraseña.');
+        } else if (error.message.includes('Email not confirmed')) {
+          setError('Debes confirmar tu correo electrónico primero.');
+        } else {
+          setError('Ocurrió un error al iniciar sesión. Intenta más tarde.');
+        }
+      } else if (data.session) {
+        onLoginSuccess();
+      }
+    } catch (err) {
+      setError('Error de conexión. Revisa tu internet.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSignUpSubmit = (e: React.FormEvent) => {
+  // Google OAuth Login
+  const handleGoogleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          // Dinámicamente usa el localhost o el dominio de producción
+          redirectTo: `${window.location.origin}/admin/dashboard`,
+        },
+      });
+
+      if (error) {
+        setError('No se pudo conectar con Google.');
+      }
+    } catch (err) {
+      setError('Error al conectar con Google.');
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('El registro está deshabilitado temporalmente.');
+    if (!email) {
+      setError('Por favor, ingresá tu correo.');
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/admin/dashboard`
+      });
+      if (error) {
+        setError('Error al enviar el correo de recuperación.');
+      } else {
+        toast.success('Te enviamos un correo con un link. Revisá tu bandeja de entrada (y spam).', { duration: 6000 });
+        setIsForgotView(false); // volver al login
+      }
+    } catch (err) {
+      setError('Error de conexión.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="login-page">
+    <div className="login-page relative z-[100]">
       <div className="logo-link">
         <div className="text-3xl font-black tracking-tighter text-[#00A9CE]">HOME<span className="text-white">.</span></div>
       </div>
@@ -50,121 +114,121 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
           <div className="row full-height justify-content-center flex">
             <div className="col-12 text-center align-self-center py-5">
               <div className="section pb-5 pt-5 pt-sm-2 text-center">
-                <h6 className="mb-0 pb-3"><span>INGRESAR </span><span>REGISTRARSE</span></h6>
-                <input
-                  className="checkbox"
-                  type="checkbox"
-                  id="reg-log"
-                  name="reg-log"
-                  checked={isSignUp}
-                  onChange={() => {
-                    setIsSignUp(!isSignUp);
-                    setError('');
-                  }}
-                />
-                <label htmlFor="reg-log"></label>
-                <div className="card-3d-wrap mx-auto">
+                <div className="card-3d-wrap mx-auto" style={{ height: '550px' }}>
                   <div className="card-3d-wrapper">
                     {/* Log In Card */}
                     <div className="card-front">
                       <div className="center-wrap">
                         <div className="section text-center">
-                          <h4 className="mb-4 pb-3">Ingresar</h4>
-                          <form onSubmit={handleLoginSubmit}>
-                            <div className="form-group">
-                              <input
-                                type="text"
-                                className="form-style"
-                                placeholder="Usuario (admin)"
-                                value={username}
-                                onChange={(e) => {
-                                  setUsername(e.target.value);
-                                  setError('');
-                                }}
-                                autoComplete="off"
-                                required
-                              />
-                              <i className="input-icon uil uil-at"></i>
-                            </div>
-                            <div className="form-group mt-4">
-                              <input
-                                type="password"
-                                className="form-style"
-                                placeholder="Contraseña"
-                                value={password}
-                                onChange={(e) => {
-                                  setPassword(e.target.value);
-                                  setError('');
-                                }}
-                                autoComplete="off"
-                                required
-                              />
-                              <i className="input-icon uil uil-lock-alt"></i>
-                            </div>
-
-                            {error && !isSignUp && (
-                              <div className="error-message">
-                                {error}
-                              </div>
+                          <h4 className="mb-4 pb-3">{isForgotView ? 'Recuperar Contraseña' : 'Admin Login'}</h4>
+                          
+                          <form onSubmit={isForgotView ? handleResetPassword : handleLoginSubmit}>
+                            {isForgotView && (
+                                <p className="text-sm text-white/70 mb-4 px-4 text-center">
+                                    Ingrese el correo electrónico con el cual desea recuperar su contraseña.
+                                </p>
                             )}
 
-                            <button type="submit" className="login-btn mt-10">
-                              ENVIAR
-                            </button>
-                            <p className="mb-0 mt-6 text-center">
-                              <a href="#0" className="login-link">¿Olvidaste tu contraseña?</a>
-                            </p>
-                          </form>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Sign Up Card */}
-                    <div className="card-back">
-                      <div className="center-wrap">
-                        <div className="section text-center">
-                          <h4 className="mb-4 pb-3">Registrarse</h4>
-                          <form onSubmit={handleSignUpSubmit}>
                             <div className="form-group">
-                              <input
-                                type="text"
-                                className="form-style"
-                                placeholder="Nombre Completo"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                autoComplete="off"
-                              />
-                              <i className="input-icon uil uil-user"></i>
-                            </div>
-                            <div className="form-group mt-4">
                               <input
                                 type="email"
                                 className="form-style"
                                 placeholder="Correo Electrónico"
-                                autoComplete="off"
+                                value={email}
+                                onChange={(e) => {
+                                  setEmail(e.target.value);
+                                  setError('');
+                                }}
+                                autoComplete="email"
+                                required
                               />
                               <i className="input-icon uil uil-at"></i>
                             </div>
-                            <div className="form-group mt-4">
-                              <input
-                                type="password"
-                                className="form-style"
-                                placeholder="Contraseña"
-                                autoComplete="off"
-                              />
-                              <i className="input-icon uil uil-lock-alt"></i>
-                            </div>
 
-                            {error && isSignUp && (
-                              <div className="error-message">
+                            {!isForgotView && (
+                                <div className="form-group mt-4 relative">
+                                  <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    className="form-style pr-12"
+                                    placeholder="Contraseña"
+                                    value={password}
+                                    onChange={(e) => {
+                                      setPassword(e.target.value);
+                                      setError('');
+                                    }}
+                                    autoComplete="current-password"
+                                    required
+                                  />
+                                  <i className="input-icon uil uil-lock-alt"></i>
+                                  <button 
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white focus:outline-none flex items-center justify-center p-2"
+                                  >
+                                    {showPassword ? (
+                                      <span className="w-5 h-5 text-white/50 flex items-center justify-center">
+                                        <IoEyeOffOutline size={20} />
+                                      </span>
+                                    ) : (
+                                      <span className="w-5 h-5 flex items-center justify-center">
+                                        <IoEyeOutline size={20} />
+                                      </span>
+                                    )}
+                                  </button>
+                                </div>
+                            )}
+
+                            {error && (
+                              <div className="text-red-400 text-sm mt-4 font-medium px-4">
                                 {error}
                               </div>
                             )}
 
-                            <button type="submit" className="login-btn mt-10">
-                              ENVIAR
+                            <button
+                              type="submit"
+                              className={`login-btn mt-6 w-full flex justify-center items-center gap-2 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                              disabled={isLoading}
+                            >
+                              {isLoading ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              ) : (
+                                isForgotView ? 'ENVIAR ENLACE' : 'INICIAR SESIÓN'
+                              )}
                             </button>
                           </form>
+
+                          {!isForgotView && (
+                              <div className="mt-6 flex flex-col gap-4">
+                                <div className="mt-6 mb-6 flex items-center justify-center">
+                                  <div className="h-[1px] w-full bg-white/10" />
+                                  <span className="px-4 text-xs font-medium text-white/50 uppercase tracking-wider">O</span>
+                                  <div className="h-[1px] w-full bg-white/10" />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleGoogleLogin}
+                                  className="w-full relative flex h-11 w-full items-center justify-center gap-3 rounded-md bg-white px-8 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                >
+                                  <span className="w-5 h-5 flex items-center justify-center">
+                                    <FcGoogle size={20} />
+                                  </span>
+                                  Continuar con Google
+                                </button>
+                              </div>
+                          )}
+
+                          <div className="mt-4">
+                            <button 
+                                onClick={() => {
+                                    setIsForgotView(!isForgotView);
+                                    setError('');
+                                }} 
+                                type="button" 
+                                className="text-white hover:text-[#00A9CE] transition-colors text-sm"
+                            >
+                                {isForgotView ? 'Volver al inicio de sesión' : '¿Olvidaste tu contraseña?'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>

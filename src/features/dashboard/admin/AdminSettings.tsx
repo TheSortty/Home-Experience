@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useSiteSettings, SiteSetting } from '../../../hooks/useSiteSettings';
+import toast from 'react-hot-toast';
 
 const AdminSettings: React.FC = () => {
     const { settings, loading, error, updateSetting } = useSiteSettings();
@@ -26,9 +27,10 @@ const AdminSettings: React.FC = () => {
         setIsSaving(true);
         try {
             await updateSetting(key, editValue);
+            toast.success('Configuración guardada exitosamente');
             setEditingKey(null);
         } catch (err) {
-            alert('Error al guardar');
+            toast.error('Error al guardar');
         } finally {
             setIsSaving(false);
         }

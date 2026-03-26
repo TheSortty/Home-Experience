@@ -3,6 +3,7 @@ import PhotoIcon from '../../ui/icons/PhotoIcon';
 import { TestimonialRole } from '../../core/types';
 import { MockDatabase } from '../../services/mockDatabase';
 import { supabase } from '../../services/supabaseClient';
+import toast from 'react-hot-toast';
 
 interface AddTestimonialProps {
   isVisible: boolean;
@@ -44,7 +45,7 @@ const AddTestimonial: React.FC<AddTestimonialProps> = ({ isVisible, onClose }) =
       ]);
 
     if (error) {
-      alert('Error: ' + error.message);
+      toast.error('Error: ' + error.message);
     } else {
       setSubmitted(true);
       setTimeout(() => {
@@ -143,7 +144,7 @@ const AddTestimonial: React.FC<AddTestimonialProps> = ({ isVisible, onClose }) =
                   </div>
                   <input id="dropzone-file" type="file" className="hidden" onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
-                      alert(`Archivo seleccionado: ${e.target.files[0].name}`);
+                      toast.success(`Archivo seleccionado: ${e.target.files[0].name}`, { duration: 3000 });
                     }
                   }} />
                 </label>

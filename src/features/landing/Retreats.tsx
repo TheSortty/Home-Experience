@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import './Retreats.css';
 
 interface Retreat {
@@ -18,7 +18,7 @@ const PAST_RETREATS: Retreat[] = [
         location: 'San Martín de los Andes, Arg',
         date: 'Octubre 2024',
         description: 'Una inmersión profunda en la naturaleza para reconectar con el propósito en el silencio de los Andes.',
-        image: '/images/retreats/patagonia.jpg',
+        image: '/images/retreats/retiro-1.jpg',
         fullStory: 'Durante 5 días, un grupo de 20 personas se sumergió en la inmensidad de la Patagonia. Entre fogones, caminatas conscientes y sesiones de introspección, logramos pausar el ruido externo para escuchar lo que realmente importa. Fue una experiencia de transformación profunda que marcó un antes y un después en nuestra comunidad.'
     },
     {
@@ -27,7 +27,7 @@ const PAST_RETREATS: Retreat[] = [
         location: 'José Ignacio, Uruguay',
         date: 'Marzo 2024',
         description: 'Procesos de transformación frente al mar, integrando calma y movimiento en la costa uruguaya.',
-        image: '/images/retreats/uruguay.jpg',
+        image: '/images/retreats/retiro-2.jpg',
         fullStory: 'La costa uruguaya nos recibió con su calma característica. Trabajamos la fluidez y el desapego, inspirados por el ritmo de las olas. Un retiro enfocado en la simplicidad y en encontrar la paz en lo cotidiano, compartiendo momentos únicos frente al océano.'
     },
     {
@@ -36,7 +36,7 @@ const PAST_RETREATS: Retreat[] = [
         location: 'Villa General Belgrano, Arg',
         date: 'Noviembre 2023',
         description: 'Un encuentro entre las sierras para trabajar el liderazgo consciente y la conexión grupal.',
-        image: '/images/retreats/patagonia.jpg', // Placeholder
+        image: '/images/retreats/retiro-3.jpg',
         fullStory: 'En el corazón de las sierras cordobesas, exploramos el liderazgo desde un lugar de autenticidad. Fue un retiro de alta intensidad emocional, donde la fuerza del entorno natural potenció cada dinámica grupal y cada momento de silencio.'
     },
     {
@@ -45,51 +45,68 @@ const PAST_RETREATS: Retreat[] = [
         location: 'Salta, Argentina',
         date: 'Mayo 2023',
         description: 'La inmensidad del norte argentino como escenario para redescubrir la propia esencia.',
-        image: '/images/retreats/uruguay.jpg', // Placeholder
+        image: '/images/retreats/retiro-4.jpg',
         fullStory: 'Bajo el cielo más puro de la Argentina, caminamos los salares y las montañas de colores. Un retiro de despojo y claridad, donde la altitud y el paisaje nos ayudaron a elevar nuestra perspectiva sobre los desafíos de la vida.'
+    },
+    {
+        id: 'sur-2023',
+        title: 'Bosque Andino',
+        location: 'Bariloche, Arg',
+        date: 'Febrero 2023',
+        description: 'La majestuosidad del bosque patagónico como espejo para nuestra propia grandeza interior.',
+        image: '/images/retreats/retiro-5.jpg',
+        fullStory: 'Rodeados de milenarios arrayanes y coihues, emprendimos un viaje hacia el interior. A través del silencio compartido y dinámicas de integración, sanamos heridas antiguas y conectamos con una vitalidad renovada. El bosque fue testigo y sostén de un proceso inolvidable.'
     }
 ];
 
 const Retreats: React.FC = React.memo(() => {
-    const [items, setItems] = useState<Retreat[]>(PAST_RETREATS);
+    const sliderRef = useRef<HTMLDivElement>(null);
     const [selectedRetreat, setSelectedRetreat] = useState<Retreat | null>(null);
 
     const handleNext = useCallback(() => {
-        setItems(prev => [...prev.slice(1), prev[0]]);
+        if (sliderRef.current) {
+            const items = sliderRef.current.querySelectorAll('.retreats-item');
+            if (items.length > 0) {
+                sliderRef.current.append(items[0]);
+            }
+        }
     }, []);
 
     const handlePrev = useCallback(() => {
-        setItems(prev => [prev[prev.length - 1], ...prev.slice(0, prev.length - 1)]);
+        if (sliderRef.current) {
+            const items = sliderRef.current.querySelectorAll('.retreats-item');
+            if (items.length > 0) {
+                sliderRef.current.prepend(items[items.length - 1]);
+            }
+        }
     }, []);
 
-    const handleItemClick = (index: number) => {
-        if (index === 0 || index === 1) return; // Main items
+    const handleItemClick = useCallback((index: number, e: React.MouseEvent) => {
+        // Since we are moving DOM nodes, index of the map is no longer accurate to visual position.
+        // We find the visual position based on the node's current position in the parent.
+        const node = e.currentTarget;
+        const parent = node.parentNode;
+        if (!parent) return;
+        const currentIdx = Array.from(parent.children).indexOf(node as Element);
+        
+        if (currentIdx === 0 || currentIdx === 1) return; // Main items
         handleNext();
-    };
+    }, [handleNext]);
 
     return (
         <section id="retreats" className="retreats-carousel-container">
-            <div className="retreats-slider">
-                {items.map((retreat, index) => (
+            <div className="retreats-slider" ref={sliderRef}>
+                {PAST_RETREATS.map((retreat, index) => (
                     <div
                         key={retreat.id}
                         className="retreats-item"
                         style={{ backgroundImage: `url(${retreat.image})` }}
-                        onClick={() => handleItemClick(index)}
+                        onClick={(e) => handleItemClick(index, e)}
                     >
                         <div className="content">
                             <p className="location">{retreat.date} • {retreat.location}</p>
                             <h2 className="title">{retreat.title}</h2>
                             <p className="description">{retreat.description}</p>
-                            <button
-                                className="btn-read-more"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedRetreat(retreat);
-                                }}
-                            >
-                                Ver Experiencia
-                            </button>
                         </div>
                     </div>
                 ))}

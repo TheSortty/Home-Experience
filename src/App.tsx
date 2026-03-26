@@ -1,280 +1,108 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { SmoothScroll } from './components/SmoothScroll';
-import Header from './ui/Header';
-import Footer from './ui/Footer';
-import TestimonialModal from './ui/TestimonialModal';
-import { Testimonial } from './core/types';
+import React, { Suspense, lazy } from 'react';
+import { Toaster } from 'react-hot-toast';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { ScrollToTop } from './components/routing/ScrollToTop';
+import { ProtectedRoute } from './components/routing/ProtectedRoute';
 
-// Landing Features (Lazy Loaded)
-const Hero = lazy(() => import('./features/landing/Hero'));
-const WhoWeAre = lazy(() => import('./features/landing/WhoWeAre'));
-const Coaching = lazy(() => import('./features/landing/Coaching'));
-const Programs = lazy(() => import('./features/landing/Programs'));
-const Retreats = lazy(() => import('./features/landing/Retreats'));
-const Impact = lazy(() => import('./features/landing/Impact'));
-const MomentsSwiper = lazy(() => import('./features/landing/MomentsSwiper'));
-const Testimonials = lazy(() => import('./features/landing/Testimonials'));
-const About = lazy(() => import('./features/landing/About'));
-const Contact = lazy(() => import('./features/landing/Contact'));
+// Layouts
+import { PublicLayout } from './layouts/PublicLayout';
+import { AuthLayout } from './layouts/AuthLayout';
+import { AdminLayout } from './layouts/AdminLayout';
 
-// Utility & Decorative Landing Features
-const VideoSection = lazy(() => import('./features/landing/VideoSection'));
-const InteractivePoints = lazy(() => import('./features/landing/InteractivePoints'));
-const Location = lazy(() => import('./features/landing/Location'));
-
-// Essential UI and Modals
-import ProgramDetailModal from './features/landing/ProgramDetailModal';
-import ProgramSelectionModal from './features/landing/ProgramSelectionModal';
-import InteractiveBg from './features/landing/InteractiveBg';
-import { FloatingShapes } from './features/landing/decorations/FloatingShapes';
-import { ElegantDecorations } from './features/landing/decorations/ElegantDecorations';
-
-// Essential UI (Static)
-import IconWave from './features/landing/IconWave';
-import Packages from './features/landing/Packages';
-
-// Lazy Loaded Features
+// Pages
+const Home = lazy(() => import('./pages/Home'));
 const Login = lazy(() => import('./features/auth/Login'));
 const RegistrationForm = lazy(() => import('./features/auth/RegistrationForm'));
+import { UpdatePassword } from './features/auth/UpdatePassword';
 const AdminDashboard = lazy(() => import('./features/dashboard/AdminDashboard'));
-const AddTestimonial = lazy(() => import('./features/dashboard/AddTestimonial'));
-const TestimonialListModal = lazy(() => import('./ui/TestimonialListModal'));
-const ProgramDetailModalLazy = lazy(() => import('./features/landing/ProgramDetailModal'));
-const ProgramSelectionModalLazy = lazy(() => import('./features/landing/ProgramSelectionModal'));
 
-type ViewState = 'landing' | 'login' | 'dashboard' | 'register';
+import { useAuth } from './contexts/AuthContext';
 
-const LoadingFallback = () => (
-  <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white">
-    <div className="animate-pulse">Loading...</div>
-  </div>
-);
+// Wrappers para mantener la retrocompatibilidad con las props actuales sin romper los componentes
+const LoginWrapper = () => {
+  const navigate = useNavigate();
+  const { session, isLoading } = useAuth();
+
+  React.useEffect(() => {
+    if (!isLoading && session) {
+      navigate('/admin/dashboard', { replace: true });
+    }
+  }, [session, isLoading, navigate]);
+
+  return <Login onLoginSuccess={() => navigate('/admin/dashboard')} onBack={() => navigate('/')} />;
+};
+
+const RegistrationWrapper = () => {
+  const navigate = useNavigate();
+  const { session, isLoading } = useAuth();
+
+  React.useEffect(() => {
+    if (!isLoading && session) {
+      navigate('/admin/dashboard', { replace: true });
+    }
+  }, [session, isLoading, navigate]);
+
+  return <RegistrationForm onSubmitSuccess={() => navigate('/')} onBack={() => navigate('/')} />;
+};
+
+const AdminWrapper = () => {
+  const navigate = useNavigate();
+  return <AdminDashboard onLogout={() => navigate('/')} onRegisterTest={() => navigate('/auth/register')} />;
+};
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<ViewState>('landing');
-  const [selectedTestimonial, setSelectedTestimonial] = useState<Testimonial | null>(null);
-  const [isViewAllTestimonialsOpen, setIsViewAllTestimonialsOpen] = useState(false);
-  // Registration/Auth state
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [isLoginHovered, setIsLoginHovered] = useState(false);
+  const { isPasswordRecovery, setIsPasswordRecovery } = useAuth();
 
-  // Program Modal States
-  const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
-  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
-
-  // Navigation Handlers (Memoized)
-  const handleLoginClick = React.useCallback(() => setCurrentView('login'), []);
-  const handleLoginSuccess = React.useCallback(() => setCurrentView('dashboard'), []);
-  const handleBackToHome = React.useCallback(() => setCurrentView('landing'), []);
-  const handleLogout = React.useCallback(() => setCurrentView('landing'), []);
-
-  const handleRegisterClick = React.useCallback(() => {
-    setCurrentView('register');
-    setIsSelectionModalOpen(false);
-    setSelectedProgramId(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  const handleRegisterTest = React.useCallback(() => setCurrentView('register'), []);
-
-  const handleOpenSelection = React.useCallback(() => setIsSelectionModalOpen(true), []);
-  const handleCloseSelection = React.useCallback(() => setIsSelectionModalOpen(false), []);
-  const handleSelectProgram = React.useCallback((id: string) => {
-    setIsSelectionModalOpen(false);
-    setSelectedProgramId(id);
-  }, []);
-  const handleCloseDetail = React.useCallback(() => setSelectedProgramId(null), []);
-  const handleViewAllTestimonials = React.useCallback(() => setIsViewAllTestimonialsOpen(true), []);
-  const handleCloseAllTestimonials = React.useCallback(() => setIsViewAllTestimonialsOpen(false), []);
-
-  // Body Scroll Lock
-  useEffect(() => {
-    if (isSelectionModalOpen || selectedProgramId || selectedTestimonial || isViewAllTestimonialsOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [isSelectionModalOpen, selectedProgramId, selectedTestimonial, isViewAllTestimonialsOpen]);
-
-  // Animation observer
-  useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('animate-fade-in-up');
-          entry.target.classList.remove('opacity-0');
-          // Once animated, we don't need to observe anymore
-          observer.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.1, rootMargin: '50px' });
-
-    // Function to observe elements
-    const observeElements = () => {
-      const animatedElements = document.querySelectorAll('.reveal-on-scroll');
-      animatedElements.forEach(el => observer.observe(el));
-    };
-
-    // Initial observation
-    observeElements();
-
-    // Re-scan after a short delay to catch lazy-loaded components
-    const timeoutId = setTimeout(observeElements, 1000);
-
-    return () => {
-      observer.disconnect();
-      clearTimeout(timeoutId);
-    };
-  }, [currentView, isSelectionModalOpen, selectedProgramId]);
-
-  if (currentView === 'login') {
+  if (isPasswordRecovery) {
     return (
-      <Suspense fallback={<LoadingFallback />}>
-        <InteractiveBg />
-        <Login onLoginSuccess={handleLoginSuccess} onBack={handleBackToHome} />
-      </Suspense>
-    );
-  }
-
-  if (currentView === 'dashboard') {
-    return (
-      <Suspense fallback={<LoadingFallback />}>
-        <AdminDashboard onLogout={handleLogout} onRegisterTest={handleRegisterTest} />
-      </Suspense>
-    );
-  }
-
-  if (currentView === 'register') {
-    return (
-      <Suspense fallback={<LoadingFallback />}>
-        <InteractiveBg />
-        <RegistrationForm onBack={handleBackToHome} onSubmitSuccess={handleBackToHome} />
-      </Suspense>
+      <>
+        <Toaster position="top-center" toastOptions={{ duration: 4000, style: { background: '#1e293b', color: '#fff', borderRadius: '12px' } }} />
+        <UpdatePassword onSuccess={() => setIsPasswordRecovery(false)} />
+      </>
     );
   }
 
   return (
-    <>
-      <SmoothScroll locked={isSelectionModalOpen || !!selectedProgramId || !!selectedTestimonial || isViewAllTestimonialsOpen} />
-      <div className="relative font-sans text-slate-900 antialiased bg-transparent selection:bg-blue-100 selection:text-blue-900">
-        <InteractiveBg />
-        {!(isSelectionModalOpen || selectedProgramId) && (
-          <div className="fixed top-0 left-0 right-0 z-[9999] flex flex-col">
-            <Header onLoginClick={handleLoginClick} onStartClick={handleOpenSelection} />
-          </div>
-        )}
+    <BrowserRouter>
+      <Toaster position="top-center" toastOptions={{ duration: 4000, style: { background: '#1e293b', color: '#fff', borderRadius: '12px' } }} />
+      <ScrollToTop />
+      <Routes>
+        {/* Rutas Públicas */}
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<Home />} />
+        </Route>
 
-        <Suspense fallback={<LoadingFallback />}>
-          <main>
-            {/* 1. EXPERIENCIA HOME (Hero) */}
-            <div className="reveal-on-scroll">
-              <Hero onRegisterClick={handleOpenSelection} />
-            </div>
+        {/* Rutas de Autenticación */}
+        <Route path="/auth" element={<AuthLayout />}>
+          <Route path="login" element={
+            <Suspense fallback={null}>
+              <LoginWrapper />
+            </Suspense>
+          } />
+          <Route path="register" element={
+            <Suspense fallback={null}>
+              <RegistrationWrapper />
+            </Suspense>
+          } />
+          <Route index element={<Navigate to="/auth/login" replace />} />
+        </Route>
 
-            {/* 2. VIDEO HIGHLIGHT */}
-            <div className="reveal-on-scroll">
-              <VideoSection />
-            </div>
+        {/* Rutas Protegidas de Administración */}
+        <Route path="/admin" element={<ProtectedRoute />}>
+          <Route element={<AdminLayout />}>
+            <Route path="dashboard" element={
+              <Suspense fallback={null}>
+                <AdminWrapper />
+              </Suspense>
+            } />
+            <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          </Route>
+        </Route>
 
-            {/* 3. QUIENES SOMOS */}
-            <div className="reveal-on-scroll">
-              <WhoWeAre onConfioClick={() => { }} />
-            </div>
-
-            {/* 4. COACHING */}
-            <div className="reveal-on-scroll">
-              <Coaching />
-            </div>
-
-            {/* 5. PROGRAMAS */}
-            <div className="reveal-on-scroll">
-              <Programs onLearnMore={(id) => setSelectedProgramId(id)} />
-            </div>
-
-            {/* 6. VIAJES & RETIROS */}
-            <div className="reveal-on-scroll">
-              <Retreats />
-            </div>
-
-            {/* Interactive/Logic Carousels (Swiper) */}
-            <div className="reveal-on-scroll">
-              <MomentsSwiper />
-            </div>
-
-            {/* 7. TESTIMONIOS */}
-            <div className="relative reveal-on-scroll">
-              <InteractivePoints />
-              <div className="relative z-10 pointer-events-none">
-                <div className="pointer-events-auto">
-                  <Testimonials
-                    onTestimonialClick={setSelectedTestimonial}
-                    onViewAllClick={handleViewAllTestimonials}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* 8. IMPACTOS */}
-            <div className="reveal-on-scroll">
-              <Impact />
-            </div>
-
-            {/* 9. UBICACIÓN */}
-            <div className="reveal-on-scroll">
-              <Location />
-            </div>
-
-            {/* 10. CONTACTO & Footer */}
-            <div className="bg-white pt-20 reveal-on-scroll">
-              <Contact />
-              <Footer onEasterEggClick={() => { }} />
-            </div>
-          </main>
-        </Suspense>
-
-        {/* Modals */}
-        <TestimonialModal
-          testimonial={selectedTestimonial}
-          onClose={() => setSelectedTestimonial(null)}
-        />
-        <Suspense fallback={null}>
-          <TestimonialListModal
-            isVisible={isViewAllTestimonialsOpen}
-            onClose={handleCloseAllTestimonials}
-            onTestimonialClick={(t) => {
-              setIsViewAllTestimonialsOpen(false);
-              setSelectedTestimonial(t);
-            }}
-          />
-        </Suspense>
-
-        {/* Program Modals (Suspense Loaded) */}
-        <Suspense fallback={null}>
-          {isSelectionModalOpen && (
-            <ProgramSelectionModalLazy
-              onClose={handleCloseSelection}
-              onSelectProgram={handleSelectProgram}
-              onStartRegistration={handleRegisterClick}
-            />
-          )}
-
-          {selectedProgramId && (
-            <ProgramDetailModalLazy
-              programId={selectedProgramId}
-              onClose={handleCloseDetail}
-              onBack={() => {
-                setSelectedProgramId(null);
-                setIsSelectionModalOpen(true);
-              }}
-              onStartRegistration={handleRegisterClick}
-            />
-          )}
-        </Suspense>
-      </div >
-    </>
+        {/* Fallback 404 */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 };
 

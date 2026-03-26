@@ -18,7 +18,7 @@ const Footer: React.FC<FooterProps> = ({ onEasterEggClick }) => {
         </div>
 
         <div className="flex items-center gap-4">
-          <span>© 2025 HOME Experience.</span>
+          <span>© 2025 HOME Experience. Todos los derechos reservados. Creado por <strong>TheSortty</strong>.</span>
           <button
             onClick={onEasterEggClick}
             className="text-slate-300 hover:text-slate-500 transition-colors"

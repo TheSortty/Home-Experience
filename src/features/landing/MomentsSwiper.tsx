@@ -15,7 +15,7 @@ const facilitators = [
         image: '/images/facilitators/maga.jpg',
         title: 'Maestra de Energía',
         description: '"Donde pones tu atención, pones tu energía." Maga te enseñará a canalizar tu fuerza interior para manifestar la realidad que deseas.',
-        videoUrl: 'https://www.youtube.com/watch?v=F-yPgKcgIsw' // Placeholder
+        instagramUrl: 'https://instagram.com/thesortty' // Placeholder
     },
     {
         id: 1,
@@ -23,7 +23,7 @@ const facilitators = [
         image: '/images/facilitators/mariano.jpg',
         title: 'Guía Espiritual',
         description: '"El viaje hacia adentro es el único que verdaderamente transforma." Mariano te acompañará a descubrir tu propia verdad con herramientas profundas de autoconocimiento.',
-        videoUrl: 'https://www.youtube.com/watch?v=F-yPgKcgIsw' // Placeholder
+        instagramUrl: 'https://instagram.com/thesortty' // Placeholder
     },
     {
         id: 4,
@@ -31,7 +31,7 @@ const facilitators = [
         image: '/images/facilitators/vivi.jpg',
         title: 'Facilitadora de Procesos',
         description: '"Integrar la experiencia es lo que permite que el cambio sea permanente." Vivi te acompañará a consolidar tu transformación con presencia y calidez.',
-        videoUrl: 'https://www.youtube.com/watch?v=F-yPgKcgIsw' // Placeholder
+        instagramUrl: 'https://instagram.com/thesortty' // Placeholder
     },
     {
         id: 3,
@@ -39,19 +39,18 @@ const facilitators = [
         image: '/images/facilitators/maru.jpg',
         title: 'Guardiana del Corazón',
         description: '"Amarse a uno mismo es el comienzo de un romance eterno." Maru crea un espacio seguro donde la vulnerabilidad se convierte en tu mayor fortaleza.',
-        videoUrl: 'https://www.youtube.com/watch?v=F-yPgKcgIsw' // Placeholder
+        instagramUrl: 'https://instagram.com/thesortty' // Placeholder
     }
 ];
 
 const MomentsSwiper: React.FC = () => {
     const [activeIndex, setActiveIndex] = useState(0);
-    const [isVideoOpen, setIsVideoOpen] = useState(false);
-    const [currentVideoSrc, setCurrentVideoSrc] = useState('');
-    const swiperRef = useRef<any>(null); // Added useRef
-
-    const handlePlayClick = (videoSrc: string) => {
-        setCurrentVideoSrc(videoSrc);
-        setIsVideoOpen(true);
+    const swiperRef = useRef<any>(null); // Added useRef back
+    
+    const handlePlayClick = (url: string) => {
+        if (url) {
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
     };
 
     return (
@@ -75,23 +74,23 @@ const MomentsSwiper: React.FC = () => {
                         {/* Elegant Separator */}
                         <div className="w-24 h-1 bg-gradient-to-r from-celeste-strong to-celeste-soft rounded-full mb-6"></div>
 
-                        <p className="text-grey-800 text-lg md:text-xl font-light italic leading-relaxed relative z-10 pl-2">
+                        <p className="text-grey-800 text-lg md:text-xl font-normal text-justify leading-relaxed relative z-10 pl-2 pr-4">
                             {facilitators[activeIndex].description}
                         </p>
 
                         {/* Watch Video Button with Decorative Arrows */}
-                        <div className="flex items-center gap-6 mb-8 group cursor-pointer" onClick={() => handlePlayClick(facilitators[activeIndex].videoUrl)}>
+                        <div className="flex items-center gap-6 mb-8 group cursor-pointer" onClick={() => handlePlayClick(facilitators[activeIndex].instagramUrl)}>
                             <svg className="w-6 h-6 text-sand-medium opacity-60 transition-transform group-hover:-translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3" />
                             </svg>
 
                             <button className="flex items-center gap-3 px-6 py-2 bg-white border border-sand-medium/50 rounded-full shadow-sm group-hover:shadow-md group-hover:border-celeste-strong/30 transition-all duration-300">
                                 <span className="w-8 h-8 rounded-full bg-celeste-strong/10 flex items-center justify-center text-celeste-strong">
-                                    <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M8 5v14l11-7z" />
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
                                     </svg>
                                 </span>
-                                <span className="font-serif font-bold text-black-soft tracking-wide">VER HISTORIA</span>
+                                <span className="font-serif font-bold text-black-soft tracking-wide">VER INSTAGRAM</span>
                             </button>
 
                             <svg className="w-6 h-6 text-sand-medium opacity-60 transition-transform group-hover:translate-x-1 rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -123,7 +122,7 @@ const MomentsSwiper: React.FC = () => {
                         onSwiper={(swiper) => { swiperRef.current = swiper; }} // Assign swiper instance to ref
                     >
                         {facilitators.map((person) => (
-                            <SwiperSlide key={person.id} className="relative group cursor-pointer" onClick={() => handlePlayClick(person.videoUrl)}>
+                            <SwiperSlide key={person.id} className="relative group cursor-pointer" onClick={() => handlePlayClick(person.instagramUrl)}>
                                 <img src={person.image} alt={person.name} loading="lazy" />
                                 <div className="slide-overlay transition-opacity duration-300">
                                     {/* Play Button Overlay - Simplified/Removed text per request */}
@@ -155,12 +154,6 @@ const MomentsSwiper: React.FC = () => {
                 <li></li>
                 <li></li>
             </ul>
-
-            <VideoModal
-                isOpen={isVideoOpen}
-                onClose={() => setIsVideoOpen(false)}
-                videoSrc={currentVideoSrc}
-            />
         </section>
     );
 };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../services/supabaseClient';
+import toast from 'react-hot-toast';
 import { FormField, FormSubmission } from '../../../services/mockDatabase';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 import { createPortal } from 'react-dom';
@@ -61,7 +62,7 @@ const AdminForms: React.FC = () => {
 
         if (error) {
             console.error('Error fetching forms:', error);
-            alert('Error al cargar formularios: ' + error.message);
+            toast.error('Error al cargar formularios: ' + error.message);
         } else if (data) {
             setForms(data);
             if (data.length > 0) {
@@ -108,7 +109,7 @@ const AdminForms: React.FC = () => {
             .eq('id', selectedFormId);
 
         if (error) {
-            alert('Error guardando formulario');
+            toast.error('Error guardando formulario');
         } else {
             // Update local state
             setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, schema: newSchema } : f));
@@ -127,7 +128,7 @@ const AdminForms: React.FC = () => {
             .eq('id', id);
 
         if (error) {
-            alert('Error al mover a la papelera');
+            toast.error('Error al mover a la papelera');
         } else {
             fetchForms();
         }
@@ -144,7 +145,7 @@ const AdminForms: React.FC = () => {
             .eq('id', id);
 
         if (error) {
-            alert('Error al restaurar');
+            toast.error('Error al restaurar');
         } else {
             fetchForms();
         }

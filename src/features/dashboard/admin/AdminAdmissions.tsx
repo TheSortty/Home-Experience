@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabaseClient';
 import ArrowRightIcon from '../../../ui/icons/ArrowRightIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
@@ -37,6 +38,7 @@ const AdminAdmissions: React.FC = () => {
     // Confirm Modal State
     const [paymentConfirmed, setPaymentConfirmed] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('MERCADO_PAGO'); // 'MERCADO_PAGO', 'TRANSFER', 'CASH'
+    const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
     const [selectedCycleId, setSelectedCycleId] = useState('');
     const [selectedCycleId2, setSelectedCycleId2] = useState(''); // For Combos
     const [detailTab, setDetailTab] = useState('PERSONAL');
@@ -66,7 +68,6 @@ const AdminAdmissions: React.FC = () => {
         const { data, error } = await supabase
             .from('form_submissions')
             .select('*')
-            .eq('is_deleted', viewMode === 'trash')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -89,8 +90,8 @@ const AdminAdmissions: React.FC = () => {
                 is_deleted: item.is_deleted
             }));
             setRegistrations(realRegistrations);
+            setTrashCount(realRegistrations.filter((r: Registration) => r.is_deleted).length);
         }
-        fetchTrashCount();
     };
 
     const fetchCycles = async () => {
@@ -120,7 +121,7 @@ const AdminAdmissions: React.FC = () => {
             .eq('id', reg.id);
 
         if (error) {
-            alert('Error updating status');
+            toast.error('Error updating status');
         } else {
             await fetchRegistrations();
             setSelectedRegistration(null);
@@ -128,7 +129,7 @@ const AdminAdmissions: React.FC = () => {
         setIsSubmitting(false);
     };
 
-    const handleSoftDelete = async (id: string) => {
+    const handleSoftDelete = async (reg: Registration) => {
         setIsSubmitting(true);
         const { data: { user } } = await supabase.auth.getUser();
         const { error } = await supabase
@@ -138,11 +139,21 @@ const AdminAdmissions: React.FC = () => {
                 deleted_at: new Date().toISOString(),
                 deleted_by: user?.id || null
             })
-            .eq('id', id);
+            .eq('id', reg.id);
 
         if (error) {
-            alert('Error al mover a la papelera');
+            toast.error('Error al mover a la papelera');
         } else {
+            if (user) {
+                await supabase.from('activity_logs').insert({
+                    user_id: user.id,
+                    action: 'ENVIADO_A_PAPELERA',
+                    details: {
+                        description: `Envió a la papelera la solicitud de ${reg.name}.`,
+                        adminEmail: user.email
+                    }
+                });
+            }
             await fetchRegistrations();
             setSelectedRegistration(null);
         }
@@ -160,7 +171,7 @@ const AdminAdmissions: React.FC = () => {
             .eq('id', id);
 
         if (error) {
-            alert('Error al restaurar');
+            toast.error('Error al restaurar');
         } else {
             fetchRegistrations();
             setSelectedRegistration(null);
@@ -176,11 +187,11 @@ const AdminAdmissions: React.FC = () => {
         const { data: profile } = await supabase
             .from('profiles')
             .select('role')
-            .eq('id', user.id)
+            .eq('user_id', user.id)
             .single();
 
-        if (profile?.role !== 'admin') {
-            alert('No tienes permisos suficientes (Admin) para eliminar permanentemente.');
+        if (profile?.role !== 'admin' && profile?.role !== 'sysadmin') {
+            toast.error('No tienes permisos suficientes para eliminar permanentemente.');
             return;
         }
 
@@ -190,10 +201,21 @@ const AdminAdmissions: React.FC = () => {
             .eq('id', registrationToDelete.id);
 
         if (error) {
-            alert('Error al eliminar definitivamente');
+            toast.error('Error al eliminar definitivamente');
         } else {
+            if (user) {
+                await supabase.from('activity_logs').insert({
+                    user_id: user.id,
+                    action: 'ELIMINACION_DEFINITIVA',
+                    details: {
+                        description: `Eliminó permanentemente la solicitud de ${registrationToDelete.name}.`,
+                        adminEmail: user.email
+                    }
+                });
+            }
             setIsConfirmDeleteOpen(false);
             setRegistrationToDelete(null);
+            setSelectedRegistration(null); // Close the detail modal
             fetchRegistrations();
         }
     };
@@ -218,7 +240,7 @@ const AdminAdmissions: React.FC = () => {
                 const { error: paymentError } = await supabase.from('payments').insert({
                     submission_id: selectedRegistration.id,
                     enrollment_id: data.enrollment_id,
-                    amount: 0, // Should ideally be fetched or passed, putting 0 as placeholder or fetch from site_settings
+                    amount: paymentAmount || 0,
                     method: paymentMethod.toLowerCase(),
                     status: 'paid',
                     paid_at: new Date().toISOString()
@@ -236,10 +258,27 @@ const AdminAdmissions: React.FC = () => {
                     if (error2) console.error('Error second enrollment', error2);
                 }
 
-                alert('✅ Alumno confirmado exitosamente!');
+                toast.success('✅ Alumno confirmado exitosamente!');
+
+                const selectedCycle = cycles.find(c => c.id === selectedCycleId);
+
+                // 3. Registrar en Activity Logs
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    await supabase.from('activity_logs').insert({
+                        user_id: user.id,
+                        action: 'ALUMNO_APROBADO',
+                        details: {
+                            description: `Aprobó el ingreso de ${selectedRegistration.name} al ciclo ${selectedCycle?.name || 'Desconocido'}.`,
+                            adminEmail: user.email,
+                            studentEmail: selectedRegistration.email,
+                            paymentMethod: paymentMethod,
+                            package: selectedRegistration.selectedPackage
+                        }
+                    });
+                }
 
                 // Enviar Email de Bienvenida
-                const selectedCycle = cycles.find(c => c.id === selectedCycleId);
                 if (selectedCycle) {
                     supabase.functions.invoke('send-email', {
                         body: {
@@ -260,11 +299,11 @@ const AdminAdmissions: React.FC = () => {
                 setSelectedRegistration(null);
                 fetchRegistrations();
             } else {
-                alert('Error en confirmación: ' + (data.error || 'Unknown'));
+                toast.error('Error en confirmación: ' + (data.error || 'Unknown'));
             }
         } catch (err: any) {
             console.error(err);
-            alert('Error crítico: ' + err.message);
+            toast.error('Error crítico: ' + err.message);
         } finally {
             setIsSubmitting(false);
         }
@@ -272,9 +311,11 @@ const AdminAdmissions: React.FC = () => {
 
     const isCombo = (pkg: string) => pkg.includes('COMBO') || pkg.includes('+');
 
-    const pendingReview = registrations.filter(r => r.status === 'PENDING_REVIEW');
-    const pendingPayment = registrations.filter(r => r.status === 'PENDING_PAYMENT');
-    const deletedRegistrations = registrations.filter(r => r.status === 'DELETED');
+    const activeRegistrations = registrations.filter(r => !r.is_deleted);
+    const trashRegistrations = registrations.filter(r => r.is_deleted);
+
+    const pendingReview = activeRegistrations.filter(r => r.status === 'PENDING_REVIEW');
+    const pendingPayment = activeRegistrations.filter(r => r.status === 'PENDING_PAYMENT');
 
     return (
         <>
@@ -310,12 +351,12 @@ const AdminAdmissions: React.FC = () => {
                             )}
                         </div>
                         <span className={`${viewMode === 'active' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'} text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider`}>
-                            {viewMode === 'active' ? pendingReview.length : registrations.length}
+                            {viewMode === 'active' ? pendingReview.length : trashRegistrations.length}
                         </span>
                     </div>
 
                     <div className="space-y-3 flex-1 overflow-y-auto pr-2">
-                        {(viewMode === 'active' ? pendingReview : registrations).length === 0 ? (
+                        {(viewMode === 'active' ? pendingReview : trashRegistrations).length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-slate-300">
                                 <DocumentIcon className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-sm font-medium">
@@ -323,7 +364,7 @@ const AdminAdmissions: React.FC = () => {
                                 </p>
                             </div>
                         ) : (
-                            (viewMode === 'active' ? pendingReview : registrations).map(reg => (
+                            (viewMode === 'active' ? pendingReview : trashRegistrations).map(reg => (
                                 <div
                                     key={reg.id}
                                     className={`group p-4 bg-white border ${viewMode === 'active' ? 'border-slate-100' : 'border-red-50 bg-red-50/20'} rounded-sm hover:border-blue-200 cursor-pointer transition-all`}
@@ -501,49 +542,75 @@ const AdminAdmissions: React.FC = () => {
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-                                        {selectedRegistration.answers
-                                            .filter(qa => {
-                                                const personal = ['firstName', 'lastName', 'email', 'phone', 'age', 'dni', 'city', 'address', 'occupation', 'birthDate', 'gender', 'instagram'];
-                                                const motivation = ['dream1', 'dream2', 'dream3', 'dreams', 'expectations', 'whyNow', 'intention', 'referral', 'goals', 'qualities', 'context', 'referredBy', 'referralChannel'];
-                                                const medical = ['healthIssue', 'medication', 'allergies', 'emergencyContact', 'medicalNotes', 'specialConditions', 'pregnant', 'medicalInfo', 'bloodType'];
+                                        {(() => {
+                                            const dictionaries: Record<string, Record<string, string>> = {
+                                                'PERSONAL': {
+                                                    'firstName': 'Nombre', 'lastName': 'Apellido', 'email': 'Correo Electrónico',
+                                                    'phone': 'Teléfono', 'age': 'Edad', 'dni': 'DNI', 'city': 'Ciudad',
+                                                    'address': 'Dirección', 'occupation': 'Ocupación', 'birthDate': 'Fecha de Nac.',
+                                                    'gender': 'Género', 'instagram': 'Instagram'
+                                                },
+                                                'MOTIVACIÓN': {
+                                                    'dream1': 'Sueño Principal', 'dream2': 'Segundo Sueño', 'dream3': 'Tercer Sueño',
+                                                    'dreams': 'Sueños y Aspiraciones', 'expectations': 'Expectativas del programa',
+                                                    'whyNow': '¿Por qué ahora?', 'referral': '¿Cómo nos conociste?',
+                                                    'referralChannel': 'Canal de llegada', 'referredBy': 'Recomendado por',
+                                                    'goals': 'Metas', 'qualities': 'Cualidades', 'context': 'Contexto actual'
+                                                },
+                                                'SALUD': {
+                                                    'healthIssue': 'Problemas de salud', 'medication': 'Medicación actual',
+                                                    'allergies': 'Alergias', 'emergencyContact': 'Contacto de Emerg.',
+                                                    'medicalNotes': 'Notas Médicas', 'specialConditions': 'Condiciones Especiales',
+                                                    'pregnant': '¿Embarazo?', 'medicalInfo': 'Información Médica', 'bloodType': 'Grupo Sanguíneo'
+                                                }
+                                            };
 
-                                                if (detailTab === 'PERSONAL') return personal.includes(qa.question);
-                                                if (detailTab === 'MOTIVACIÓN') return motivation.includes(qa.question);
-                                                if (detailTab === 'SALUD') return medical.includes(qa.question);
-                                                if (detailTab === 'OTROS') return !personal.includes(qa.question) && !motivation.includes(qa.question) && !medical.includes(qa.question);
-                                                return false;
-                                            })
-                                            .map((qa, idx) => (
-                                                <div key={idx} className={`group ${qa.answer?.length > 70 ? 'md:col-span-2' : ''}`}>
+                                            const dict = dictionaries[detailTab];
+                                            let itemsToRender: { label: string, val: string }[] = [];
+
+                                            if (dict) {
+                                                itemsToRender = Object.entries(dict).map(([key, label]) => {
+                                                    const found = selectedRegistration.answers.find(a => a.question === key);
+                                                    return { label, val: found?.answer || '' };
+                                                });
+                                            } else if (detailTab === 'OTROS') {
+                                                const allKnownKeys = Object.values(dictionaries).flatMap(d => Object.keys(d));
+                                                allKnownKeys.push('intention'); // Ocultar intention del listado genérico
+                                                
+                                                itemsToRender = selectedRegistration.answers
+                                                    .filter(a => !allKnownKeys.includes(a.question))
+                                                    .map(a => ({
+                                                        label: a.question.replace(/([A-Z])/g, ' $1').toUpperCase().trim(),
+                                                        val: a.answer || ''
+                                                    }));
+                                            }
+
+                                            if (itemsToRender.length === 0 && detailTab === 'OTROS') {
+                                                return (
+                                                    <div className="md:col-span-2 py-24 text-center flex flex-col items-center border border-dashed border-slate-100 rounded-sm">
+                                                        <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mb-6">
+                                                            <svg className="w-6 h-6 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                            </svg>
+                                                        </div>
+                                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">No hay datos extra</p>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return itemsToRender.map((item, idx) => (
+                                                <div key={idx} className={`group ${item.val?.length > 70 ? 'md:col-span-2' : ''}`}>
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5 group-hover:text-blue-600 transition-colors">
-                                                        {qa.question.replace(/([A-Z])/g, ' $1').toUpperCase().trim()}
+                                                        {item.label}
                                                     </p>
-                                                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-sm group-hover:bg-white group-hover:border-blue-100 transition-all">
+                                                    <div className="p-4 bg-slate-50 border border-slate-100 rounded-sm group-hover:bg-white group-hover:border-blue-100 transition-all min-h-[50px] flex items-center">
                                                         <p className="text-sm text-slate-700 leading-relaxed font-medium">
-                                                            {qa.answer || <span className="text-slate-300 italic">No especificado</span>}
+                                                            {item.val ? item.val : <span className="text-slate-300 italic text-xs">Sin completar</span>}
                                                         </p>
                                                     </div>
                                                 </div>
-                                            ))}
-
-                                        {selectedRegistration.answers.filter(qa => {
-                                            const personal = ['firstName', 'lastName', 'email', 'phone', 'age', 'dni', 'city', 'address', 'occupation', 'birthDate', 'gender', 'instagram'];
-                                            const motivation = ['dream1', 'dream2', 'dream3', 'dreams', 'expectations', 'whyNow', 'intention', 'referral', 'goals', 'qualities', 'context', 'referredBy', 'referralChannel'];
-                                            const medical = ['healthIssue', 'medication', 'allergies', 'emergencyContact', 'medicalNotes', 'specialConditions', 'pregnant', 'medicalInfo', 'bloodType'];
-                                            if (detailTab === 'PERSONAL') return personal.includes(qa.question);
-                                            if (detailTab === 'MOTIVACIÓN') return motivation.includes(qa.question);
-                                            if (detailTab === 'SALUD') return medical.includes(qa.question);
-                                            return !personal.includes(qa.question) && !motivation.includes(qa.question) && !medical.includes(qa.question);
-                                        }).length === 0 && (
-                                                <div className="md:col-span-2 py-24 text-center flex flex-col items-center border border-dashed border-slate-100 rounded-sm">
-                                                    <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mb-6">
-                                                        <svg className="w-6 h-6 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                        </svg>
-                                                    </div>
-                                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Sin datos registrados en esta sección</p>
-                                                </div>
-                                            )}
+                                            ));
+                                        })()}
                                     </div>
                                 </div>
                             </div>
@@ -585,7 +652,7 @@ const AdminAdmissions: React.FC = () => {
                                         {selectedRegistration.status === 'PENDING_REVIEW' && (
                                             <>
                                                 <button
-                                                    onClick={() => handleSoftDelete(selectedRegistration.id)}
+                                                    onClick={() => handleSoftDelete(selectedRegistration)}
                                                     disabled={isSubmitting}
                                                     className="px-6 py-3 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100 disabled:opacity-50"
                                                 >
@@ -649,17 +716,29 @@ const AdminAdmissions: React.FC = () => {
                                     </label>
 
                                     {paymentConfirmed && (
-                                        <div className="animate-fade-in pl-9">
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Canal de pago</label>
-                                            <select
-                                                value={paymentMethod}
-                                                onChange={e => setPaymentMethod(e.target.value)}
-                                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
-                                            >
-                                                <option value="MERCADO_PAGO">Mercado Pago</option>
-                                                <option value="TRANSFER">Transferencia Directa</option>
-                                                <option value="CASH">Efectivo / Manual</option>
-                                            </select>
+                                        <div className="animate-fade-in pl-9 space-y-4">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Canal de pago</label>
+                                                <select
+                                                    value={paymentMethod}
+                                                    onChange={e => setPaymentMethod(e.target.value)}
+                                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
+                                                >
+                                                    <option value="MERCADO_PAGO">Mercado Pago</option>
+                                                    <option value="TRANSFER">Transferencia Directa</option>
+                                                    <option value="CASH">Efectivo / Manual</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Monto Abonado ($)</label>
+                                                <input
+                                                    type="number"
+                                                    value={paymentAmount}
+                                                    onChange={e => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                                                    placeholder="Ej: 50000"
+                                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
+                                                />
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -718,8 +797,8 @@ const AdminAdmissions: React.FC = () => {
                             </button>
                             <button
                                 onClick={handleConfirmEnrollment}
-                                disabled={!paymentConfirmed || !selectedCycleId || isSubmitting}
-                                className={`flex-1 py-3 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-[0.2em] rounded-sm shadow-xl shadow-blue-500/20 transition-all ${(!paymentConfirmed || !selectedCycleId) ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-700 hover:scale-[1.01]'}`}
+                                disabled={!paymentConfirmed || !selectedCycleId || isSubmitting || paymentAmount === ''}
+                                className={`flex-1 py-3 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-[0.2em] rounded-sm shadow-xl shadow-blue-500/20 transition-all ${(!paymentConfirmed || !selectedCycleId || paymentAmount === '') ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-700 hover:scale-[1.01]'}`}
                             >
                                 {isSubmitting ? 'Procesando...' : 'FINALIZAR INSCRIPCIÓN'}
                             </button>

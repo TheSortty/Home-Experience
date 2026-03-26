@@ -6,15 +6,15 @@ import CalendarIcon from '../../ui/icons/CalendarIcon';
 import SettingsIcon from '../../ui/icons/SettingsIcon';
 import DocumentIcon from '../../ui/icons/DocumentIcon';
 import MailIcon from '../../ui/icons/MailIcon';
+import toast from 'react-hot-toast';
 import { MockDatabase, FormField, FormSubmission } from '../../services/mockDatabase';
 import { supabase } from '../../services/supabaseClient';
 import AdminCalendar from './admin/AdminCalendar';
 import AdminStudents from './admin/AdminStudents';
 import AdminAdmissions from './admin/AdminAdmissions';
-import AdminTestimonials from './admin/AdminTestimonials';
-
 import AdminSettings from './admin/AdminSettings';
 import AdminForms from './admin/AdminForms';
+import AdminLogs from './admin/AdminLogs';
 
 import './admin/admin-reboot.css';
 
@@ -23,14 +23,14 @@ interface AdminDashboardProps {
   onRegisterTest: () => void;
 }
 
-type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'communications' | 'reports' | 'forms' | 'testimonials' | 'settings';
+type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'communications' | 'forms' | 'settings' | 'logs';
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTest }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [globalSearch, setGlobalSearch] = useState('');
 
   // Role and User State
-  const [role, setRole] = useState<'admin' | 'super_admin'>('admin');
+  const [role, setRole] = useState<'admin' | 'sysadmin'>('admin');
   const [userEmail, setUserEmail] = useState<string>('');
   const [isLoadingRole, setIsLoadingRole] = useState(true);
 
@@ -128,7 +128,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
       setRole('admin'); // Robust fallback
-      alert('Error al cargar datos del dashboard: ' + (error.message || 'Error desconocido'));
+      toast.error('Error al cargar datos del dashboard: ' + (error.message || 'Error desconocido'));
     } finally {
       setIsLoadingRole(false);
     }
@@ -216,45 +216,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     </div>
   );
 
-  const renderReports = () => (
-    <div className="space-y-8 animate-fade-in-up">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {[
-          { title: 'Reporte de Asistencia', desc: 'Exportar datos por ciclo', icon: DocumentIcon, color: 'blue' },
-          { title: 'Reporte Financiero', desc: 'Ingresos y proyecciones', icon: ChartIcon, color: 'emerald' },
-          { title: 'Demografía', desc: 'Análisis de alumnos', icon: UsersIcon, color: 'purple' }
-        ].map((report, idx) => (
-          <div key={idx} className="formal-card p-6 hover:shadow-md transition-shadow cursor-pointer">
-            <div className={`h-10 w-10 bg-${report.color}-100 rounded-sm flex items-center justify-center text-${report.color}-600 mb-4`}>
-              <report.icon className="w-6 h-6" />
-            </div>
-            <h4 className="font-bold text-slate-800">{report.title}</h4>
-            <p className="text-xs text-slate-500 mt-2 uppercase font-medium">{report.desc}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const isSuper = role === 'sysadmin';
 
-  const isSuper = role === 'super_admin';
-
-  const menuItems = [
+  const adminItems = [
     { id: 'overview', label: 'Resumen', icon: ChartIcon },
     { id: 'admissions', label: 'Admisiones', icon: DocumentIcon },
-    { id: 'students', label: 'Alumnos Registrar', icon: UsersIcon },
+    { id: 'students', label: 'Alumnos', icon: UsersIcon },
     { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
-    ...(isSuper ? [
-      { id: 'communications', label: 'Comunicación', icon: MailIcon },
-      { id: 'reports', label: 'Reportes', icon: SettingsIcon },
-      { id: 'forms', label: 'Formulario y Encuestas', icon: DocumentIcon },
-    ] : []),
-    { id: 'testimonials', label: 'Testimonios', icon: UsersIcon },
-    ...(isSuper ? [
-      { id: 'settings', label: 'Configuración Web', icon: SettingsIcon },
-    ] : [])
   ];
 
-  const handleLogout = () => {
+  const sysadminItems = [
+    { id: 'communications', label: 'Comunicación', icon: MailIcon },
+    { id: 'forms', label: 'Formulario y Encuestas', icon: DocumentIcon },
+    { id: 'settings', label: 'Configuración Web', icon: SettingsIcon },
+    { id: 'logs', label: 'Auditoría', icon: DocumentIcon },
+  ];
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setRole('admin');
     setUserEmail('');
     onLogout();
@@ -280,8 +259,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
           <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-[0.2em]">Management System</p>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-6 space-y-1">
-          {menuItems.map((item) => (
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-6 space-y-1">
+          {adminItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as Tab)}
@@ -290,18 +269,49 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                 : 'text-slate-400 hover:bg-white/5 hover:text-white'
                 }`}
             >
-              <item.icon className={`w-4 h-4 ${activeTab === item.id ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
-              {item.label}
+              <item.icon className={`w-4 h-4 flex-shrink-0 ${activeTab === item.id ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
+              <span className="truncate">{item.label}</span>
             </button>
           ))}
+
+          {isSuper && (
+            <>
+              <div className="px-6 py-4 mt-4 mb-2">
+                <p className="text-[9px] uppercase font-bold text-slate-500 tracking-[0.2em]">Sysadmin Tools</p>
+                <div className="h-px w-full bg-white/5 mt-3"></div>
+              </div>
+              {sysadminItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as Tab)}
+                  className={`w-[calc(100%-24px)] flex items-center gap-3 px-4 py-2.5 mx-3 rounded-sm text-sm font-medium transition-all group ${activeTab === item.id
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                >
+                  <item.icon className={`w-4 h-4 flex-shrink-0 ${activeTab === item.id ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
+                  <span className="truncate">{item.label}</span>
+                </button>
+              ))}
+            </>
+          )}
         </nav>
 
-        <div className="p-6 border-t border-white/5 bg-black/20">
+        <div className="p-6 border-t border-white/5 bg-black/20 space-y-3">
+          <a
+            href="/"
+            className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors"
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            Volver a la Web
+          </a>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-red-400 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-red-400 transition-colors"
           >
-            <LogoutIcon className="w-4 h-4" />
+            <LogoutIcon className="w-4 h-4 flex-shrink-0" />
             Cerrar Sesión
           </button>
         </div>
@@ -329,11 +339,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-end">
               <span className="text-sm font-bold text-slate-900 leading-none">{userEmail || 'Admin User'}</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase mt-1 ${role === 'super_admin'
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase mt-1 ${role === 'sysadmin'
                   ? 'bg-blue-100 text-blue-600 border border-blue-200'
                   : 'bg-slate-100 text-slate-600 border border-slate-200'
                 }`}>
-                {role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                {role === 'sysadmin' ? 'Sysadmin' : 'Admin'}
               </span>
             </div>
             <div className="w-10 h-10 rounded-sm bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200 shadow-sm uppercase">
@@ -347,16 +357,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
           <div className="max-w-7xl mx-auto pb-20">
             <div className="mb-10">
               <h2 className="text-2xl font-bold text-slate-900">
-                {menuItems.find(i => i.id === activeTab)?.label}
+                {[...adminItems, ...sysadminItems].find(i => i.id === activeTab)?.label}
               </h2>
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-xs text-slate-400 font-medium">Dashboard</span>
                 <span className="text-xs text-slate-300">/</span>
-                <span className="text-xs text-blue-600 font-bold">{menuItems.find(i => i.id === activeTab)?.label}</span>
+                <span className="text-xs text-blue-600 font-bold">{[...adminItems, ...sysadminItems].find(i => i.id === activeTab)?.label}</span>
               </div>
             </div>
 
-            {(!isSuper && ['reports', 'forms', 'communications', 'settings'].includes(activeTab)) ? (
+            {(!isSuper && ['forms', 'communications', 'settings'].includes(activeTab)) ? (
               <div className="flex-1 flex flex-col items-center justify-center py-20 bg-[#f8fafc]">
                 <div className="text-center p-8 formal-card inline-block max-w-md w-full border-t-4 border-t-red-500">
                   <h2 className="text-xl font-bold text-slate-900 mb-2">Acceso Denegado</h2>
@@ -370,10 +380,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                 {activeTab === 'students' && <AdminStudents />}
                 {activeTab === 'calendar' && <AdminCalendar />}
                 {activeTab === 'communications' && renderCommunications()}
-                {activeTab === 'reports' && renderReports()}
                 {activeTab === 'forms' && <AdminForms />}
-                {activeTab === 'testimonials' && <AdminTestimonials />}
                 {activeTab === 'settings' && <AdminSettings />}
+                {activeTab === 'logs' && <AdminLogs />}
               </>
             )}
           </div>
