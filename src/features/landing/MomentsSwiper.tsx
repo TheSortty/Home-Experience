@@ -15,7 +15,7 @@ const facilitators = [
         image: '/images/facilitators/maga.jpg',
         title: 'Maestra de Energía',
         description: '"Donde pones tu atención, pones tu energía." Maga te enseñará a canalizar tu fuerza interior para manifestar la realidad que deseas.',
-        instagramUrl: 'https://instagram.com/thesortty' // Placeholder
+        instagramUrl: 'https://www.instagram.com/p/DHCJTCExI0H/'
     },
     {
         id: 1,
@@ -23,7 +23,7 @@ const facilitators = [
         image: '/images/facilitators/mariano.jpg',
         title: 'Guía Espiritual',
         description: '"El viaje hacia adentro es el único que verdaderamente transforma." Mariano te acompañará a descubrir tu propia verdad con herramientas profundas de autoconocimiento.',
-        instagramUrl: 'https://instagram.com/thesortty' // Placeholder
+        instagramUrl: 'https://www.instagram.com/p/DHZZuEPRMWD/'
     },
     {
         id: 4,
@@ -31,7 +31,7 @@ const facilitators = [
         image: '/images/facilitators/vivi.jpg',
         title: 'Facilitadora de Procesos',
         description: '"Integrar la experiencia es lo que permite que el cambio sea permanente." Vivi te acompañará a consolidar tu transformación con presencia y calidez.',
-        instagramUrl: 'https://instagram.com/thesortty' // Placeholder
+        instagramUrl: 'https://www.instagram.com/siendohome?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw=='
     },
     {
         id: 3,
@@ -39,7 +39,7 @@ const facilitators = [
         image: '/images/facilitators/maru.jpg',
         title: 'Guardiana del Corazón',
         description: '"Amarse a uno mismo es el comienzo de un romance eterno." Maru crea un espacio seguro donde la vulnerabilidad se convierte en tu mayor fortaleza.',
-        instagramUrl: 'https://instagram.com/thesortty' // Placeholder
+        instagramUrl: 'https://www.instagram.com/p/DI4xlb_RVCf/'
     }
 ];
 
@@ -74,7 +74,7 @@ const MomentsSwiper: React.FC = () => {
                         {/* Elegant Separator */}
                         <div className="w-24 h-1 bg-gradient-to-r from-celeste-strong to-celeste-soft rounded-full mb-6"></div>
 
-                        <p className="text-grey-800 text-lg md:text-xl font-normal text-justify leading-relaxed relative z-10 pl-2 pr-4">
+                        <p className="text-grey-800 text-lg md:text-xl font-normal text-left leading-relaxed relative z-10 pl-2 pr-4">
                             {facilitators[activeIndex].description}
                         </p>
 

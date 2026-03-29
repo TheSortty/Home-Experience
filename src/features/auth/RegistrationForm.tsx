@@ -39,11 +39,11 @@ const DateSelect = ({ value, onChange, error }: { value: string, onChange: (val:
     const [year, setYear] = useState('');
 
     useEffect(() => {
-        if (value) {
+        if (value && value.includes('-')) {
             const [y, m, d] = value.split('-');
-            setYear(y);
-            setMonth(m);
-            setDay(d);
+            if (y !== year) setYear(y);
+            if (m !== month) setMonth(m);
+            if (d !== day) setDay(d);
         }
     }, [value]);
 
@@ -52,12 +52,16 @@ const DateSelect = ({ value, onChange, error }: { value: string, onChange: (val:
         let m = type === 'm' ? val : month;
         let y = type === 'y' ? val : year;
 
-        if (type === 'd') setDay(val);
-        if (type === 'm') setMonth(val);
-        if (type === 'y') setYear(val);
+        // Ensure 2-digit padding for month/day
+        const paddedD = d && d.length === 1 ? d.padStart(2, '0') : d;
+        const paddedM = m && m.length === 1 ? m.padStart(2, '0') : m;
 
-        if (d && m && y) {
-            onChange(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
+        if (type === 'd') setDay(paddedD);
+        if (type === 'm') setMonth(paddedM);
+        if (type === 'y') setYear(y);
+
+        if (paddedD && paddedM && y) {
+            onChange(`${y}-${paddedM}-${paddedD}`);
         } else {
             onChange('');
         }
@@ -73,7 +77,10 @@ const DateSelect = ({ value, onChange, error }: { value: string, onChange: (val:
             <div className="relative flex-1">
                 <select value={day} onChange={e => handleChange('d', e.target.value)} className={selectClass}>
                     <option value="">Día</option>
-                    {days.map(d => <option key={d} value={d}>{d}</option>)}
+                    {days.map(d => {
+                        const val = d.toString().padStart(2, '0');
+                        return <option key={val} value={val}>{d}</option>;
+                    })}
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -82,7 +89,10 @@ const DateSelect = ({ value, onChange, error }: { value: string, onChange: (val:
             <div className="relative flex-[1.5]">
                 <select value={month} onChange={e => handleChange('m', e.target.value)} className={selectClass}>
                     <option value="">Mes</option>
-                    {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                    {months.map((m, i) => {
+                        const val = (i + 1).toString().padStart(2, '0');
+                        return <option key={val} value={val}>{m}</option>;
+                    })}
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -91,7 +101,7 @@ const DateSelect = ({ value, onChange, error }: { value: string, onChange: (val:
             <div className="relative flex-[1.2]">
                 <select value={year} onChange={e => handleChange('y', e.target.value)} className={selectClass}>
                     <option value="">Año</option>
-                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                    {years.map(y => <option key={y} value={y.toString()}>{y}</option>)}
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -204,20 +214,27 @@ const RenderField = memo(({ field, value, error, onChange }: FieldProps) => {
             );
         case 'checkbox':
             return (
-                <div id={field.id} className="col-span-1 md:col-span-2">
-                    <label className={`cursor-pointer p-6 rounded-xl border-2 transition-all flex items-start gap-4 ${value ? 'border-blue-600 bg-blue-50' : error ? 'border-red-300 bg-red-50' : 'border-slate-100 bg-white hover:border-slate-300'
+                <div id={field.id} className="col-span-1 md:col-span-2 text-left">
+                    <label className={`cursor-pointer group relative p-6 rounded-xl border-2 transition-all flex items-start gap-5 ${value ? 'border-blue-600 bg-blue-50/50 shadow-sm' : error ? 'border-red-300 bg-red-50' : 'border-slate-100 bg-white hover:border-slate-200 shadow-sm'
                         }`}>
+                        <div className={`mt-1 h-7 w-7 rounded-md border-2 flex items-center justify-center transition-all shrink-0 ${value ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-white border-slate-200 group-hover:border-slate-300'}`}>
+                            {value && (
+                                <svg className="w-4 h-4 stroke-[3]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                            )}
+                        </div>
                         <input
                             type="checkbox"
-                            className="w-6 h-6 mt-1 text-blue-600 rounded focus:ring-blue-500"
+                            className="hidden"
                             checked={!!value}
                             onChange={(e) => onChange(field.id, e.target.checked)}
                         />
-                        <span className="text-lg text-slate-700 leading-relaxed font-medium select-none">
+                        <span className={`text-lg leading-relaxed font-semibold transition-colors select-none ${value ? 'text-blue-900' : 'text-slate-600'}`}>
                             {field.label}
                         </span>
                     </label>
-                    {error && <p className="text-red-500 text-sm mt-2 ml-2">Debes aceptar para continuar</p>}
+                    {error && <p className="mt-2 text-xs font-bold text-red-500 uppercase tracking-widest text-center md:text-left ml-4">Debes aceptar para continuar</p>}
                 </div>
             );
         default: // text, email, etc.
@@ -459,6 +476,30 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
         fetchFormSchema();
     }, []);
 
+    const injectSelectedService = (schema: FormField[]) => {
+        if (!schema.some((f: any) => f.id === 'selectedService')) {
+            const comboField: FormField = {
+                id: 'selectedService',
+                type: 'radio',
+                label: '¿Qué experiencia estás a punto de iniciar?',
+                required: true,
+                section: 'personal',
+                options: [
+                    'CRESER (Solo Inicial)',
+                    'COMBO 1 (Inicial + Avanzado)',
+                    'COMBO 2 (Inicial + Avanzado + PL)'
+                ]
+            };
+            const pIdx = schema.findIndex((f: any) => f.section === 'personal');
+            if (pIdx > -1) {
+                schema.splice(pIdx, 0, comboField);
+            } else {
+                schema.unshift(comboField);
+            }
+        }
+        return schema;
+    };
+
     const fetchFormSchema = async () => {
         setIsLoadingSchema(true);
         try {
@@ -468,8 +509,12 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
                 .eq('slug', 'inscripcion-creser')
                 .single();
 
+            if (error) throw error;
+
             if (data && data.schema) {
-                const schema = Array.isArray(data.schema) ? data.schema : JSON.parse(data.schema);
+                let schema = Array.isArray(data.schema) ? data.schema : JSON.parse(data.schema);
+                schema = injectSelectedService(schema);
+
                 setFields(schema);
                 setFormId(data.id);
 
@@ -483,12 +528,25 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
                     });
                     return initialData;
                 });
+            } else {
+                throw new Error('No schema found');
             }
         } catch (err) {
-            console.error('Error fetching form schema:', err);
-            // Fallback to mock if database fails
-            const loadedFields = MockDatabase.getFormFields();
+            console.error('Error fetching form schema, using fallback:', err);
+            let loadedFields = [...MockDatabase.getFormFields()];
+            loadedFields = injectSelectedService(loadedFields);
             setFields(loadedFields);
+            
+            // Initialize data for fallback fields
+            setFormData(prev => {
+                const initialData = { ...prev };
+                loadedFields.forEach((field: FormField) => {
+                    if (initialData[field.id] === undefined) {
+                        initialData[field.id] = '';
+                    }
+                });
+                return initialData;
+            });
         } finally {
             setIsLoadingSchema(false);
         }
@@ -640,9 +698,13 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
                 .single();
 
             if (error) throw error;
-
-            // Optional: send email notification
-            await supabase.functions.invoke('send-email', { body: { record: data } });
+            
+            // Optional: send email notification - Wrapped to prevent submission blockage
+            try {
+                await supabase.functions.invoke('send-email', { body: { record: data } });
+            } catch (emailErr) {
+                console.warn('Silent failure sending enrollment email:', emailErr);
+            }
 
             setCurrentStep('success');
             scrollToTop();

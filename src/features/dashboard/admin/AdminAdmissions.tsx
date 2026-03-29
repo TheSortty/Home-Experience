@@ -28,7 +28,11 @@ interface Cycle {
     enrolled_count: number;
 }
 
-const AdminAdmissions: React.FC = () => {
+interface AdminAdmissionsProps {
+    searchTerm?: string;
+}
+
+const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) => {
     const [registrations, setRegistrations] = useState<Registration[]>([]);
     const [cycles, setCycles] = useState<Cycle[]>([]);
     const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
@@ -38,7 +42,7 @@ const AdminAdmissions: React.FC = () => {
     // Confirm Modal State
     const [paymentConfirmed, setPaymentConfirmed] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('MERCADO_PAGO'); // 'MERCADO_PAGO', 'TRANSFER', 'CASH'
-    const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
+    const [paymentAmount, setPaymentAmount] = useState<string>('');
     const [selectedCycleId, setSelectedCycleId] = useState('');
     const [selectedCycleId2, setSelectedCycleId2] = useState(''); // For Combos
     const [detailTab, setDetailTab] = useState('PERSONAL');
@@ -52,6 +56,27 @@ const AdminAdmissions: React.FC = () => {
         fetchCycles();
         fetchTrashCount();
     }, [viewMode]);
+
+    useEffect(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setIsAssignModalOpen(false);
+                setIsConfirmDeleteOpen(false);
+                setSelectedRegistration(null);
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, []);
+
+    const formatAmount = (val: string) => {
+        const nums = val.replace(/\D/g, '');
+        return nums.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    };
+
+    const unformatAmount = (val: string) => {
+        return val.replace(/\./g, '');
+    };
 
     const fetchTrashCount = async () => {
         const { count, error } = await supabase
@@ -85,7 +110,9 @@ const AdminAdmissions: React.FC = () => {
                     (item.status === 'approved' ? 'PENDING_PAYMENT' :
                         (item.status === 'enrolled' ? 'APPROVED' :
                             (item.status === 'rejected' ? 'REJECTED' : item.status))),
-                selectedPackage: (item.data.intention?.includes('COMBO') ? 'COMBO' : 'INICIAL').toUpperCase(), // Simple logic for now, ideally mapped from form
+                selectedPackage: (item.data.selectedService && item.data.selectedService.toUpperCase().includes('COMBO')) 
+                    ? (item.data.selectedService.toUpperCase().includes('COMBO 1') ? 'COMBO 1' : 'COMBO 2')
+                    : (item.data.intention?.toUpperCase().includes('COMBO') ? 'COMBO 1' : 'INICIAL'),
                 answers: Object.entries(item.data).map(([key, val]) => ({ question: key, answer: String(val) })),
                 is_deleted: item.is_deleted
             }));
@@ -240,7 +267,7 @@ const AdminAdmissions: React.FC = () => {
                 const { error: paymentError } = await supabase.from('payments').insert({
                     submission_id: selectedRegistration.id,
                     enrollment_id: data.enrollment_id,
-                    amount: paymentAmount || 0,
+                    amount: Number(unformatAmount(paymentAmount)) || 0,
                     method: paymentMethod.toLowerCase(),
                     status: 'paid',
                     paid_at: new Date().toISOString()
@@ -310,12 +337,21 @@ const AdminAdmissions: React.FC = () => {
     };
 
     const isCombo = (pkg: string) => pkg.includes('COMBO') || pkg.includes('+');
+    const isCombo2 = (pkg: string) => pkg.includes('COMBO 2') || pkg.includes('PL') || pkg.includes('LIDERAZGO');
 
     const activeRegistrations = registrations.filter(r => !r.is_deleted);
     const trashRegistrations = registrations.filter(r => r.is_deleted);
 
-    const pendingReview = activeRegistrations.filter(r => r.status === 'PENDING_REVIEW');
-    const pendingPayment = activeRegistrations.filter(r => r.status === 'PENDING_PAYMENT');
+    const term = searchTerm.toLowerCase();
+    const filteredRegistrations = activeRegistrations.filter(r => 
+        r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term)
+    );
+
+    const pendingReview = filteredRegistrations.filter(r => r.status === 'PENDING_REVIEW');
+    const pendingPayment = filteredRegistrations.filter(r => r.status === 'PENDING_PAYMENT');
+    const trashMatched = trashRegistrations.filter(r => 
+        r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term)
+    );
 
     return (
         <>
@@ -351,12 +387,12 @@ const AdminAdmissions: React.FC = () => {
                             )}
                         </div>
                         <span className={`${viewMode === 'active' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'} text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider`}>
-                            {viewMode === 'active' ? pendingReview.length : trashRegistrations.length}
+                            {viewMode === 'active' ? pendingReview.length : trashMatched.length}
                         </span>
                     </div>
 
                     <div className="space-y-3 flex-1 overflow-y-auto pr-2">
-                        {(viewMode === 'active' ? pendingReview : trashRegistrations).length === 0 ? (
+                        {(viewMode === 'active' ? pendingReview : trashMatched).length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-slate-300">
                                 <DocumentIcon className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-sm font-medium">
@@ -364,7 +400,7 @@ const AdminAdmissions: React.FC = () => {
                                 </p>
                             </div>
                         ) : (
-                            (viewMode === 'active' ? pendingReview : trashRegistrations).map(reg => (
+                            (viewMode === 'active' ? pendingReview : trashMatched).map(reg => (
                                 <div
                                     key={reg.id}
                                     className={`group p-4 bg-white border ${viewMode === 'active' ? 'border-slate-100' : 'border-red-50 bg-red-50/20'} rounded-sm hover:border-blue-200 cursor-pointer transition-all`}
@@ -732,21 +768,38 @@ const AdminAdmissions: React.FC = () => {
                                             <div>
                                                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Monto Abonado ($)</label>
                                                 <input
-                                                    type="number"
+                                                    type="text"
                                                     value={paymentAmount}
-                                                    onChange={e => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                                                    placeholder="Ej: 50000"
-                                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
+                                                    onChange={e => setPaymentAmount(formatAmount(e.target.value))}
+                                                    placeholder="Ej: 50.000"
+                                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400 font-mono"
                                                 />
                                             </div>
                                         </div>
                                     )}
                                 </div>
                             </div>
-
-                            {/* 2. Cycle Assignment */}
+                            
+                            {/* OVERRIDE PACKAGE SELECTION */}
                             <div>
-                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">2. Asignación de Calendario</h4>
+                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">2. Programa a Cursar</h4>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Servicio Abonado</label>
+                                    <select
+                                        value={selectedRegistration.selectedPackage}
+                                        onChange={e => setSelectedRegistration({ ...selectedRegistration, selectedPackage: e.target.value })}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400 font-bold text-slate-700"
+                                    >
+                                        <option value="INICIAL">CRESER (Solo Inicial)</option>
+                                        <option value="COMBO 1">COMBO 1 (Inicial + Avanzado)</option>
+                                        <option value="COMBO 2">COMBO 2 (Inicial + Avanzado + Liderazgo)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* 3. Cycle Assignment */}
+                            <div>
+                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">3. Asignación de Calendario</h4>
                                 <div className="space-y-6">
                                     <div>
                                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
@@ -781,6 +834,15 @@ const AdminAdmissions: React.FC = () => {
                                                     </option>
                                                 ))}
                                             </select>
+                                        </div>
+                                    )}
+                                    
+                                    {isCombo2(selectedRegistration.selectedPackage) && (
+                                        <div className="animate-fade-in mt-4">
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">Tramo 3 (Programa Líder)</label>
+                                            <div className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm text-slate-500 italic">
+                                                *Se asignará posteriormente por el equipo docente.
+                                            </div>
                                         </div>
                                     )}
                                 </div>

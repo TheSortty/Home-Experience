@@ -17,8 +17,8 @@ export const PublicLayout: React.FC = () => {
     };
 
     const handleStartClick = () => {
-        // Por ahora redirige al home o abre modal según lógica (en MPA idealmente a /auth/register o /programas)
-        navigate('/auth/register');
+        // Redirect to home with a parameter to trigger the program selection modal
+        navigate('/?select=true');
     };
 
     return (

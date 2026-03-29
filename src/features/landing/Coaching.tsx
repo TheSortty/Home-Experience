@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import SparkleIcon from '../../ui/icons/SparkleIcon';
-import logoHome from '../../assets/logo_home.jpg';
 
 const logos = [
     { name: 'SOLITECH', url: 'https://via.placeholder.com/150?text=SOLITECH' },
@@ -122,9 +121,9 @@ const Coaching: React.FC = React.memo(() => {
                                     <div className="relative group">
                                         <div className="absolute -inset-4 bg-white/20 rounded-full blur-2xl group-hover:bg-white/30 transition-all"></div>
                                         <img
-                                            src={logoHome}
+                                            src="/logo-circle.png"
                                             alt="HOME Logo"
-                                            className="relative w-48 h-48 md:w-64 md:h-64 rounded-full object-cover border-4 border-white/40 shadow-2xl transition-transform group-hover:scale-105"
+                                            className="relative w-48 h-48 md:w-64 md:h-64 transition-transform group-hover:scale-105"
                                         />
                                     </div>
                                 </div>

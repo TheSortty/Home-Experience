@@ -7,7 +7,6 @@ import SettingsIcon from '../../ui/icons/SettingsIcon';
 import DocumentIcon from '../../ui/icons/DocumentIcon';
 import MailIcon from '../../ui/icons/MailIcon';
 import toast from 'react-hot-toast';
-import { MockDatabase, FormField, FormSubmission } from '../../services/mockDatabase';
 import { supabase } from '../../services/supabaseClient';
 import AdminCalendar from './admin/AdminCalendar';
 import AdminStudents from './admin/AdminStudents';
@@ -15,6 +14,7 @@ import AdminAdmissions from './admin/AdminAdmissions';
 import AdminSettings from './admin/AdminSettings';
 import AdminForms from './admin/AdminForms';
 import AdminLogs from './admin/AdminLogs';
+import { useAuth } from '../../contexts/AuthContext';
 
 import './admin/admin-reboot.css';
 
@@ -28,11 +28,8 @@ type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'communications
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTest }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [globalSearch, setGlobalSearch] = useState('');
-
-  // Role and User State
-  const [role, setRole] = useState<'admin' | 'sysadmin'>('admin');
-  const [userEmail, setUserEmail] = useState<string>('');
-  const [isLoadingRole, setIsLoadingRole] = useState(true);
+  const { role, user, isLoading: isLoadingAuth } = useAuth();
+  const userEmail = user?.email || '';
 
   // Real Data State
   const [stats, setStats] = useState({
@@ -46,33 +43,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    if (user) {
+      fetchDashboardData();
+    }
+  }, [user]);
 
   const fetchDashboardData = async () => {
     try {
-      setIsLoadingRole(true);
-      // 0. Fetch User and Role
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserEmail(user.email || '');
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single();
-
-        if (profileError || !profile) {
-          setRole('admin');
-        } else {
-          setRole(profile.role as any);
-        }
-      } else {
-        setRole('admin');
-      }
-
       // 1. Fetch Pending Admissions Count (from form_submissions)
-      const { count: pendingCount, error: pendingError } = await supabase
+      const { count: pendingCount } = await supabase
         .from('form_submissions')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
@@ -127,10 +106,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
-      setRole('admin'); // Robust fallback
-      toast.error('Error al cargar datos del dashboard: ' + (error.message || 'Error desconocido'));
-    } finally {
-      setIsLoadingRole(false);
+      toast.error('Error al cargar datos del dashboard');
     }
   };
 
@@ -178,9 +154,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                 <div className="flex-1">
                   <p className="text-slate-800 font-medium text-sm">{activity.text}</p>
                   <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-tight">{activity.date}</p>
-                </div>
-                <div className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold">
-                  GESTIONAR &rarr;
                 </div>
               </div>
             ))
@@ -234,21 +207,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setRole('admin');
-    setUserEmail('');
     onLogout();
   };
-
-  if (isLoadingRole) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-slate-900">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-          <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Cargando Sistema...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen admin-reboot-container overflow-hidden">
@@ -319,7 +279,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        {/* Top Bar (Azia Reboot) */}
+        {/* Top Bar */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 flex-shrink-0 z-10">
           <div className="flex items-center gap-6 flex-1">
             <div className="formal-search-container max-w-sm">
@@ -328,11 +288,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
               </svg>
               <input
                 type="text"
-                placeholder="Search for anything..."
-                className="formal-search-input"
+                placeholder="Search..."
+                className="formal-search-input pr-10"
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
               />
+              {globalSearch && (
+                <button 
+                  onClick={() => setGlobalSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
 
@@ -366,23 +334,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
               </div>
             </div>
 
-            {(!isSuper && ['forms', 'communications', 'settings'].includes(activeTab)) ? (
-              <div className="flex-1 flex flex-col items-center justify-center py-20 bg-[#f8fafc]">
-                <div className="text-center p-8 formal-card inline-block max-w-md w-full border-t-4 border-t-red-500">
-                  <h2 className="text-xl font-bold text-slate-900 mb-2">Acceso Denegado</h2>
-                  <p className="text-sm text-slate-500">No tenés los permisos necesarios para acceder a esta sección. Contactá a un Super Admin para más información.</p>
-                </div>
+            {isLoadingAuth ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="w-12 h-12 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin" />
               </div>
             ) : (
               <>
-                {activeTab === 'overview' && renderOverview()}
-                {activeTab === 'admissions' && <AdminAdmissions />}
-                {activeTab === 'students' && <AdminStudents />}
-                {activeTab === 'calendar' && <AdminCalendar />}
-                {activeTab === 'communications' && renderCommunications()}
-                {activeTab === 'forms' && <AdminForms />}
-                {activeTab === 'settings' && <AdminSettings />}
-                {activeTab === 'logs' && <AdminLogs />}
+                {(!isSuper && ['forms', 'communications', 'settings'].includes(activeTab)) ? (
+                  <div className="flex-1 flex flex-col items-center justify-center py-20 bg-[#f8fafc]">
+                    <div className="text-center p-8 formal-card inline-block max-w-md w-full border-t-4 border-t-red-500">
+                      <h2 className="text-xl font-bold text-slate-900 mb-2">Acceso Denegado</h2>
+                      <p className="text-sm text-slate-500">No tenés los permisos necesarios para acceder a esta sección.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {activeTab === 'overview' && renderOverview()}
+                    {activeTab === 'admissions' && <AdminAdmissions searchTerm={globalSearch} />}
+                    {activeTab === 'students' && <AdminStudents role={role || 'admin'} />}
+                    {activeTab === 'calendar' && <AdminCalendar />}
+                    {activeTab === 'communications' && renderCommunications()}
+                    {activeTab === 'forms' && <AdminForms />}
+                    {activeTab === 'settings' && <AdminSettings />}
+                    {activeTab === 'logs' && <AdminLogs />}
+                  </>
+                )}
               </>
             )}
           </div>

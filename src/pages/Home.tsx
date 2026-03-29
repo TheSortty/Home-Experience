@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import gsap from 'gsap';
+import { useAuth } from '../contexts/AuthContext';
 
 // Landing Features (Lazy Loaded)
 const Hero = lazy(() => import('../features/landing/Hero'));
@@ -21,12 +22,25 @@ import ProgramSelectionModal from '../features/landing/ProgramSelectionModal';
 import TestimonialModal from '../ui/TestimonialModal';
 const TestimonialListModal = lazy(() => import('../ui/TestimonialListModal'));
 
+import { useSearchParams } from 'react-router-dom';
+
 const Home: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   // Modal states from original App.tsx
   const [selectedTestimonial, setSelectedTestimonial] = useState<any>(null);
   const [isViewAllTestimonialsOpen, setIsViewAllTestimonialsOpen] = useState(false);
   const [isSelectionModalOpen, setIsSelectionModalOpen] = useState(false);
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
+  const { role } = useAuth();
+
+  // Handle ?select=true from Header
+  useEffect(() => {
+    if (searchParams.get('select') === 'true') {
+      setIsSelectionModalOpen(true);
+      // Clear the parameter without reloading
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // GSAP Context Cleanup mapping to user requirement
   useEffect(() => {
@@ -108,18 +122,20 @@ const Home: React.FC = () => {
         <MomentsSwiper />
       </div>
 
-      {/* 7. TESTIMONIOS */}
-      <div className="relative reveal-on-scroll opacity-0">
-        <InteractivePoints />
-        <div className="relative z-10 pointer-events-none">
-          <div className="pointer-events-auto">
-            <Testimonials
-              onTestimonialClick={setSelectedTestimonial}
-              onViewAllClick={() => setIsViewAllTestimonialsOpen(true)}
-            />
+      {/* 7. TESTIMONIOS (Visible only for sysadmin) */}
+      {role === 'sysadmin' && (
+        <div className="relative reveal-on-scroll opacity-0">
+          <InteractivePoints />
+          <div className="relative z-10 pointer-events-none">
+            <div className="pointer-events-auto">
+              <Testimonials
+                onTestimonialClick={setSelectedTestimonial}
+                onViewAllClick={() => setIsViewAllTestimonialsOpen(true)}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 8. IMPACTOS */}
       <div className="reveal-on-scroll opacity-0">

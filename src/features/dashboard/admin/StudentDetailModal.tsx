@@ -58,6 +58,7 @@ interface StudentDetailModalProps {
     onSoftDelete?: (id: string) => void;
     onRestore?: (id: string) => void;
     onPermanentDelete?: (student: StudentForModal) => void;
+    role?: 'admin' | 'sysadmin';
 }
 
 const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
@@ -66,6 +67,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     onSoftDelete,
     onRestore,
     onPermanentDelete,
+    role = 'admin',
 }) => {
     const [detailTab, setDetailTab] = useState('PERSONAL');
     const [activeProgramId, setActiveProgramId] = useState<string | null>(null);
@@ -112,6 +114,14 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         }
         setIsLoadingGoals(false);
     };
+
+    useEffect(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, [onClose]);
 
     const handleAddNote = async (enrollmentId: string) => {
         if (!newNoteContent.trim()) return;
@@ -194,7 +204,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                     id: 'METAS', label: 'Seguimiento de Metas',
                                     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                                 }
-                            ].map(section => (
+                                ].filter(s => s.id !== 'METAS' || role === 'sysadmin').map(section => (
                                 <button
                                     key={section.id}
                                     onClick={() => setDetailTab(section.id)}
@@ -502,18 +512,34 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                             );
                                         }
 
-                                        return itemsToRender.map((item, idx) => (
-                                            <div key={idx} className={`group ${item.val?.length > 70 ? 'md:col-span-2' : ''}`}>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5 group-hover:text-blue-600 transition-colors">
-                                                    {item.label}
-                                                </p>
-                                                <div className="p-4 bg-slate-50 border border-slate-100 rounded-sm group-hover:bg-white group-hover:border-blue-100 transition-all min-h-[50px] flex items-center">
-                                                    <p className="text-sm text-slate-700 leading-relaxed font-medium">
-                                                        {item.val ? item.val : <span className="text-slate-300 italic text-xs">Información no proporcionada</span>}
+                                        return itemsToRender.map((item, idx) => {
+                                            const isNegative = typeof item.val === 'string' && (
+                                                item.val.toLowerCase() === 'no' || 
+                                                item.val.toLowerCase() === 'no aplica' || 
+                                                item.val.toLowerCase() === 'ninguno'
+                                            );
+                                            
+                                            return (
+                                                <div key={idx} className={`group ${item.val?.length > 70 ? 'md:col-span-2' : ''}`}>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5 group-hover:text-blue-600 transition-colors">
+                                                        {item.label}
                                                     </p>
+                                                    <div className={`p-4 border rounded-sm transition-all min-h-[50px] flex items-center ${
+                                                        isNegative 
+                                                            ? 'bg-slate-50 border-slate-100 opacity-60' 
+                                                            : 'bg-white border-slate-100 group-hover:border-blue-100 group-hover:bg-white'
+                                                    }`}>
+                                                        <p className={`text-sm leading-relaxed font-medium ${isNegative ? 'text-slate-400' : 'text-slate-700'}`}>
+                                                            {item.val ? (
+                                                                isNegative ? <span className="font-bold tracking-tight">NO APLICA</span> : item.val
+                                                            ) : (
+                                                                <span className="text-slate-300 italic text-xs">Información no proporcionada</span>
+                                                            )}
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ));
+                                            );
+                                        });
                                     })()}
                                 </div>
                             )}

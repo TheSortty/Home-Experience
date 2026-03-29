@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import UserIcon from './icons/UserIcon';
-import logoHome from '../assets/logo_home.jpg';
+import { useAuth } from '../contexts/AuthContext';
 
 interface HeaderProps {
   onLoginClick: () => void;
@@ -10,6 +10,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ onLoginClick, onStartClick }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { role } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,8 +25,12 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onStartClick }) => {
     { href: '#programs', label: 'Programas' },
     { href: '#retreats', label: 'Retiros' },
     { href: '#impact', label: 'Impacto' },
-    { href: '#voices', label: 'Testimonios' },
   ];
+
+  // Add Testimonios link only for sysadmin
+  if (role === 'sysadmin') {
+    navLinks.push({ href: '#voices', label: 'Testimonios' });
+  }
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -52,7 +57,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onStartClick }) => {
     >
       <div className="container mx-auto px-6 flex justify-between items-center">
         <a href="#home" className="flex items-center gap-3 group" onClick={handleSmoothScroll} data-interactive="true">
-          <img src={logoHome} alt="Home Experience" className="w-10 h-10 rounded-full object-cover shadow-sm group-hover:scale-105 transition-transform" />
+          <img src="/logo-circle.png" alt="Home Experience" className="w-10 h-10 group-hover:scale-105 transition-transform" />
           <span className="text-xl font-bold tracking-widest text-slate-900">
             HOME<span className="text-blue-600">.</span>
           </span>

@@ -34,14 +34,7 @@ const LoginWrapper = () => {
 
 const RegistrationWrapper = () => {
   const navigate = useNavigate();
-  const { session, isLoading } = useAuth();
-
-  React.useEffect(() => {
-    if (!isLoading && session) {
-      navigate('/admin/dashboard', { replace: true });
-    }
-  }, [session, isLoading, navigate]);
-
+  // Removed automatic dashboard redirect to allow registered users to sign up for new programs
   return <RegistrationForm onSubmitSuccess={() => navigate('/')} onBack={() => navigate('/')} />;
 };
 

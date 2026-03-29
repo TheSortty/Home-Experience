@@ -94,19 +94,21 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
   };
 
   return (
-    <div className="login-page relative z-[100]">
+    <div className="login-page relative z-[100] bg-slate-50">
       <div className="logo-link">
-        <div className="text-3xl font-black tracking-tighter text-[#00A9CE]">HOME<span className="text-white">.</span></div>
+        <div className="text-3xl font-black tracking-tighter text-[#00A9CE]">HOME<span className="text-[#00A9CE]">.</span></div>
       </div>
 
       <button
         onClick={onBack}
-        className="absolute top-8 left-8 text-white/50 hover:text-white transition-colors flex items-center gap-2 z-[100] group"
+        className="absolute top-8 left-8 text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2 z-[100] group"
       >
-        <span className="w-6 h-6 transition-transform group-hover:scale-110 flex items-center justify-center">
-          <IoClose />
+        <span className="w-6 h-6 transition-transform group-hover:-translate-x-1 flex items-center justify-center">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
         </span>
-        <span className="font-semibold uppercase tracking-widest text-xs">Volver</span>
+        <span className="font-bold uppercase tracking-widest text-xs">Volver</span>
       </button>
 
       <div className="section">

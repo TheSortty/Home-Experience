@@ -4,8 +4,11 @@ import { supabase } from '../../../services/supabaseClient';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 import StudentDetailModal, { StudentForModal, AttendanceBadge } from './StudentDetailModal';
 import toast from 'react-hot-toast';
+interface AdminStudentsProps {
+    role?: 'admin' | 'sysadmin';
+}
 
-const AdminStudents: React.FC = () => {
+const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
     const [students, setStudents] = useState<StudentForModal[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -16,6 +19,17 @@ const AdminStudents: React.FC = () => {
     const [studentToDelete, setStudentToDelete] = useState<StudentForModal | null>(null);
 
     useEffect(() => { fetchStudents(); fetchTrashCount(); }, [viewMode]);
+
+    useEffect(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setSelectedStudent(null);
+                setIsConfirmDeleteOpen(false);
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, []);
 
     const fetchTrashCount = async () => {
         const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_deleted', true);
@@ -60,21 +74,33 @@ const AdminStudents: React.FC = () => {
                 const cId = e.cycle?.id;
                 const totalSess = cId ? (sessionsMap[cId] || 0) : 0;
                 const pay = e.payments?.[0];
+                
+                // Dynamic CONFLICT logic
+                const startDate = e.cycle?.start_date || '9999-12-31';
+                const isOverdue = new Date(startDate) < new Date() && e.payment_status !== 'paid';
+                let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' = 'ACTIVE';
+                
+                if (e.status === 'conflict' || isOverdue) {
+                    derivedStatus = 'CONFLICT';
+                } else if (e.status === 'graduated') {
+                    derivedStatus = 'GRADUATED';
+                }
+
                 return {
                     id: e.id,
                     cycleName: e.cycle?.name || 'Desconocido',
                     cycleType: e.cycle?.type || 'initial',
-                    status: e.status === 'active' ? 'ACTIVE' : (e.status === 'conflict' ? 'CONFLICT' : 'GRADUATED'),
+                    status: derivedStatus,
                     attendanceCount: attCount,
                     totalSessions: totalSess,
                     paymentInfo: pay ? {
                         amount: pay.amount,
                         method: pay.method === 'mercadopago' ? 'Mercado Pago' : (pay.method === 'transfer' ? 'Transferencia' : 'Efectivo'),
-                        status: pay.status === 'paid' ? 'Pagado' : 'Pendiente',
+                        status: pay.status === 'paid' ? 'Pagado' : (e.payment_status === 'paid' ? 'Pagado' : 'Pendiente'),
                         paidAt: pay.paid_at ? new Date(pay.paid_at).toLocaleDateString() : '-'
                     } : null,
                     notes: e.notes || '',
-                    startDate: e.cycle?.start_date || '9999-12-31'
+                    startDate: startDate
                 };
             }).sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 
@@ -138,8 +164,13 @@ const AdminStudents: React.FC = () => {
                         )}
                     </div>
                     <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-                        <div className="formal-search-container">
-                            <input type="text" placeholder="Buscar por nombre o email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="formal-search-input" />
+                        <div className="formal-search-container relative">
+                            <input type="text" placeholder="Buscar por nombre o email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="formal-search-input pr-10" />
+                            {searchTerm && (
+                                <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors">
+                                    ✕
+                                </button>
+                            )}
                         </div>
                         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-sm text-xs font-bold uppercase text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-400">
                             <option value="ALL">TODOS</option>
@@ -170,7 +201,16 @@ const AdminStudents: React.FC = () => {
                                 <tr key={student.id} className={`hover:bg-slate-50 transition-colors cursor-pointer ${status === 'CONFLICT' ? 'bg-rose-50/50' : ''}`} onClick={() => setSelectedStudent(student)}>
                                     <td>
                                         <div className="font-bold text-slate-800">{student.name}</div>
-                                        <div className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 tracking-tight">{student.email}</div>
+                                        <div className="flex items-center gap-2 mt-0.5 group/copy">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{student.email}</div>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(student.email); toast.success('Email copiado'); }}
+                                                className="opacity-0 group-hover/copy:opacity-100 p-1 hover:bg-slate-100 rounded-sm transition-all"
+                                                title="Copiar Email"
+                                            >
+                                                <svg className="w-2.5 h-2.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                                            </button>
+                                        </div>
                                     </td>
                                     <td>
                                         <span className="px-2 py-1 rounded-sm text-[10px] font-bold border bg-blue-50 border-blue-200 text-blue-700 uppercase tracking-wider">{currentPackage}</span>
@@ -204,6 +244,7 @@ const AdminStudents: React.FC = () => {
             {selectedStudent && (
                 <StudentDetailModal
                     student={selectedStudent}
+                    role={role}
                     onClose={() => setSelectedStudent(null)}
                     onSoftDelete={handleSoftDelete}
                     onRestore={handleRestore}
