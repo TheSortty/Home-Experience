@@ -106,13 +106,18 @@ const Coaching: React.FC = React.memo(() => {
                                             Integra herramientas de coaching ontológico, aprendizaje experiencial y prácticas reflexivas, preparando a las personas tanto para el ejercicio profesional como para aplicar el coaching en su vida y en organizaciones.
                                         </p>
                                         <div className="grid md:grid-cols-2 gap-6 pt-4">
-                                            <div className="p-6 bg-white/40 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm">
-                                                <p className="text-xs uppercase tracking-widest text-slate-900/40 mb-2">Avalado por</p>
-                                                <p className="font-bold">Cámara Argentina para la formación Profesional y la Capacitación Laboral</p>
+                                            <div className="p-6 bg-white/60 backdrop-blur-md rounded-2xl border border-white/60 shadow-sm flex flex-col justify-between hover:bg-white/80 transition-colors">
+                                                <p className="text-xs uppercase tracking-widest text-slate-500 mb-4 font-bold">Avalado por</p>
+                                                <img 
+                                                    src="/Logo-Camara-Argentina.png" 
+                                                    alt="Cámara Argentina para la Formación Profesional y la Capacitación Laboral" 
+                                                    className="w-full h-auto object-contain max-h-24 mix-blend-multiply opacity-90 grayscale hover:grayscale-0 transition-all duration-300"
+                                                />
                                             </div>
-                                            <div className="p-6 bg-white/40 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm">
-                                                <p className="text-xs uppercase tracking-widest text-slate-900/40 mb-2">Aval Internacional</p>
-                                                <p className="font-bold">OIEP (Organización Internacional para la educación permanente)</p>
+                                            <div className="p-6 bg-white/40 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm flex flex-col justify-between">
+                                                <p className="text-xs uppercase tracking-widest text-slate-900/40 mb-2 font-bold">Aval Internacional</p>
+                                                <p className="font-bold text-sm">OIEP (Organización Internacional para la educación permanente)</p>
+
                                             </div>
                                         </div>
                                     </div>
