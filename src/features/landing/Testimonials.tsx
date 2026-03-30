@@ -61,7 +61,7 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
   };
 
   return (
-    <section id="voices" className="py-24 relative bg-transparent">
+    <section id="voices" className="py-24 relative bg-transparent scroll-mt-24">
       <div className="container mx-auto px-6">
 
         {/* Header Section */}

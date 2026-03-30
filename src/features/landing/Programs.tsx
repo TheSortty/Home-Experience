@@ -43,7 +43,7 @@ interface ProgramsProps {
 
 const Programs: React.FC<ProgramsProps> = React.memo(({ onLearnMore }) => {
     return (
-        <section id="programs" className="py-24 bg-transparent">
+        <section id="programs" className="py-24 bg-transparent scroll-mt-24">
             <div className="container mx-auto px-6">
                 {/* Header */}
                 <div className="max-w-4xl mx-auto text-center mb-20">

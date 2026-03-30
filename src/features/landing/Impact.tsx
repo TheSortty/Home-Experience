@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 
 const Impact: React.FC = React.memo(() => {
     return (
-        <section id="impact" className="py-24 bg-transparent">
+        <section id="impact" className="py-24 bg-transparent scroll-mt-24">
             <div className="container mx-auto px-6">
                 <div className="text-center mb-24">
                     <h2 className="text-5xl md:text-7xl font-serif font-bold text-slate-900 mb-6 underline decoration-celeste-strong decoration-4 underline-offset-8">IMPACTO</h2>

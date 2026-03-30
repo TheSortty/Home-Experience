@@ -12,7 +12,7 @@ const logos = [
 
 const Coaching: React.FC = React.memo(() => {
     return (
-        <section id="coaching" className="py-24 bg-transparent overflow-hidden">
+        <section id="coaching" className="py-24 bg-transparent overflow-hidden scroll-mt-24">
             <div className="container mx-auto px-6">
                 {/* Section Header */}
                 <div className="text-center mb-20">

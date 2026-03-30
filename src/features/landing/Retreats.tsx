@@ -94,7 +94,7 @@ const Retreats: React.FC = React.memo(() => {
     }, [handleNext]);
 
     return (
-        <section id="retreats" className="retreats-carousel-container">
+        <section id="retreats" className="retreats-carousel-container scroll-mt-24">
             <div className="retreats-slider" ref={sliderRef}>
                 {PAST_RETREATS.map((retreat, index) => (
                     <div
