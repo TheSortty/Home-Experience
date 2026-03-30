@@ -177,8 +177,9 @@ const Home: React.FC = () => {
             setSelectedProgramId(id);
           }}
           onStartRegistration={() => {
-            /* Now handled by routing later or modal */
-            window.location.href = '/auth/register';
+            const waNumber = '5491130586930';
+            const message = encodeURIComponent('¡Hola! Me gustaría inscribirme en el programa CreSER.');
+            window.location.href = `/auth/register`;
           }}
         />
       )}
@@ -193,7 +194,15 @@ const Home: React.FC = () => {
               setIsSelectionModalOpen(true);
             }}
             onStartRegistration={() => {
-              window.location.href = '/auth/register';
+              // Redirect to WhatsApp for non-creser programs as requested
+              if (selectedProgramId === 'evolucion' || selectedProgramId === 'vincularte') {
+                const programName = selectedProgramId === 'evolucion' ? 'Evolución' : 'Vincularte';
+                const waNumber = '5491130586930';
+                const message = encodeURIComponent(`¡Hola! Quisiera más información sobre el programa ${programName}.`);
+                window.open(`https://wa.me/${waNumber}?text=${message}`, '_blank');
+              } else {
+                window.location.href = '/auth/register';
+              }
             }}
           />
         </React.Suspense>

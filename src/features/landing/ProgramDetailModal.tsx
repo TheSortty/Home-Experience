@@ -234,7 +234,7 @@ const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({ programId, onCl
                                     onClick={onStartRegistration}
                                     className="group flex items-center justify-between w-full md:w-auto gap-6 px-8 py-4 bg-[#1B2134] text-white rounded-full font-bold text-sm tracking-wider uppercase hover:bg-celeste-strong transition-all shadow-xl"
                                 >
-                                    Comenzar Inscripción
+                                    {detail.id === 'creser' ? 'Comenzar Inscripción' : 'Consultar por WhatsApp'}
                                     <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
                                         <ArrowRightIcon className="w-4 h-4" />
                                     </div>

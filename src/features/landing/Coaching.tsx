@@ -35,11 +35,31 @@ const Coaching: React.FC = React.memo(() => {
 
                         <div className="bg-celeste-strong/5 border border-celeste-strong/20 p-8 rounded-2xl relative overflow-hidden group">
                             <div className="relative z-10">
-                                <h4 className="font-bold text-slate-900 mb-2">Agendá tu primer sesión</h4>
+                                <h4 className="font-bold text-slate-900 mb-4">Agendá tu primer sesión</h4>
                                 <p className="text-slate-600 text-sm mb-6">
-                                    Un espacio gratuito para conocernos, escuchar tus objetivos y ver si el proceso es adecuado para vos.
+                                    Un espacio gratuito para conocernos, escuchar tus objetivos y ver si el proceso es adecuado para vos. Elegí un coach para contactar:
                                 </p>
-                                <div className="flex items-center gap-4 text-celeste-strong font-medium">
+                                
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    {[
+                                        { name: 'Maga', phone: '5491134786937' },
+                                        { name: 'Mariano', phone: '5491151589383' },
+                                        { name: 'Maru', phone: '5491153338335' }
+                                    ].map((coach) => (
+                                        <a 
+                                            key={coach.name}
+                                            href={`https://wa.me/${coach.phone}?text=${encodeURIComponent('¡Hola! Quisiera agendar una sesión de coaching individual.')}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex flex-col items-center p-4 bg-white/60 hover:bg-celeste-strong hover:text-white rounded-xl border border-celeste-strong/20 transition-all duration-300 shadow-sm group/coach"
+                                        >
+                                            <span className="font-bold text-sm mb-1">{coach.name}</span>
+                                            <span className="text-[10px] opacity-70 group-hover/coach:opacity-100 uppercase tracking-tighter">Contactar</span>
+                                        </a>
+                                    ))}
+                                </div>
+
+                                <div className="flex items-center gap-4 text-celeste-strong font-medium mt-8 pt-6 border-t border-celeste-strong/10">
                                     <span className="flex items-center gap-2">
                                         <span className="w-2 h-2 rounded-full bg-celeste-strong animate-pulse"></span>
                                         Online
