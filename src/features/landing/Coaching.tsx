@@ -111,7 +111,7 @@ const Coaching: React.FC = React.memo(() => {
                                                 <img 
                                                     src="/Logo-Camara-Argentina.png" 
                                                     alt="Cámara Argentina para la Formación Profesional y la Capacitación Laboral" 
-                                                    className="w-full h-auto object-contain max-h-24 mix-blend-multiply opacity-90 grayscale hover:grayscale-0 transition-all duration-300"
+                                                    className="w-full h-auto object-contain max-h-24 mix-blend-multiply opacity-90 transition-transform duration-300 group-hover:scale-105"
                                                 />
                                             </div>
                                             <div className="p-6 bg-white/60 backdrop-blur-md rounded-2xl border border-white/60 shadow-sm flex flex-col justify-between hover:bg-white/80 transition-colors">
@@ -119,7 +119,7 @@ const Coaching: React.FC = React.memo(() => {
                                                 <img 
                                                     src="/OIEP.png" 
                                                     alt="OIEP (Organización Internacional para la Educación Permanente)" 
-                                                    className="w-full h-auto object-contain max-h-24 mix-blend-multiply opacity-90 grayscale hover:grayscale-0 transition-all duration-300"
+                                                    className="w-full h-auto object-contain max-h-24 mix-blend-multiply opacity-90 transition-transform duration-300 group-hover:scale-105"
                                                 />
                                             </div>
                                         </div>
