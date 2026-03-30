@@ -23,39 +23,12 @@ const PAST_RETREATS: Retreat[] = [
     },
     {
         id: 'uruguay-2024',
-        title: 'Costa Este',
+        title: 'Uruguay',
         location: 'José Ignacio, Uruguay',
         date: 'Marzo 2024',
-        description: 'Procesos de transformación frente al mar, integrando calma y movimiento en la costa uruguaya.',
-        image: '/images/retreats/retiro-2.jpg',
-        fullStory: 'La costa uruguaya nos recibió con su calma característica. Trabajamos la fluidez y el desapego, inspirados por el ritmo de las olas. Un retiro enfocado en la simplicidad y en encontrar la paz en lo cotidiano, compartiendo momentos únicos frente al océano.'
-    },
-    {
-        id: 'cordoba-2023',
-        title: 'Sierras',
-        location: 'Villa General Belgrano, Arg',
-        date: 'Noviembre 2023',
-        description: 'Un encuentro entre las sierras para trabajar el liderazgo consciente y la conexión grupal.',
-        image: '/images/retreats/retiro-3.jpg',
-        fullStory: 'En el corazón de las sierras cordobesas, exploramos el liderazgo desde un lugar de autenticidad. Fue un retiro de alta intensidad emocional, donde la fuerza del entorno natural potenció cada dinámica grupal y cada momento de silencio.'
-    },
-    {
-        id: 'norte-2023',
-        title: 'Puna',
-        location: 'Salta, Argentina',
-        date: 'Mayo 2023',
-        description: 'La inmensidad del norte argentino como escenario para redescubrir la propia esencia.',
-        image: '/images/retreats/retiro-4.jpg',
-        fullStory: 'Bajo el cielo más puro de la Argentina, caminamos los salares y las montañas de colores. Un retiro de despojo y claridad, donde la altitud y el paisaje nos ayudaron a elevar nuestra perspectiva sobre los desafíos de la vida.'
-    },
-    {
-        id: 'sur-2023',
-        title: 'Bosque Andino',
-        location: 'Bariloche, Arg',
-        date: 'Febrero 2023',
-        description: 'La majestuosidad del bosque patagónico como espejo para nuestra propia grandeza interior.',
-        image: '/images/retreats/retiro-5.jpg',
-        fullStory: 'Rodeados de milenarios arrayanes y coihues, emprendimos un viaje hacia el interior. A través del silencio compartido y dinámicas de integración, sanamos heridas antiguas y conectamos con una vitalidad renovada. El bosque fue testigo y sostén de un proceso inolvidable.'
+        description: 'Procesos de transformación frente al mar, integrando calma y movimiento en la cabaña.',
+        image: '/images/retreats/Retiro Cabaña.jpeg',
+        fullStory: 'La costa uruguaya nos recibió con su calma característica. Trabajamos la fluidez y el desapego en nuestra cabaña. Un retiro enfocado en la simplicidad y en encontrar la paz en lo cotidiano, compartiendo momentos únicos.'
     }
 ];
 
@@ -89,7 +62,7 @@ const Retreats: React.FC = React.memo(() => {
         if (!parent) return;
         const currentIdx = Array.from(parent.children).indexOf(node as Element);
         
-        if (currentIdx === 0 || currentIdx === 1) return; // Main items
+        if (currentIdx === 0) return; // Main item
         handleNext();
     }, [handleNext]);
 
