@@ -67,13 +67,13 @@ const DateSelect = ({ value, onChange, error }: { value: string, onChange: (val:
         }
     };
 
-    const selectClass = `flex-1 p-4 rounded-xl border text-lg outline-none focus:ring-4 transition-all appearance-none cursor-pointer bg-white ${error
+    const selectClass = `w-full p-4 rounded-xl border text-lg outline-none focus:ring-4 transition-all appearance-none cursor-pointer bg-white text-center ${error
         ? 'border-red-300 bg-red-50 focus:ring-red-100'
         : 'border-slate-200 focus:border-blue-500 focus:ring-blue-100'
         }`;
 
     return (
-        <div className="flex gap-2 w-full">
+        <div className="flex gap-3 w-full">
             <div className="relative flex-1">
                 <select value={day} onChange={e => handleChange('d', e.target.value)} className={selectClass}>
                     <option value="">Día</option>
@@ -82,7 +82,7 @@ const DateSelect = ({ value, onChange, error }: { value: string, onChange: (val:
                         return <option key={val} value={val}>{d}</option>;
                     })}
                 </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </div>
             </div>
@@ -94,7 +94,7 @@ const DateSelect = ({ value, onChange, error }: { value: string, onChange: (val:
                         return <option key={val} value={val}>{m}</option>;
                     })}
                 </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </div>
             </div>
@@ -103,7 +103,7 @@ const DateSelect = ({ value, onChange, error }: { value: string, onChange: (val:
                     <option value="">Año</option>
                     {years.map(y => <option key={y} value={y.toString()}>{y}</option>)}
                 </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </div>
             </div>
