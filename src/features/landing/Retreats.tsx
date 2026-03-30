@@ -24,11 +24,11 @@ const PAST_RETREATS: Retreat[] = [
     {
         id: 'uruguay-2024',
         title: 'Uruguay',
-        location: 'José Ignacio, Uruguay',
+        location: 'Neptunia, Uruguay',
         date: 'Marzo 2024',
-        description: 'Procesos de transformación frente al mar, integrando calma y movimiento en la cabaña.',
+        description: 'Procesos de transformación frente al mar en Mama Killa Neptunia Eco Hostel, integrando calma y movimiento.',
         image: '/images/retreats/retiro-uruguay-1.jpg',
-        fullStory: 'La costa uruguaya nos recibió con su calma característica. Trabajamos la fluidez y el desapego en nuestra cabaña. Un retiro enfocado en la simplicidad y en encontrar la paz en lo cotidiano, compartiendo momentos únicos.'
+        fullStory: 'El eco hostel Mama Killa en Neptunia nos recibió con su calma característica. Trabajamos la fluidez y el desapego en nuestra cabaña rodeadas de naturaleza y playa. Un retiro enfocado en la simplicidad y en encontrar la paz en lo cotidiano, compartiendo momentos únicos.'
     }
 ];
 
