@@ -114,10 +114,13 @@ const Coaching: React.FC = React.memo(() => {
                                                     className="w-full h-auto object-contain max-h-24 mix-blend-multiply opacity-90 grayscale hover:grayscale-0 transition-all duration-300"
                                                 />
                                             </div>
-                                            <div className="p-6 bg-white/40 backdrop-blur-md rounded-2xl border border-white/40 shadow-sm flex flex-col justify-between">
-                                                <p className="text-xs uppercase tracking-widest text-slate-900/40 mb-2 font-bold">Aval Internacional</p>
-                                                <p className="font-bold text-sm">OIEP (Organización Internacional para la educación permanente)</p>
-
+                                            <div className="p-6 bg-white/60 backdrop-blur-md rounded-2xl border border-white/60 shadow-sm flex flex-col justify-between hover:bg-white/80 transition-colors">
+                                                <p className="text-xs uppercase tracking-widest text-slate-500 mb-4 font-bold">Aval Internacional</p>
+                                                <img 
+                                                    src="/OIEP.png" 
+                                                    alt="OIEP (Organización Internacional para la Educación Permanente)" 
+                                                    className="w-full h-auto object-contain max-h-24 mix-blend-multiply opacity-90 grayscale hover:grayscale-0 transition-all duration-300"
+                                                />
                                             </div>
                                         </div>
                                     </div>
