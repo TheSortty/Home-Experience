@@ -690,21 +690,26 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
 
         try {
             // Submit to form_submissions table
-            const { data, error } = await supabase
+            const { error } = await supabase
                 .from('form_submissions')
                 .insert([{
                     form_id: formId,
                     data: formData,
                     status: 'pending'
-                }])
-                .select()
-                .single();
+                }]);
 
             if (error) throw error;
             
+            // Synthesize the record object for the Edge Function since we cannot .select() it via RLS
+            const submittedRecord = {
+                data: formData,
+                form_id: formId,
+                status: 'pending'
+            };
+
             // Optional: send email notification - Wrapped to prevent submission blockage
             try {
-                await supabase.functions.invoke('send-email', { body: { record: data } });
+                await supabase.functions.invoke('send-email', { body: { record: submittedRecord } });
             } catch (emailErr) {
                 console.warn('Silent failure sending enrollment email:', emailErr);
             }
