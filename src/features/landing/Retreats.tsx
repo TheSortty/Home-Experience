@@ -27,7 +27,7 @@ const PAST_RETREATS: Retreat[] = [
         location: 'José Ignacio, Uruguay',
         date: 'Marzo 2024',
         description: 'Procesos de transformación frente al mar, integrando calma y movimiento en la cabaña.',
-        image: '/images/retreats/Retiro Cabaña.jpeg',
+        image: '/images/retreats/retiro-uruguay-1.jpg',
         fullStory: 'La costa uruguaya nos recibió con su calma característica. Trabajamos la fluidez y el desapego en nuestra cabaña. Un retiro enfocado en la simplicidad y en encontrar la paz en lo cotidiano, compartiendo momentos únicos.'
     }
 ];
