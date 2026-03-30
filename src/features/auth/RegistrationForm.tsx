@@ -509,12 +509,15 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
                 .eq('slug', 'inscripcion-creser')
                 .single();
 
-            if (error) throw error;
-
             if (data && data.schema) {
+                console.log('Form schema fetched successfully from Supabase:', data.id);
                 let schema = Array.isArray(data.schema) ? data.schema : JSON.parse(data.schema);
-                schema = injectSelectedService(schema);
+                
+                // Log the sections found in the schema to help debug missing steps
+                const sections = [...new Set(schema.map((f: any) => f.section))];
+                console.log('Available sections in fetched schema:', sections);
 
+                schema = injectSelectedService(schema);
                 setFields(schema);
                 setFormId(data.id);
 
