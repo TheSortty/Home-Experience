@@ -40,15 +40,16 @@ const Coaching: React.FC = React.memo(() => {
                                     Un espacio gratuito para conocernos, escuchar tus objetivos y ver si el proceso es adecuado para vos. Elegí un coach para contactar:
                                 </p>
                                 
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                     {[
                                         { name: 'Maga', phone: '5491134786937' },
                                         { name: 'Mariano', phone: '5491151589383' },
-                                        { name: 'Maru', phone: '5491153338335' }
+                                        { name: 'Maru', phone: '5491153338335' },
+                                        { name: 'Vivi', phone: '5491130586930' }
                                     ].map((coach) => (
                                         <a 
                                             key={coach.name}
-                                            href={`https://wa.me/${coach.phone}?text=${encodeURIComponent('¡Hola! Quisiera agendar una sesión de coaching individual.')}`}
+                                            href={`https://wa.me/${coach.phone}?text=${encodeURIComponent(`¡Hola ${coach.name}! Vi el anuncio en la página de siendohome y quisiera agendar una sesión de coaching individual.`)}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="flex flex-col items-center p-4 bg-white/60 hover:bg-celeste-strong hover:text-white rounded-xl border border-celeste-strong/20 transition-all duration-300 shadow-sm group/coach"
