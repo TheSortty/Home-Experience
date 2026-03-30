@@ -37,7 +37,7 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     const [cycles, setCycles] = useState<Cycle[]>([]);
     const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-    const [viewMode, setViewMode] = useState<'active' | 'trash'>('active');
+    const [viewMode, setViewMode] = useState<'active' | 'history' | 'trash'>('active');
 
     // Confirm Modal State
     const [paymentConfirmed, setPaymentConfirmed] = useState(false);
@@ -54,7 +54,6 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     useEffect(() => {
         fetchRegistrations();
         fetchCycles();
-        fetchTrashCount();
     }, [viewMode]);
 
     useEffect(() => {
@@ -79,14 +78,7 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     };
 
     const fetchTrashCount = async () => {
-        const { count, error } = await supabase
-            .from('form_submissions')
-            .select('*', { count: 'exact', head: true })
-            .eq('is_deleted', true);
-
-        if (!error && count !== null) {
-            setTrashCount(count);
-        }
+        // Removed separate query, managed via local array state
     };
 
     const fetchRegistrations = async () => {
@@ -117,7 +109,7 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                 is_deleted: item.is_deleted
             }));
             setRegistrations(realRegistrations);
-            setTrashCount(realRegistrations.filter((r: Registration) => r.is_deleted).length);
+            setTrashCount(realRegistrations.filter((r: Registration) => r.is_deleted || r.status === 'REJECTED').length);
         }
     };
 
@@ -193,7 +185,8 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
             .update({
                 is_deleted: false,
                 deleted_at: null,
-                deleted_by: null
+                deleted_by: null,
+                status: 'pending'
             })
             .eq('id', id);
 
@@ -339,71 +332,83 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     const isCombo = (pkg: string) => pkg.includes('COMBO') || pkg.includes('+');
     const isCombo2 = (pkg: string) => pkg.includes('COMBO 2') || pkg.includes('PL') || pkg.includes('LIDERAZGO');
 
-    const activeRegistrations = registrations.filter(r => !r.is_deleted);
-    const trashRegistrations = registrations.filter(r => r.is_deleted);
-
     const term = searchTerm.toLowerCase();
-    const filteredRegistrations = activeRegistrations.filter(r => 
-        r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term)
+
+    const activeMatched = registrations.filter(r => 
+        !r.is_deleted && 
+        ['PENDING_REVIEW', 'PENDING_PAYMENT'].includes(r.status) &&
+        (r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term))
     );
 
-    const pendingReview = filteredRegistrations.filter(r => r.status === 'PENDING_REVIEW');
-    const pendingPayment = filteredRegistrations.filter(r => r.status === 'PENDING_PAYMENT');
-    const trashMatched = trashRegistrations.filter(r => 
-        r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term)
+    const pendingReview = activeMatched.filter(r => r.status === 'PENDING_REVIEW');
+    const pendingPayment = activeMatched.filter(r => r.status === 'PENDING_PAYMENT');
+
+    const historyMatched = registrations.filter(r => 
+        !r.is_deleted && 
+        r.status === 'APPROVED' &&
+        (r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term))
+    );
+
+    const trashMatched = registrations.filter(r => 
+        (r.is_deleted || r.status === 'REJECTED') &&
+        (r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term))
     );
 
     return (
         <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in-up h-full">
-                {/* Pending Review Column */}
+                {/* Tabbed Column */}
                 <div className="formal-card p-8 flex flex-col h-full bg-white">
                     <div className="flex items-center justify-between mb-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-lg font-bold text-slate-800">
-                                {viewMode === 'active' ? 'Solicitudes Nuevas' : 'Papelera de Reciclaje'}
+                                {viewMode === 'active' && 'Solicitudes Nuevas'}
+                                {viewMode === 'history' && 'Historial Aprobados'}
+                                {viewMode === 'trash' && 'Papelera & Rechazadas'}
                             </h3>
-                            {viewMode === 'active' && (
-                                <button
-                                    onClick={() => setViewMode('trash')}
-                                    className="p-2 text-slate-300 hover:text-red-500 transition-colors relative"
-                                    title="Ver Papelera"
-                                >
-                                    <TrashIcon className="w-4 h-4" />
-                                    {trashCount > 0 && (
-                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
-                                            {trashCount}
-                                        </span>
-                                    )}
-                                </button>
-                            )}
-                            {viewMode === 'trash' && (
+                            <div className="flex bg-slate-100 p-1 rounded-sm gap-1">
                                 <button
                                     onClick={() => setViewMode('active')}
-                                    className="px-3 py-1 text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-sm transition-colors uppercase tracking-wider"
+                                    className={`px-3 py-1 text-[10px] font-bold rounded-sm uppercase tracking-wider transition-colors ${viewMode === 'active' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                                 >
-                                    Volver a Activas
+                                    Activas
                                 </button>
-                            )}
+                                <button
+                                    onClick={() => setViewMode('history')}
+                                    className={`px-3 py-1 text-[10px] font-bold rounded-sm uppercase tracking-wider transition-colors ${viewMode === 'history' ? 'bg-white shadow-sm text-green-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Historial
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('trash')}
+                                    className={`px-3 py-1 text-[10px] font-bold rounded-sm uppercase tracking-wider transition-colors relative ${viewMode === 'trash' ? 'bg-white shadow-sm text-red-600' : 'text-slate-500 hover:text-red-500'}`}
+                                >
+                                    <span className="flex items-center gap-1">Papelera {trashCount > 0 && <span className="bg-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-full">{trashCount}</span>}</span>
+                                </button>
+                            </div>
                         </div>
-                        <span className={`${viewMode === 'active' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'} text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider`}>
-                            {viewMode === 'active' ? pendingReview.length : trashMatched.length}
-                        </span>
                     </div>
 
                     <div className="space-y-3 flex-1 overflow-y-auto pr-2">
-                        {(viewMode === 'active' ? pendingReview : trashMatched).length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-slate-300">
-                                <DocumentIcon className="w-12 h-12 mb-4 opacity-20" />
-                                <p className="text-sm font-medium">
-                                    {viewMode === 'active' ? 'No hay solicitudes pendientes.' : 'No hay elementos en la papelera.'}
-                                </p>
-                            </div>
-                        ) : (
-                            (viewMode === 'active' ? pendingReview : trashMatched).map(reg => (
+                        {(() => {
+                            const listToRender = viewMode === 'active' ? pendingReview : (viewMode === 'history' ? historyMatched : trashMatched);
+                            if (listToRender.length === 0) {
+                                return (
+                                    <div className="flex flex-col items-center justify-center py-20 text-slate-300">
+                                        <DocumentIcon className="w-12 h-12 mb-4 opacity-20" />
+                                        <p className="text-sm font-medium">
+                                            {viewMode === 'active' && 'No hay solicitudes pendientes.'}
+                                            {viewMode === 'history' && 'No hay historial de aprobados.'}
+                                            {viewMode === 'trash' && 'No hay elementos en la papelera.'}
+                                        </p>
+                                    </div>
+                                );
+                            }
+
+                            return listToRender.map(reg => (
                                 <div
                                     key={reg.id}
-                                    className={`group p-4 bg-white border ${viewMode === 'active' ? 'border-slate-100' : 'border-red-50 bg-red-50/20'} rounded-sm hover:border-blue-200 cursor-pointer transition-all`}
+                                    className={`group p-4 bg-white border ${viewMode === 'active' ? 'border-amber-100/50 hover:border-amber-200' : (viewMode === 'history' ? 'border-slate-100 hover:border-blue-200' : 'border-red-50 bg-red-50/20 hover:border-red-200')} rounded-sm cursor-pointer transition-all flex flex-col`}
                                     onClick={() => setSelectedRegistration(reg)}
                                 >
                                     <div className="flex justify-between items-start">
@@ -411,16 +416,18 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                             <h4 className="font-bold text-slate-800 text-sm">{reg.name}</h4>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className="text-[10px] font-bold text-slate-400 border border-slate-100 px-1.5 py-0.5 uppercase">{reg.selectedPackage}</span>
-                                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    {reg.status === 'PENDING_REVIEW' ? 'Auditar Respuesta' : 'Ver detalle'} &rarr;
-                                                </p>
                                             </div>
                                         </div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{reg.date}</p>
+                                        <div className="flex flex-col items-end gap-1">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{reg.date}</p>
+                                            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                                {reg.status === 'PENDING_REVIEW' ? 'Auditar Respuesta' : 'Ver detalle'} &rarr;
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
-                            ))
-                        )}
+                            ));
+                        })()}
                     </div>
                 </div>
 
@@ -581,7 +588,7 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                         {(() => {
                                             const dictionaries: Record<string, Record<string, string>> = {
                                                 'PERSONAL': {
-                                                    'firstName': 'Nombre', 'lastName': 'Apellido', 'email': 'Correo Electrónico',
+                                                    'firstName': 'Nombre', 'lastName': 'Apellido', 'preferredName': 'Nombre Preferido', 'email': 'Correo Electrónico',
                                                     'phone': 'Teléfono', 'age': 'Edad', 'dni': 'DNI', 'city': 'Ciudad',
                                                     'address': 'Dirección', 'occupation': 'Ocupación', 'birthDate': 'Fecha de Nac.',
                                                     'gender': 'Género', 'instagram': 'Instagram'
@@ -591,13 +598,22 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                                     'dreams': 'Sueños y Aspiraciones', 'expectations': 'Expectativas del programa',
                                                     'whyNow': '¿Por qué ahora?', 'referral': '¿Cómo nos conociste?',
                                                     'referralChannel': 'Canal de llegada', 'referredBy': 'Recomendado por',
-                                                    'goals': 'Metas', 'qualities': 'Cualidades', 'context': 'Contexto actual'
+                                                    'goals': 'Metas', 'qualities': 'Cualidades', 'context': 'Contexto actual',
+                                                    'intention': 'Intención Principal', 'energyLeaks': 'Fugas de energía',
+                                                    'lifeHistory': 'Historia de vida', 'dailyRoutine': 'Rutina diaria'
                                                 },
                                                 'SALUD': {
                                                     'healthIssue': 'Problemas de salud', 'medication': 'Medicación actual',
                                                     'allergies': 'Alergias', 'emergencyContact': 'Contacto de Emerg.',
                                                     'medicalNotes': 'Notas Médicas', 'specialConditions': 'Condiciones Especiales',
-                                                    'pregnant': '¿Embarazo?', 'medicalInfo': 'Información Médica', 'bloodType': 'Grupo Sanguíneo'
+                                                    'pregnant': '¿Embarazo?', 'medicalInfo': 'Información Médica', 'bloodType': 'Grupo Sanguíneo',
+                                                    'chronicDisease': 'Enfermedad Crónica', 'chronicDiseaseDetails': 'Detalles Enf. Crónica',
+                                                    'underTreatment': 'En Tratamiento', 'underTreatmentDetails': 'Detalles Tratamiento',
+                                                    'allergiesDetails': 'Detalles Alergias', 'medicationDetails': 'Detalles Medicación',
+                                                    'psychiatricTreatment': 'Tratamiento Psiquiátrico', 'psychiatricTreatmentDetails': 'Detalles Tratamiento Psiq.',
+                                                    'drugConsumption': 'Consumo Drogas/Alcohol', 'drugConsumptionDetails': 'Detalles Consumo',
+                                                    'addictionTreatment': 'Tratamiento Adicciones', 'alcoholAbuse': 'Abuso de Alcohol',
+                                                    'emergencyName': 'Nombre Ref. Emergencia', 'emergencyPhone': 'Teléfono Ref. Emergencia'
                                                 }
                                             };
 
@@ -611,14 +627,19 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                                 });
                                             } else if (detailTab === 'OTROS') {
                                                 const allKnownKeys = Object.values(dictionaries).flatMap(d => Object.keys(d));
-                                                allKnownKeys.push('intention'); // Ocultar intention del listado genérico
+                                                allKnownKeys.push('intention'); // Ocultar intention del listado genérico si ya está
+                                                allKnownKeys.push('selectedService'); // No mostrar esto
                                                 
                                                 itemsToRender = selectedRegistration.answers
                                                     .filter(a => !allKnownKeys.includes(a.question))
-                                                    .map(a => ({
-                                                        label: a.question.replace(/([A-Z])/g, ' $1').toUpperCase().trim(),
-                                                        val: a.answer || ''
-                                                    }));
+                                                    .map(a => {
+                                                        let label = a.question.replace(/([A-Z])/g, ' $1').toUpperCase().trim();
+                                                        if (a.question === 'honestDeclaration') label = 'DECLARACIÓN DE HONESTIDAD';
+                                                        return {
+                                                            label: label,
+                                                            val: String(a.answer) || ''
+                                                        };
+                                                    });
                                             }
 
                                             if (itemsToRender.length === 0 && detailTab === 'OTROS') {
@@ -668,7 +689,7 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                             <div className="flex gap-4">
                                 <button onClick={() => setSelectedRegistration(null)} className="px-8 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all">Cerrar</button>
 
-                                {selectedRegistration.is_deleted ? (
+                                {selectedRegistration.is_deleted || selectedRegistration.status === 'REJECTED' ? (
                                     <div className="flex gap-4">
                                         <button
                                             onClick={() => {
@@ -680,7 +701,7 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                             Eliminar Definitivamente
                                         </button>
                                         <button onClick={() => handleRestore(selectedRegistration.id)} className="px-8 py-3 bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all">
-                                            Restaurar Solicitud
+                                            Restaurar / Volver a Pendiente
                                         </button>
                                     </div>
                                 ) : (

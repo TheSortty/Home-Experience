@@ -43,10 +43,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
-    if (user) {
+    if (user && activeTab === 'overview') {
       fetchDashboardData();
     }
-  }, [user]);
+  }, [user, activeTab]);
 
   const fetchDashboardData = async () => {
     try {
