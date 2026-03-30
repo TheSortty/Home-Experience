@@ -416,6 +416,11 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                             <h4 className="font-bold text-slate-800 text-sm">{reg.name}</h4>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className="text-[10px] font-bold text-slate-400 border border-slate-100 px-1.5 py-0.5 uppercase">{reg.selectedPackage}</span>
+                                                {viewMode === 'trash' && (
+                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 uppercase rounded-sm ${reg.is_deleted ? 'bg-slate-100 text-slate-500' : 'bg-red-50 text-red-500'}`}>
+                                                        {reg.is_deleted ? 'Eliminada' : 'Rechazada'}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="flex flex-col items-end gap-1">
@@ -559,8 +564,27 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                 <div className="p-4 bg-white border border-slate-100 rounded-sm">
                                     <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-2">Estado de Revisión</p>
                                     <div className="flex items-center gap-2">
-                                        <div className={`w-2 h-2 rounded-full ${selectedRegistration.status === 'PENDING_REVIEW' ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
-                                        <span className="text-[10px] font-bold text-slate-600 uppercase">{selectedRegistration.status === 'PENDING_REVIEW' ? 'Pendiente' : 'Aprobado'}</span>
+                                        {(() => {
+                                            let label = 'Desconocido';
+                                            let dotClass = 'bg-slate-400';
+                                            if (selectedRegistration.is_deleted) {
+                                                label = 'Eliminada (Papelera)'; dotClass = 'bg-slate-400';
+                                            } else if (selectedRegistration.status === 'REJECTED') {
+                                                label = 'Rechazada'; dotClass = 'bg-red-500';
+                                            } else if (selectedRegistration.status === 'PENDING_REVIEW') {
+                                                label = 'Pendiente Revisión'; dotClass = 'bg-amber-400';
+                                            } else if (selectedRegistration.status === 'PENDING_PAYMENT') {
+                                                label = 'Esperando Pago'; dotClass = 'bg-blue-400';
+                                            } else if (selectedRegistration.status === 'APPROVED') {
+                                                label = 'Confirmado'; dotClass = 'bg-emerald-400';
+                                            }
+                                            return (
+                                                <>
+                                                    <div className={`w-2 h-2 rounded-full ${dotClass}`}></div>
+                                                    <span className="text-[10px] font-bold text-slate-600 uppercase">{label}</span>
+                                                </>
+                                            )
+                                        })()}
                                     </div>
                                 </div>
                             </div>
