@@ -73,7 +73,7 @@ const Retreats: React.FC = React.memo(() => {
                     <div
                         key={retreat.id}
                         className="retreats-item"
-                        style={{ backgroundImage: `url(${retreat.image})` }}
+                        style={{ backgroundImage: `url('${retreat.image}')` }}
                         onClick={(e) => handleItemClick(index, e)}
                     >
                         <div className="content">
