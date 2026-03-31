@@ -18,7 +18,23 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
     const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
     const [studentToDelete, setStudentToDelete] = useState<StudentForModal | null>(null);
 
-    useEffect(() => { fetchStudents(); fetchTrashCount(); }, [viewMode]);
+    useEffect(() => { 
+        fetchStudents(); 
+        fetchTrashCount(); 
+
+        const channel = supabase.channel('students_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+                fetchStudents();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => {
+                fetchStudents();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [viewMode]);
 
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {

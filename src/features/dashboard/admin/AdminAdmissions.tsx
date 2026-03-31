@@ -54,6 +54,19 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     useEffect(() => {
         fetchRegistrations();
         fetchCycles();
+
+        const channel = supabase.channel('admissions_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, () => {
+                fetchRegistrations();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => {
+                fetchCycles();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, [viewMode]);
 
     useEffect(() => {

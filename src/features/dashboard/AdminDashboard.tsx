@@ -46,6 +46,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     // Esperamos a que 'role' esté seteado para garantizar que la sesión (y el token) está 100% activa en Supabase
     if (role && user && activeTab === 'overview') {
       fetchDashboardData();
+
+      // Suscribirse a cambios en la base de datos para mantener el resumen actualizado en tiempo real
+      const channel = supabase.channel('dashboard_overview_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, () => {
+          fetchDashboardData();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => {
+          fetchDashboardData();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [role, user, activeTab]);
 

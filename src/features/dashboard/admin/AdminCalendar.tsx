@@ -68,7 +68,23 @@ const AdminCalendar: React.FC = () => {
     // Student detail modal (shared)
     const [selectedStudentForDetail, setSelectedStudentForDetail] = useState<StudentForModal | null>(null);
 
-    useEffect(() => { fetchCycles(); fetchTrashCount(); }, [viewMode]);
+    useEffect(() => { 
+        fetchCycles(); 
+        fetchTrashCount(); 
+
+        const channel = supabase.channel('calendar_changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => {
+                fetchCycles();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => {
+                fetchCycles();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [viewMode]);
 
     // ─── Fetch Cycles ────────────────────────────────────────────────────────
 
