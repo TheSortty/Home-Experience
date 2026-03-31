@@ -30,7 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
     });
 
-    const fetchRole = async (userId: string) => {
+    const fetchRole = async (userId: string, retries = 2): Promise<void> => {
         try {
             const { data, error } = await supabase
                 .from('profiles')
@@ -39,28 +39,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .single();
             
             if (error || !data) {
+                // RLS may block the query if the token hasn't fully propagated yet.
+                // Retry after a short delay before falling back.
+                if (retries > 0) {
+                    await new Promise(r => setTimeout(r, 500));
+                    return fetchRole(userId, retries - 1);
+                }
                 setRole('admin');
             } else {
                 setRole(data.role as any);
             }
         } catch (err) {
+            if (retries > 0) {
+                await new Promise(r => setTimeout(r, 500));
+                return fetchRole(userId, retries - 1);
+            }
             setRole('admin');
         }
     };
 
     useEffect(() => {
-        // Inicializar estado con la sesión actual
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                fetchRole(session.user.id);
-            } else {
-                setIsLoading(false);
-            }
-        });
-
-        // Escuchar cambios de autenticación
+        // Use onAuthStateChange as the SOLE source of truth.
+        // getSession() can resolve before the Supabase client has fully
+        // initialized its internal auth headers for API calls, causing
+        // RLS-protected queries to silently return empty results.
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             setSession(session);
             setUser(session?.user ?? null);
