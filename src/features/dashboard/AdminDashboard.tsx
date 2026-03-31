@@ -43,33 +43,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
-    if (user && activeTab === 'overview') {
+    // Esperamos a que 'role' esté seteado para garantizar que la sesión (y el token) está 100% activa en Supabase
+    if (role && user && activeTab === 'overview') {
       fetchDashboardData();
     }
-  }, [user, activeTab]);
+  }, [role, user, activeTab]);
 
   const fetchDashboardData = async () => {
     try {
       // 1. Fetch Pending Admissions Count (from form_submissions)
-      const { count: pendingCount } = await supabase
+      const { count: pendingCount, error: countError } = await supabase
         .from('form_submissions')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
 
+      if (countError) throw countError;
+
       // 2. Fetch Recent Activity (Latest Registrations)
-      const { data: recentRegs } = await supabase
+      const { data: recentRegs, error: recentError } = await supabase
         .from('form_submissions')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(5);
 
+      if (recentError) throw recentError;
+
       // 3. Fetch Metrics for Graduation Rate
-      const { data: enrollmentsData } = await supabase
+      const { data: enrollmentsData, error: enrollError } = await supabase
         .from('enrollments')
         .select(`
           status,
           cycle:cycles ( type )
         `);
+
+      if (enrollError) throw enrollError;
 
       let rates = { initial: '0%', advanced: '0%', pl: '0%' };
 
