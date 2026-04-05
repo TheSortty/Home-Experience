@@ -1,13 +1,10 @@
--- Migration: 000000_init
--- Description: Squashed migration containing the full project schema, RLS, and seed data.
--- Created At: 2026-04-05
+﻿-- Migration: 000000_init
+-- Description: Single source of truth for HOME Experience database.
 
--- 1. EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. CORE TABLES
--- Profiles Table
-CREATE TABLE public.profiles (
+-- Core tables
+CREATE TABLE profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID UNIQUE,
     email TEXT UNIQUE,
@@ -20,17 +17,23 @@ CREATE TABLE public.profiles (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Link to auth.users if exists (for Supabase environment)
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users') THEN
-        ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_user_id_fkey;
-        ALTER TABLE public.profiles ADD CONSTRAINT profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'auth'
+          AND table_name = 'users'
+    ) THEN
+        ALTER TABLE profiles
+        DROP CONSTRAINT IF EXISTS profiles_user_id_fkey;
+        ALTER TABLE profiles
+        ADD CONSTRAINT profiles_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
     END IF;
 END $$;
 
--- Packages Table
-CREATE TABLE public.packages (
+CREATE TABLE packages (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     description TEXT,
@@ -40,8 +43,7 @@ CREATE TABLE public.packages (
     is_active BOOLEAN DEFAULT TRUE
 );
 
--- Cycles Table
-CREATE TABLE public.cycles (
+CREATE TABLE cycles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     start_date DATE NOT NULL,
@@ -53,55 +55,47 @@ CREATE TABLE public.cycles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enrollments Table
-CREATE TABLE public.enrollments (
+CREATE TABLE enrollments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    cycle_id UUID REFERENCES public.cycles(id) ON DELETE SET NULL,
-    package_id INTEGER REFERENCES public.packages(id) ON DELETE SET NULL,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    cycle_id UUID REFERENCES cycles(id) ON DELETE SET NULL,
+    package_id INTEGER REFERENCES packages(id) ON DELETE SET NULL,
     status TEXT DEFAULT 'pending', -- pending, active, completed, reset_required
     payment_status TEXT DEFAULT 'unpaid', -- unpaid, pending, paid
     pl_number INTEGER,
     enrolled_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    completed_at TIMESTAMP WITH TIME ZONE,
-    notes TEXT -- From 000005_add_enrollment_notes
+    completed_at TIMESTAMP WITH TIME ZONE
 );
 
--- Enrollment Notes Table (Alternative storage for multiple notes per enrollment)
-CREATE TABLE public.enrollment_notes (
+CREATE TABLE cycle_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    enrollment_id UUID NOT NULL REFERENCES public.enrollments(id) ON DELETE CASCADE,
-    content TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- Cycle Sessions Table
-CREATE TABLE public.cycle_sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    cycle_id UUID NOT NULL REFERENCES public.cycles(id) ON DELETE CASCADE,
+    cycle_id UUID NOT NULL REFERENCES cycles(id) ON DELETE CASCADE,
     session_date DATE NOT NULL,
     label TEXT,
     is_mandatory BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    UNIQUE (cycle_id, session_date)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Attendance Table
-CREATE TABLE public.attendance (
+CREATE UNIQUE INDEX cycle_sessions_unique_date
+    ON cycle_sessions (cycle_id, session_date);
+
+CREATE TABLE attendance (
     id BIGSERIAL PRIMARY KEY,
-    enrollment_id UUID NOT NULL REFERENCES public.enrollments(id) ON DELETE CASCADE,
-    cycle_session_id UUID REFERENCES public.cycle_sessions(id) ON DELETE SET NULL,
+    enrollment_id UUID NOT NULL REFERENCES enrollments(id) ON DELETE CASCADE,
+    cycle_session_id UUID REFERENCES cycle_sessions(id) ON DELETE SET NULL,
     date DATE,
     status TEXT DEFAULT 'present', -- present, absent, late, excused
     notes TEXT,
-    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    CONSTRAINT attendance_date_or_session_check CHECK (date IS NOT NULL OR cycle_session_id IS NOT NULL)
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Student Goals Table (Linked to enrollments)
-CREATE TABLE public.student_goals (
+ALTER TABLE attendance
+    ADD CONSTRAINT attendance_date_or_session_check
+    CHECK (date IS NOT NULL OR cycle_session_id IS NOT NULL);
+
+CREATE TABLE student_goals (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    enrollment_id UUID NOT NULL REFERENCES public.enrollments(id) ON DELETE CASCADE,
+    enrollment_id UUID NOT NULL REFERENCES enrollments(id) ON DELETE CASCADE,
     goal_description TEXT NOT NULL,
     target_date DATE,
     status TEXT DEFAULT 'pending', -- pending, achieved
@@ -110,10 +104,9 @@ CREATE TABLE public.student_goals (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- General Goals Table (Legacy/Alternate)
-CREATE TABLE public.goals (
+CREATE TABLE goals (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     description TEXT,
     category TEXT,
@@ -122,10 +115,9 @@ CREATE TABLE public.goals (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Notifications Table
-CREATE TABLE public.notifications (
+CREATE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     body TEXT NOT NULL,
     type TEXT DEFAULT 'system',
@@ -134,9 +126,8 @@ CREATE TABLE public.notifications (
     action_url TEXT
 );
 
--- Medical Info Table
-CREATE TABLE public.medical_info (
-    user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+CREATE TABLE medical_info (
+    user_id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
     under_treatment BOOLEAN,
     treatment_details TEXT,
     medication TEXT,
@@ -146,12 +137,11 @@ CREATE TABLE public.medical_info (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Testimonials Table
-CREATE TABLE public.testimonials (
+CREATE TABLE testimonials (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     author_name TEXT NOT NULL,
-    user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
     cycle_text TEXT,
     roles TEXT[],
     quote TEXT NOT NULL,
@@ -161,8 +151,7 @@ CREATE TABLE public.testimonials (
     status TEXT DEFAULT 'pending'
 );
 
--- Site Settings Table
-CREATE TABLE public.site_settings (
+CREATE TABLE site_settings (
     key VARCHAR(255) PRIMARY KEY,
     value TEXT NOT NULL,
     label VARCHAR(255) NOT NULL,
@@ -173,37 +162,31 @@ CREATE TABLE public.site_settings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Forms Table
-CREATE TABLE public.forms (
+CREATE TABLE forms (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     slug VARCHAR(100) UNIQUE NOT NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT,
     schema JSONB NOT NULL DEFAULT '[]',
     is_active BOOLEAN DEFAULT true,
-    is_deleted BOOLEAN DEFAULT false, -- From fix_forms_rls.sql
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Form Submissions Table
-CREATE TABLE public.form_submissions (
+CREATE TABLE form_submissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    form_id UUID REFERENCES public.forms(id) ON DELETE SET NULL,
+    form_id UUID REFERENCES forms(id) ON DELETE SET NULL,
     data JSONB NOT NULL,
-    email TEXT, -- From 000002_form_submissions_email.sql
     status VARCHAR(50) DEFAULT 'pending',
     admin_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_form_submissions_email ON public.form_submissions(email);
 
--- Payments Table
-CREATE TABLE public.payments (
+CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    submission_id UUID REFERENCES public.form_submissions(id) ON DELETE SET NULL,
-    enrollment_id UUID REFERENCES public.enrollments(id) ON DELETE SET NULL,
-    package_id INTEGER REFERENCES public.packages(id) ON DELETE SET NULL,
+    submission_id UUID REFERENCES form_submissions(id) ON DELETE SET NULL,
+    enrollment_id UUID REFERENCES enrollments(id) ON DELETE SET NULL,
+    package_id INTEGER REFERENCES packages(id) ON DELETE SET NULL,
     amount NUMERIC,
     currency TEXT DEFAULT 'ARS',
     method TEXT DEFAULT 'manual', -- mercadopago, transfer, cash, manual
@@ -214,141 +197,16 @@ CREATE TABLE public.payments (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Activity Logs Table (From admin_update.sql)
-CREATE TABLE public.activity_logs (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID, -- NULL for system actions or before linking
-    action VARCHAR(255) NOT NULL, -- Ej: 'APPROVED_ADMISSION', 'DELETED_CYCLE'
-    details JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- Legacy Table (kept for safety)
-CREATE TABLE public.registrations (
+-- Legacy table kept for migration safety (not used by current UI)
+CREATE TABLE registrations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     status TEXT DEFAULT 'pending',
     data JSONB NOT NULL
 );
 
--- 3. FUNCTIONS AND RPCs
--- Helper to check staff status (SECURITY DEFINER to read profiles table)
-CREATE OR REPLACE FUNCTION public.is_staff()
-RETURNS BOOLEAN
-SET search_path = public
-AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid() AND role IN ('admin', 'sysadmin', 'super_admin')
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- RPC: Confirm Enrollment logic
-CREATE OR REPLACE FUNCTION public.confirm_submission_enrollment(
-    p_submission_id UUID,
-    p_cycle_id UUID,
-    p_payment_method VARCHAR,
-    p_is_total_payment BOOLEAN
-) RETURNS JSONB 
-SET search_path = public
-AS $$
-DECLARE
-    v_sub_data JSONB;
-    v_user_id UUID;
-    v_first_name TEXT;
-    v_last_name TEXT;
-    v_email TEXT;
-    v_enrollment_id UUID;
-    v_cycle_type TEXT;
-BEGIN
-    SELECT data INTO v_sub_data FROM form_submissions WHERE id = p_submission_id;
-    IF v_sub_data IS NULL THEN RAISE EXCEPTION 'Submission not found'; END IF;
-
-    v_first_name := v_sub_data->>'firstName';
-    v_last_name := v_sub_data->>'lastName';
-    v_email := v_sub_data->>'email';
-
-    -- Try to find or create profile
-    SELECT id INTO v_user_id FROM profiles WHERE email = v_email;
-
-    IF v_user_id IS NULL THEN
-        INSERT INTO profiles (first_name, last_name, email, role, created_at)
-        VALUES (v_first_name, v_last_name, v_email, 'student', NOW())
-        RETURNING id INTO v_user_id;
-    END IF;
-
-    -- Create enrollment
-    INSERT INTO enrollments (user_id, cycle_id, status, payment_status, enrolled_at)
-    VALUES (
-        v_user_id,
-        p_cycle_id,
-        'active',
-        CASE WHEN p_is_total_payment THEN 'paid' ELSE 'pending' END,
-        NOW()
-    )
-    RETURNING id INTO v_enrollment_id;
-
-    -- Update cycle stats
-    UPDATE cycles SET enrolled_count = enrolled_count + 1 WHERE id = p_cycle_id;
-    SELECT type INTO v_cycle_type FROM cycles WHERE id = p_cycle_id;
-
-    -- Update submission status
-    UPDATE form_submissions SET status = 'enrolled' WHERE id = p_submission_id;
-
-    RETURN jsonb_build_object(
-        'success', true,
-        'user_id', v_user_id,
-        'enrollment_id', v_enrollment_id,
-        'cycle_type', v_cycle_type
-    );
-EXCEPTION WHEN OTHERS THEN
-    RETURN jsonb_build_object('success', false, 'error', SQLERRM);
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 4. RLS POLICIES (UNIFIED)
-DO $$
-DECLARE
-  r RECORD;
-BEGIN
-  -- 1. Enable RLS on all public tables
-  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
-    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', r.tablename);
-    -- Clear ALL existing policies (dynamic cleanup)
-    FOR r_pol IN (SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = r.tablename) LOOP
-        EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r_pol.policyname, r.tablename);
-    END LOOP;
-    -- Create unified staff policy
-    EXECUTE format('CREATE POLICY staff_all_access ON public.%I FOR ALL TO authenticated USING (public.is_staff()) WITH CHECK (public.is_staff())', r.tablename);
-  END LOOP;
-END $$;
-
--- 5. SPECIFIC RLS EXCEPTIONS
--- A. Anonymous Form Submissions
-CREATE POLICY public_insert_forms ON public.form_submissions
-  FOR INSERT TO anon, authenticated WITH CHECK (true);
-
--- B. Anonymous Testimonials Read & Insert
-CREATE POLICY public_read_testimonials ON public.testimonials FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY public_insert_testimonials ON public.testimonials FOR INSERT TO anon, authenticated WITH CHECK (true);
-
--- C. Anonymous Forms & Cycles Read (for Landing Page/Calendar)
-CREATE POLICY public_read_forms ON public.forms FOR SELECT TO anon, authenticated USING (is_deleted = false);
-CREATE POLICY public_read_cycles ON public.cycles FOR SELECT TO anon, authenticated USING (true);
-
--- D. Activity Logs (Admins can insert, sysadmins can view - already covered by staff_all_access but explicit for clarity)
--- Note: staff_all_access already covers is_staff().
-
--- 6. PERMISSIONS
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
-
--- 7. SEED DATA
--- Site Settings
-INSERT INTO public.site_settings (key, value, label, description, category, input_type) VALUES
+-- Seed site settings
+INSERT INTO site_settings (key, value, label, description, category, input_type) VALUES
 ('contact_email', 'contacto@home-experience.com', 'Email de Contacto', 'Email visible en el pie de pÃ¡gina y secciÃ³n de contacto', 'contact', 'email'),
 ('contact_phone', '+54 9 11 1234-5678', 'TelÃ©fono de Contacto', 'NÃºmero visible para WhatsApp o llamadas', 'contact', 'text'),
 ('whatsapp', '+5491130586930', 'WhatsApp', 'NÃºmero de WhatsApp para contacto directo.', 'contact', 'tel'),
@@ -365,8 +223,8 @@ INSERT INTO public.site_settings (key, value, label, description, category, inpu
 ('link_mercadopago_leadership', 'https://mp.ago.la/...', 'Link Pago: Liderazgo', 'Link de pago para curso Liderazgo', 'links', 'url')
 ON CONFLICT (key) DO NOTHING;
 
--- Forms
-INSERT INTO public.forms (slug, title, schema) VALUES 
+-- Seed forms
+INSERT INTO forms (slug, title, schema) VALUES 
 ('registration-main', 'InscripciÃ³n General', '[
     {"type": "text", "name": "firstName", "label": "Nombre", "required": true},
     {"type": "text", "name": "lastName", "label": "Apellido", "required": true},
@@ -379,7 +237,7 @@ INSERT INTO public.forms (slug, title, schema) VALUES
 ]')
 ON CONFLICT (slug) DO NOTHING;
 
-INSERT INTO public.forms (slug, title, schema, is_active)
+INSERT INTO forms (slug, title, schema, is_active)
 VALUES (
     'inscripcion-creser', 
     'InscripciÃ³n CRESER', 
@@ -430,4 +288,269 @@ VALUES (
     ]'::jsonb,
     true
 )
-ON CONFLICT (slug) DO UPDATE SET schema = EXCLUDED.schema;
+ON CONFLICT (slug) DO UPDATE
+SET schema = EXCLUDED.schema;
+
+-- Migrate legacy registrations into form_submissions
+INSERT INTO form_submissions (form_id, data, status, created_at)
+SELECT 
+    (SELECT id FROM forms WHERE slug = 'registration-main'),
+    data,
+    status,
+    created_at
+FROM registrations
+WHERE EXISTS (SELECT 1 FROM forms WHERE slug = 'registration-main');
+
+-- RPC: Confirm Enrollment (using form_submissions)
+CREATE OR REPLACE FUNCTION confirm_submission_enrollment(
+    p_submission_id UUID,
+    p_cycle_id UUID,
+    p_payment_method VARCHAR,
+    p_is_total_payment BOOLEAN
+) RETURNS JSONB AS $$
+DECLARE
+    v_sub_data JSONB;
+    v_user_id UUID;
+    v_first_name TEXT;
+    v_last_name TEXT;
+    v_email TEXT;
+    v_enrollment_id UUID;
+    v_cycle_type TEXT;
+BEGIN
+    SELECT data, status INTO v_sub_data 
+    FROM form_submissions 
+    WHERE id = p_submission_id;
+
+    IF v_sub_data IS NULL THEN
+        RAISE EXCEPTION 'Submission not found';
+    END IF;
+
+    v_first_name := v_sub_data->>'firstName';
+    v_last_name := v_sub_data->>'lastName';
+    v_email := v_sub_data->>'email';
+
+    SELECT id INTO v_user_id FROM profiles WHERE email = v_email;
+
+    IF v_user_id IS NULL THEN
+        INSERT INTO profiles (first_name, last_name, email, role, created_at)
+        VALUES (v_first_name, v_last_name, v_email, 'student', NOW())
+        RETURNING id INTO v_user_id;
+    END IF;
+
+    INSERT INTO enrollments (user_id, cycle_id, status, payment_status, enrolled_at)
+    VALUES (
+        v_user_id,
+        p_cycle_id,
+        'active',
+        CASE WHEN p_is_total_payment THEN 'paid' ELSE 'pending' END,
+        NOW()
+    )
+    RETURNING id INTO v_enrollment_id;
+
+    UPDATE cycles
+    SET enrolled_count = enrolled_count + 1
+    WHERE id = p_cycle_id;
+    
+    SELECT type INTO v_cycle_type FROM cycles WHERE id = p_cycle_id;
+
+    UPDATE form_submissions
+    SET status = 'enrolled'
+    WHERE id = p_submission_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'user_id', v_user_id,
+        'enrollment_id', v_enrollment_id,
+        'cycle_type', v_cycle_type
+    );
+
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+        'success', false,
+        'error', SQLERRM
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Migration: 000001_open_access
+-- Description: Open access policies and grants for development/testing.
+
+-- Schema usage
+grant usage on schema public to anon, authenticated;
+
+-- Table permissions
+grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+
+-- Sequence permissions (for serial/bigserial)
+grant usage, select on all sequences in schema public to anon, authenticated;
+
+-- RLS open policies for all public tables
+do $$
+declare
+  r record;
+begin
+  for r in select tablename from pg_tables where schemaname = 'public' loop
+    execute format('alter table public.%I enable row level security', r.tablename);
+    execute format('drop policy if exists open_select on public.%I', r.tablename);
+    execute format('drop policy if exists open_insert on public.%I', r.tablename);
+    execute format('drop policy if exists open_update on public.%I', r.tablename);
+    execute format('drop policy if exists open_delete on public.%I', r.tablename);
+
+    execute format('create policy open_select on public.%I for select using (true)', r.tablename);
+    execute format('create policy open_insert on public.%I for insert with check (true)', r.tablename);
+    execute format('create policy open_update on public.%I for update using (true)', r.tablename);
+    execute format('create policy open_delete on public.%I for delete using (true)', r.tablename);
+  end loop;
+end $$;
+-- Migration: 000002_form_submissions_email
+-- Adds real email column to form_submissions for indexed lookups
+
+ALTER TABLE form_submissions 
+ADD COLUMN IF NOT EXISTS email TEXT;
+
+-- Backfill emails from JSONB data
+UPDATE form_submissions 
+SET email = data->>'email'
+WHERE email IS NULL AND data->>'email' IS NOT NULL;
+
+-- Create index for fast search
+CREATE INDEX IF NOT EXISTS idx_form_submissions_email 
+ON form_submissions(email);
+-- Migration: 000003_populate_medical_info
+-- Migrates medical data from form_submissions.data (CRESER) into the structured medical_info table
+
+INSERT INTO medical_info (
+    user_id,
+    under_treatment,
+    treatment_details,
+    medication,
+    allergies,
+    emergency_contact_name,
+    emergency_contact_phone,
+    updated_at
+)
+SELECT 
+    p.id,
+    CASE WHEN fs.data->>'underTreatment' = 'SÃ­' THEN true ELSE false END,
+    COALESCE(fs.data->>'underTreatmentDetails', '') || 
+        CASE WHEN fs.data->>'chronicDisease' = 'SÃ­' THEN '. Enfermedad crÃ³nica: ' || COALESCE(fs.data->>'chronicDiseaseDetails', 'Sin detalles') ELSE '' END ||
+        CASE WHEN fs.data->>'psychiatricTreatment' != 'Ninguno' THEN '. Tratamiento psiq: ' || COALESCE(fs.data->>'psychiatricTreatment', '') || ' ' || COALESCE(fs.data->>'psychiatricTreatmentDetails', '') ELSE '' END,
+    CASE WHEN fs.data->>'medication' = 'SÃ­' THEN COALESCE(fs.data->>'medicationDetails', 'SÃ­ (sin detalles)') ELSE NULL END,
+    CASE WHEN fs.data->>'allergies' = 'SÃ­' THEN COALESCE(fs.data->>'allergiesDetails', 'SÃ­ (sin detalles)') ELSE NULL END,
+    fs.data->>'emergencyName',
+    fs.data->>'emergencyPhone',
+    NOW()
+FROM form_submissions fs
+JOIN profiles p ON p.email = fs.email
+WHERE p.role = 'student'
+  AND fs.email IS NOT NULL
+ON CONFLICT (user_id) DO UPDATE SET
+    under_treatment = EXCLUDED.under_treatment,
+    treatment_details = EXCLUDED.treatment_details,
+    medication = EXCLUDED.medication,
+    allergies = EXCLUDED.allergies,
+    emergency_contact_name = EXCLUDED.emergency_contact_name,
+    emergency_contact_phone = EXCLUDED.emergency_contact_phone,
+    updated_at = NOW();
+z
+ALTER TABLE enrollments ADD COLUMN notes TEXT;
+CREATE TABLE enrollment_notes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    enrollment_id UUID NOT NULL REFERENCES enrollments(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE enrollment_notes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all for authenticated users" ON enrollment_notes FOR ALL USING (true);
+-- Migration: 000007_unified_rls_policies
+-- Description: Unifies database security by applying strict RLS to ensure only staff can access data.
+
+-- Fix for "Function Search Path Mutable" warning on existing confirm_submission_enrollment
+ALTER FUNCTION public.confirm_submission_enrollment SET search_path = public;
+
+-- 1. Create a helper function to check if the current user is an admin or sysadmin.
+-- SECURITY DEFINER allows this function to bypass RLS to read the profiles table without infinite recursion.
+-- SET search_path = public fixes the "Function Search Path Mutable" warning.
+CREATE OR REPLACE FUNCTION public.is_staff()
+RETURNS BOOLEAN
+SET search_path = public
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE user_id = auth.uid() AND role IN ('admin', 'sysadmin', 'super_admin')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 2. Clean up ALL existing policies dynamically to eliminate the "RLS Policy Always True" warnings
+DO $$
+DECLARE
+  pol RECORD;
+BEGIN
+  -- We query the internal Postgres table of policies to find EVERY policy that exists
+  FOR pol IN 
+    SELECT policyname, tablename 
+    FROM pg_policies 
+    WHERE schemaname = 'public' 
+      AND policyname NOT IN ('staff_all_access', 'public_insert_forms', 'public_read_testimonials')
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', pol.policyname, pol.tablename);
+  END LOOP;
+END $$;
+
+-- 3. Apply the new secure policy to all public tables
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    -- Drop our own policy in case we are re-running this script
+    EXECUTE format('DROP POLICY IF EXISTS staff_all_access ON public.%I', r.tablename);
+
+    -- Ensure RLS is strictly enabled
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', r.tablename);
+
+    -- Create the new, unified staff-only policy
+    EXECUTE format('CREATE POLICY staff_all_access ON public.%I FOR ALL TO authenticated USING (public.is_staff()) WITH CHECK (public.is_staff())', r.tablename);
+  END LOOP;
+END $$;
+
+-- 4. Specific RLS Exceptions for Public Workflows
+
+-- EXCEPTION A: The Landing Page needs to be able to INSERT form submissions anonymously or as authenticated students.
+DROP POLICY IF EXISTS public_insert_forms ON public.form_submissions;
+CREATE POLICY public_insert_forms ON public.form_submissions
+  FOR INSERT 
+  TO anon, authenticated
+  WITH CHECK (true);
+
+-- EXCEPTION B: Testimonials are read by the Landing Page, so they need to be public for reading.
+DROP POLICY IF EXISTS public_read_testimonials ON public.testimonials;
+CREATE POLICY public_read_testimonials ON public.testimonials
+  FOR SELECT 
+  TO anon, authenticated
+  USING (true);
+
+-- 5. Re-grant general API access
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+-- Migration: 000008_public_read_forms
+-- Description: Allows anyone (anonymous or authenticated) to read the form schemas.
+
+-- 1. Explicitly allow public reading of form schemas
+DROP POLICY IF EXISTS public_read_forms ON public.forms;
+CREATE POLICY public_read_forms ON public.forms
+  FOR SELECT 
+  TO anon, authenticated
+  USING (true);
+
+-- 2. Also ensure cycles (for calendar) are readable by public
+DROP POLICY IF EXISTS public_read_cycles ON public.cycles;
+CREATE POLICY public_read_cycles ON public.cycles
+  FOR SELECT 
+  TO anon, authenticated
+  USING (true);
+
+-- 3. Ensure enrollments and profiles remain strictly protected (already covered by 000007 staff_all_access)
