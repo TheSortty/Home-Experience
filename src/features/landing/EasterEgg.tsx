@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 
 interface EasterEggProps {
   isVisible: boolean;
@@ -21,7 +22,8 @@ const EasterEgg: React.FC<EasterEggProps> = ({ isVisible, onClose }) => {
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-800 transition-colors"
+          aria-label="Cerrar easter egg"
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-800 transition-colors z-10"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -34,12 +36,11 @@ const EasterEgg: React.FC<EasterEggProps> = ({ isVisible, onClose }) => {
           Nos alegra verte de nuevo por aquí. Sabemos que el camino no termina, solo se transforma. Esperamos que estos recuerdos te dibujen una sonrisa.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <img src="https://picsum.photos/400/400?random=1" alt="Nostalgic moment 1" className="rounded-lg shadow-md" />
-            <img src="https://picsum.photos/400/400?random=2" alt="Nostalgic moment 2" className="rounded-lg shadow-md" />
-            <img src="https://picsum.photos/400/400?random=3" alt="Nostalgic moment 3" className="rounded-lg shadow-md" />
-            <img src="https://picsum.photos/400/400?random=4" alt="Nostalgic moment 4" className="rounded-lg shadow-md" />
-            <img src="https://picsum.photos/400/400?random=5" alt="Nostalgic moment 5" className="rounded-lg shadow-md" />
-            <img src="https://picsum.photos/400/400?random=6" alt="Nostalgic moment 6" className="rounded-lg shadow-md" />
+            {[1,2,3,4,5,6].map(num => (
+                <div key={num} className="relative aspect-square">
+                    <Image src={`https://picsum.photos/400/400?random=${num}`} alt={`Nostalgic moment ${num}`} fill sizes="(max-width: 768px) 50vw, 33vw" unoptimized className="object-cover rounded-lg shadow-md" />
+                </div>
+            ))}
         </div>
         <p className="mt-6 text-sm text-slate-500 italic">
           "Lo que la oruga llama el fin del mundo, el maestro lo llama mariposa."

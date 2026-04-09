@@ -56,6 +56,7 @@ const FeatureVideo: React.FC<{ src: string; altText: string }> = ({ src, altText
       loop
       muted
       playsInline
+      preload="none"
       className="w-full h-full object-cover"
       aria-label={altText}
     >

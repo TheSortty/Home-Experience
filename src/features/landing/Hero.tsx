@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import ArrowRightIcon from '../../ui/icons/ArrowRightIcon';
 
@@ -10,9 +12,9 @@ const Hero: React.FC<HeroProps> = React.memo(({ onRegisterClick }) => {
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20 bg-white">
 
       <div className="container mx-auto px-6 relative z-10 text-center w-full flex flex-col items-center">
-        <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold tracking-tight text-slate-900 mb-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+        <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-bold tracking-tight text-slate-900 mb-6">
           EXPERIENCIA <br />
-          <span className="text-celeste-strong">HOME</span>
+          <span className="text-celeste-strong font-sans">HOME</span>
         </h1>
 
         <p className="text-xl md:text-2xl text-slate-600 max-w-3xl mx-auto mb-12 leading-relaxed animate-fade-in-up font-light" style={{ animationDelay: '0.2s' }}>

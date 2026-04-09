@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import './Login.css';
-import { IoClose, IoEyeOutline, IoEyeOffOutline } from 'react-icons/io5';
+import { IoClose, IoEyeOutline, IoEyeOffOutline, IoMailOutline, IoLockClosedOutline } from 'react-icons/io5';
 import { FcGoogle } from 'react-icons/fc';
 import { supabase } from '../../services/supabaseClient';
 import toast from 'react-hot-toast';
@@ -55,8 +55,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // Dinámicamente usa el localhost o el dominio de producción
-          redirectTo: `${window.location.origin}/admin/dashboard`,
+          // Next.js callback route: exchanges the OAuth code for a session cookie
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
@@ -78,7 +78,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
     setError('');
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/admin/dashboard`
+        // /auth/callback will exchange the recovery code, then redirect to dashboard
+        redirectTo: `${window.location.origin}/auth/callback?next=/admin/dashboard`
       });
       if (error) {
         setError('Error al enviar el correo de recuperación.');
@@ -94,14 +95,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
   };
 
   return (
-    <div className="login-page relative z-[100] bg-slate-50">
-      <div className="logo-link">
-        <div className="text-3xl font-black tracking-tighter text-[#00A9CE]">HOME<span className="text-[#00A9CE]">.</span></div>
-      </div>
+    <div className="relative w-full z-10 flex flex-col items-center">
+      <div className="absolute -top-16 text-3xl font-black tracking-tighter text-[#00A9CE] mb-4">HOME<span className="text-slate-900">.</span></div>
 
       <button
         onClick={onBack}
-        className="absolute top-8 left-8 text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2 z-[100] group"
+        className="absolute -top-16 -left-4 md:-left-12 text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2 group"
       >
         <span className="w-6 h-6 transition-transform group-hover:-translate-x-1 flex items-center justify-center">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -111,9 +110,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
         <span className="font-bold uppercase tracking-widest text-xs">Volver</span>
       </button>
 
-      <div className="section">
-        <div className="container">
-          <div className="row full-height justify-content-center flex">
+      <div className="w-full">
+        <div className="w-full">
+          <div className="w-full flex justify-center">
             <div className="col-12 text-center align-self-center py-5">
               <div className="section pb-5 pt-5 pt-sm-2 text-center">
                 <div className="card-3d-wrap mx-auto" style={{ height: '550px' }}>
@@ -144,7 +143,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
                                 autoComplete="email"
                                 required
                               />
-                              <i className="input-icon uil uil-at"></i>
+                              <div className="input-icon"><IoMailOutline size={20} /></div>
                             </div>
 
                             {!isForgotView && (
@@ -161,7 +160,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
                                     autoComplete="current-password"
                                     required
                                   />
-                                  <i className="input-icon uil uil-lock-alt"></i>
+                                  <div className="input-icon"><IoLockClosedOutline size={20} /></div>
                                   <button 
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}

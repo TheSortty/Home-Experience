@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import SparkleIcon from '../../ui/icons/SparkleIcon';
 
@@ -73,7 +74,7 @@ const Coaching: React.FC = React.memo(() => {
                         </div>
                     </div>
                     <div className="order-1 md:order-2 relative aspect-square rounded-3xl overflow-hidden shadow-2xl">
-                        <img src="/images/coaching/individual.jpg" alt="Coaching Individual" className="w-full h-full object-cover" loading="lazy" />
+                        <Image src="/images/coaching/individual.jpg" alt="Coaching Individual" fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" />
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
                     </div>
                 </div>
@@ -82,7 +83,7 @@ const Coaching: React.FC = React.memo(() => {
                 <div className="mb-32">
                     <div className="grid md:grid-cols-2 gap-16 items-center mb-16">
                         <div className="relative aspect-video rounded-3xl overflow-hidden shadow-2xl">
-                            <img src="/images/coaching/organizacional.jpg" alt="Coaching Organizacional" className="w-full h-full object-cover" loading="lazy" />
+                            <Image src="/images/coaching/organizacional.jpg" alt="Coaching Organizacional" fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" />
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 to-transparent"></div>
                         </div>
                         <div>
@@ -129,17 +130,21 @@ const Coaching: React.FC = React.memo(() => {
                                         <div className="grid md:grid-cols-2 gap-6 pt-4">
                                             <div className="p-6 bg-white/60 backdrop-blur-md rounded-2xl border border-white/60 shadow-sm flex flex-col justify-between hover:bg-white/80 transition-colors">
                                                 <p className="text-xs uppercase tracking-widest text-slate-500 mb-4 font-bold">Avalado por</p>
-                                                <img 
+                                                <Image 
                                                     src="/Logo-Camara-Argentina.png" 
                                                     alt="Cámara Argentina para la Formación Profesional y la Capacitación Laboral" 
+                                                    width={300}
+                                                    height={100}
                                                     className="w-full h-auto object-contain max-h-24 mix-blend-multiply opacity-90 transition-transform duration-300 group-hover:scale-105"
                                                 />
                                             </div>
                                             <div className="p-6 bg-white/60 backdrop-blur-md rounded-2xl border border-white/60 shadow-sm flex flex-col justify-between hover:bg-white/80 transition-colors">
                                                 <p className="text-xs uppercase tracking-widest text-slate-500 mb-4 font-bold">Aval Internacional</p>
-                                                <img 
+                                                <Image 
                                                     src="/OIEP.png" 
                                                     alt="OIEP (Organización Internacional para la Educación Permanente)" 
+                                                    width={300}
+                                                    height={100}
                                                     className="w-full h-auto object-contain max-h-24 mix-blend-multiply opacity-90 transition-transform duration-300 group-hover:scale-105"
                                                 />
                                             </div>
@@ -149,9 +154,11 @@ const Coaching: React.FC = React.memo(() => {
                                 <div className="lg:w-1/3 flex justify-center">
                                     <div className="relative group">
                                         <div className="absolute -inset-4 bg-white/20 rounded-full blur-2xl group-hover:bg-white/30 transition-all"></div>
-                                        <img
+                                        <Image
                                             src="/logo-circle.png"
                                             alt="HOME Logo"
+                                            width={256}
+                                            height={256}
                                             className="relative w-48 h-48 md:w-64 md:h-64 transition-transform group-hover:scale-105"
                                         />
                                     </div>

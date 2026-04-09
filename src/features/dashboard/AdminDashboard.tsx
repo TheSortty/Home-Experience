@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import LogoutIcon from '../../ui/icons/LogoutIcon';
 import ChartIcon from '../../ui/icons/ChartIcon';

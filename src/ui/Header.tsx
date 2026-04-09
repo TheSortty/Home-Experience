@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import UserIcon from './icons/UserIcon';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -57,7 +58,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onStartClick }) => {
     >
       <div className="container mx-auto px-6 flex justify-between items-center">
         <a href="#home" className="flex items-center gap-3 group" onClick={handleSmoothScroll} data-interactive="true">
-          <img src="/logo-circle.png" alt="Home Experience" className="w-10 h-10 group-hover:scale-105 transition-transform" />
+          <Image src="/logo-circle.png" alt="Home Experience" width={40} height={40} priority className="w-10 h-10 group-hover:scale-105 transition-transform" />
           <span className="text-xl font-bold tracking-widest text-slate-900">
             HOME<span className="text-blue-600">.</span>
           </span>
@@ -100,6 +101,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onStartClick }) => {
         <div className="lg:hidden flex items-center">
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label={isMenuOpen ? "Cerrar menú de navegación" : "Abrir menú de navegación"}
             className="text-slate-900 focus:outline-none"
             data-interactive="true"
           >

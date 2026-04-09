@@ -476,10 +476,10 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                         if (key === 'underTreatmentDetails') val = medData.treatment_details;
                                                         if (key === 'medication') val = medData.medication;
                                                         if (key === 'allergies') val = medData.allergies;
-                                                        if (key === 'emergencyContact') val = medData.emergency_contact_name ? `${medData.emergency_contact_name} - ${medData.emergency_contact_phone || ''}` : null;
+                                                        if (key === 'emergencyContact') val = medData.emergency_contact_name ? `${medData.emergency_contact_name} - ${medData.emergency_contact_phone || ''}` : '';
                                                     } else {
                                                         // Fallback to formData
-                                                        if (key === 'emergencyContact') val = formData.emergencyName ? `${formData.emergencyName} - ${formData.emergencyPhone || ''}` : null;
+                                                        if (key === 'emergencyContact') val = formData.emergencyName ? `${formData.emergencyName} - ${formData.emergencyPhone || ''}` : '';
                                                     }
                                                 }
 

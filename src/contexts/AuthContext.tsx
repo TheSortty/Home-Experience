@@ -59,11 +59,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     useEffect(() => {
-        // Use onAuthStateChange as the SOLE source of truth.
-        // getSession() can resolve before the Supabase client has fully
-        // initialized its internal auth headers for API calls, causing
-        // RLS-protected queries to silently return empty results.
+        let mounted = true;
+
+        const initializeAuth = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!mounted) return;
+            
+            setSession(session);
+            setUser(session?.user ?? null);
+            
+            if (session?.user) {
+                await fetchRole(session.user.id);
+            } else {
+                setRole(null);
+            }
+            setIsLoading(false);
+        };
+
+        initializeAuth();
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (!mounted) return;
+            
             setSession(session);
             setUser(session?.user ?? null);
             
@@ -80,7 +97,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            mounted = false;
+            subscription.unsubscribe();
+        };
     }, []);
 
     return (

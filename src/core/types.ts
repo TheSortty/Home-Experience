@@ -20,12 +20,13 @@ export interface Testimonial {
   program?: string; // e.g. 'CRESER'
   camada?: string; // '27', '32'
   plName?: string; // 'Nombre de tu PL'
+  pl?: number;
   camadaName?: string; // 'Nombre de tu camada'
   hasMultiplePL?: boolean;
   enrolledBy?: string; // 'Quien te enrollo'
   rating: number; // Supports 4.5 etc.
   photoUrl?: string;
   videoUrl?: string;
-  status: TestimonialStatus;
-  createdAt: string;
+  status?: TestimonialStatus;
+  createdAt?: string;
 }

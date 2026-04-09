@@ -129,11 +129,12 @@ const VideoCarousel: React.FC = () => {
           >
             <div className="rounded-3xl overflow-hidden shadow-2xl aspect-[16/9] relative group bg-transparent">
               <video
-                ref={el => (videoRefs.current[index] = el)}
+                ref={(el) => { videoRefs.current[index] = el; }}
                 src={video.src}
                 loop
                 muted
                 playsInline
+                preload="none"
                 className="w-full h-full object-cover outline-none border-none bg-transparent"
               />
               <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>

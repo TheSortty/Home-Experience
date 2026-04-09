@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import toast from 'react-hot-toast';
-import { IoEyeOutline, IoEyeOffOutline } from 'react-icons/io5';
+import { IoEyeOutline, IoEyeOffOutline, IoLockClosedOutline } from 'react-icons/io5';
 import './Login.css'; // Reuse Login styles
 
 interface UpdatePasswordProps {
@@ -80,7 +80,7 @@ export const UpdatePassword: React.FC<UpdatePasswordProps> = ({ onSuccess }) => 
                                 }}
                                 required
                               />
-                              <i className="input-icon uil uil-lock-alt"></i>
+                              <div className="input-icon"><IoLockClosedOutline size={20} /></div>
                               <button 
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
@@ -110,7 +110,7 @@ export const UpdatePassword: React.FC<UpdatePasswordProps> = ({ onSuccess }) => 
                                 }}
                                 required
                               />
-                              <i className="input-icon uil uil-lock-alt"></i>
+                              <div className="input-icon"><IoLockClosedOutline size={20} /></div>
                               <button 
                                 type="button"
                                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}

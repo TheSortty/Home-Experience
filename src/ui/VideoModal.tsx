@@ -20,6 +20,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, videoSrc }) =>
             >
                 <button
                     onClick={onClose}
+                    aria-label="Cerrar modal"
                     className="absolute top-4 right-4 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/70 backdrop-blur-sm transition-all"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -32,7 +33,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, videoSrc }) =>
                         src={`https://www.youtube.com/embed/${videoSrc.split('v=')[1]?.split('&')[0] || videoSrc.split('/').pop()}?autoplay=1&rel=0`}
                         className="w-full h-full"
                         title="YouTube video player"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allow="autoplay"
                         allowFullScreen
                     ></iframe>
                 ) : (

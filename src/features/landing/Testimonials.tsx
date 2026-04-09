@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { supabase } from '../../services/supabaseClient';
 import { Testimonial } from '../../core/types';
 import StarIcon from '../../ui/icons/StarIcon';
@@ -7,7 +8,7 @@ import { FcGoogle } from 'react-icons/fc';
 
 interface TestimonialsProps {
   onTestimonialClick: (testimonial: Testimonial) => void;
-  onAddTestimonialClick: () => void;
+  onAddTestimonialClick?: () => void;
   onViewAllClick: () => void;
 }
 
@@ -103,7 +104,7 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
             >
               <div className="flex items-start gap-4 mb-3">
                 {t.photoUrl ? (
-                  <img src={t.photoUrl} alt={t.author} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                  <Image src={t.photoUrl} alt={t.author} width={40} height={40} className="w-10 h-10 rounded-full object-cover shrink-0" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white uppercase text-lg shrink-0">
                     {t.author.charAt(0)}

@@ -7,8 +7,8 @@ interface CustomCursorProps {
 const CustomCursor: React.FC<CustomCursorProps> = ({ isAdmin = false }) => {
   const cursorDotRef = useRef<HTMLDivElement>(null);
   const cursorOutlineRef = useRef<HTMLDivElement>(null);
-  const requestRef = useRef<number>();
-  const previousTimeRef = useRef<number>();
+  const requestRef = useRef<number | undefined>(undefined);
+  const previousTimeRef = useRef<number | undefined>(undefined);
   
   const [mousePosition, setMousePosition] = useState({ x: -100, y: -100 });
   const [outlinePosition, setOutlinePosition] = useState({ x: -100, y: -100 });

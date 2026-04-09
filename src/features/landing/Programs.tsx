@@ -1,4 +1,7 @@
+'use client';
+
 import React from 'react';
+import Image from 'next/image';
 import SparkleIcon from '../../ui/icons/SparkleIcon';
 
 const programs = [
@@ -71,7 +74,7 @@ const Programs: React.FC<ProgramsProps> = React.memo(({ onLearnMore }) => {
                     {programs.map((program) => (
                         <div key={program.id} className="bg-white rounded-[2.5rem] overflow-hidden shadow-xl shadow-slate-200/50 flex flex-col h-full group hover:-translate-y-2 transition-transform duration-500">
                             <div className="h-64 relative overflow-hidden">
-                                <img src={program.image} alt={program.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy" />
+                                <Image src={program.image} alt={program.name} fill sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" className="object-cover group-hover:scale-110 transition-transform duration-700" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                                 <div className="absolute bottom-6 left-8 right-8">
                                     <h3 className="text-2xl font-bold text-white mb-1">{program.name}</h3>
