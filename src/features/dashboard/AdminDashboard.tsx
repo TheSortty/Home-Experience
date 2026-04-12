@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import LogoutIcon from '../../ui/icons/LogoutIcon';
 import ChartIcon from '../../ui/icons/ChartIcon';
 import UsersIcon from '../../ui/icons/UsersIcon';
@@ -8,7 +8,6 @@ import CalendarIcon from '../../ui/icons/CalendarIcon';
 import SettingsIcon from '../../ui/icons/SettingsIcon';
 import DocumentIcon from '../../ui/icons/DocumentIcon';
 import MailIcon from '../../ui/icons/MailIcon';
-import toast from 'react-hot-toast';
 import { supabase } from '../../services/supabaseClient';
 import AdminCalendar from './admin/AdminCalendar';
 import AdminStudents from './admin/AdminStudents';
@@ -27,164 +26,324 @@ interface AdminDashboardProps {
 
 type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'communications' | 'forms' | 'settings' | 'logs';
 
+interface DashboardStats {
+  pendingAdmissions: number;
+  pendingPayments: number;
+  activeStudents: number;
+  activeCycles: number;
+  graduationRateInitial: string;
+  graduationRateAdvanced: string;
+  graduationRatePL: string;
+}
+
+interface UpcomingSession {
+  cycleId: string;
+  cycleName: string;
+  cycleType: string;
+  sessionDate: string;
+  enrolledCount: number;
+}
+
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTest }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [globalSearch, setGlobalSearch] = useState('');
   const { role, user, isLoading: isLoadingAuth } = useAuth();
   const userEmail = user?.email || '';
 
-  // Real Data State
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     pendingAdmissions: 0,
+    pendingPayments: 0,
     activeStudents: 0,
     activeCycles: 0,
     graduationRateInitial: '0%',
     graduationRateAdvanced: '0%',
-    graduationRatePL: '0%'
+    graduationRatePL: '0%',
   });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
 
-  useEffect(() => {
-    // Esperamos a que 'role' esté seteado para garantizar que la sesión (y el token) está 100% activa en Supabase
-    if (role && user && activeTab === 'overview') {
-      fetchDashboardData();
+  // ─── Data Fetching ──────────────────────────────────────────────────────────
 
-      // Suscribirse a cambios en la base de datos para mantener el resumen actualizado en tiempo real
-      const channel = supabase.channel('dashboard_overview_changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, () => {
-          fetchDashboardData();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => {
-          fetchDashboardData();
-        })
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [role, user, activeTab]);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
+    if (!role || !user) return;
+    setIsLoadingDashboard(true);
     try {
-      // 1. Fetch Pending Admissions Count (from form_submissions)
-      const { count: pendingCount, error: countError } = await supabase
-        .from('form_submissions')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
+      const [
+        { count: pendingReviewCount },
+        { count: pendingPaymentCount },
+        { count: activeStudentsCount },
+        { data: activeCyclesData },
+        { data: sessionsData },
+        { data: recentRegs },
+        { data: enrollmentsData },
+      ] = await Promise.all([
+        supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('is_deleted', false),
+        supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('is_deleted', false),
+        supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('cycles').select('id, name, type, enrolled_count, start_date').eq('status', 'active').eq('is_deleted', false).order('start_date', { ascending: true }),
+        supabase.from('cycle_sessions')
+          .select('session_date, cycle_id, cycle:cycles(name, type, enrolled_count)')
+          .gte('session_date', new Date().toISOString().split('T')[0])
+          .lte('session_date', new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+          .order('session_date', { ascending: true })
+          .limit(5),
+        supabase.from('form_submissions').select('id, data, created_at, status').order('created_at', { ascending: false }).limit(6),
+        supabase.from('enrollments').select('status, cycle:cycles(type)'),
+      ]);
 
-      if (countError) throw countError;
+      // Graduation rates
+      const calculateRate = (type: string) => {
+        const relevant = (enrollmentsData || []).filter((e: any) => e.cycle?.type === type);
+        if (relevant.length === 0) return 'N/A';
+        const graduated = relevant.filter((e: any) => ['completed', 'graduated'].includes(e.status)).length;
+        return Math.round((graduated / relevant.length) * 100) + '%';
+      };
 
-      // 2. Fetch Recent Activity (Latest Registrations)
-      const { data: recentRegs, error: recentError } = await supabase
-        .from('form_submissions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
+      setStats({
+        pendingAdmissions: pendingReviewCount || 0,
+        pendingPayments: pendingPaymentCount || 0,
+        activeStudents: activeStudentsCount || 0,
+        activeCycles: activeCyclesData?.length || 0,
+        graduationRateInitial: calculateRate('initial'),
+        graduationRateAdvanced: calculateRate('advanced'),
+        graduationRatePL: calculateRate('plan_lider'),
+      });
 
-      if (recentError) throw recentError;
+      setUpcomingSessions((sessionsData || []).map((s: any) => ({
+        cycleId: s.cycle_id,
+        cycleName: s.cycle?.name || 'Desconocido',
+        cycleType: s.cycle?.type || 'initial',
+        sessionDate: s.session_date,
+        enrolledCount: s.cycle?.enrolled_count || 0,
+      })));
 
-      // 3. Fetch Metrics for Graduation Rate
-      const { data: enrollmentsData, error: enrollError } = await supabase
-        .from('enrollments')
-        .select(`
-          status,
-          cycle:cycles ( type )
-        `);
-
-      if (enrollError) throw enrollError;
-
-      let rates = { initial: '0%', advanced: '0%', pl: '0%' };
-
-      if (enrollmentsData) {
-        const calculateRate = (type: string) => {
-          const relevant = enrollmentsData.filter((e: any) => e.cycle?.type === type);
-          const total = relevant.length;
-          if (total === 0) return '0%';
-          const graduated = relevant.filter((e: any) => e.status === 'completed' || e.status === 'graduated').length;
-          return Math.round((graduated / total) * 100) + '%';
-        };
-
-        rates.initial = calculateRate('initial');
-        rates.advanced = calculateRate('advanced');
-        rates.pl = calculateRate('plan_lider');
-      }
-
-      setStats(prev => ({
-        ...prev,
-        pendingAdmissions: pendingCount || 0,
-        graduationRateInitial: rates.initial,
-        graduationRateAdvanced: rates.advanced,
-        graduationRatePL: rates.pl
-      }));
-
-      if (recentRegs) {
-        setRecentActivity(recentRegs.map(r => ({
-          id: r.id,
-          text: `Nueva solicitud: ${r.data.firstName} ${r.data.lastName}`,
-          date: new Date(r.created_at).toLocaleDateString(),
-          type: 'registration'
-        })));
-      }
+      setRecentActivity((recentRegs || []).map((r: any) => ({
+        id: r.id,
+        name: `${r.data?.firstName || ''} ${r.data?.lastName || ''}`.trim() || 'Sin nombre',
+        date: new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+        status: r.status,
+      })));
 
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
-      toast.error('Error al cargar datos del dashboard');
+    } finally {
+      setIsLoadingDashboard(false);
     }
+  }, [role, user]);
+
+  // Fix hydration: canal Realtime con nombre único (evita duplicados al cambiar de tab y volver)
+  useEffect(() => {
+    if (role && user && activeTab === 'overview') {
+      fetchDashboardData();
+
+      const channelName = `dashboard_overview_${Date.now()}`;
+      const channel = supabase.channel(channelName)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, fetchDashboardData)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchDashboardData)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, fetchDashboardData)
+        .subscribe();
+
+      return () => { supabase.removeChannel(channel); };
+    }
+  }, [role, user, activeTab, fetchDashboardData]);
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
+  const getStatusLabel = (status: string) => {
+    const map: Record<string, { label: string; cls: string }> = {
+      pending: { label: 'Pendiente', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+      approved: { label: 'Esp. Pago', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+      enrolled: { label: 'Confirmado', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+      rejected: { label: 'Rechazado', cls: 'bg-red-50 text-red-700 border-red-200' },
+    };
+    return map[status] || { label: status, cls: 'bg-slate-50 text-slate-600 border-slate-200' };
   };
+
+  const getCycleTypeInfo = (type: string) => {
+    const map: Record<string, { label: string; color: string }> = {
+      initial: { label: 'Inicial', color: 'bg-blue-500' },
+      advanced: { label: 'Avanzado', color: 'bg-purple-500' },
+      plan_lider: { label: 'P. Líder', color: 'bg-indigo-600' },
+      workshop: { label: 'Taller', color: 'bg-orange-500' },
+      coaching: { label: 'Coaching', color: 'bg-green-500' },
+    };
+    return map[type] || { label: type, color: 'bg-slate-500' };
+  };
+
+  const formatSessionDate = (dateStr: string) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const diff = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      label: diff === 0 ? 'HOY' : diff === 1 ? 'MAÑANA' : `EN ${diff} DÍAS`,
+      dateFormatted: d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }),
+      isUrgent: diff <= 1,
+    };
+  };
+
+  // ─── Render Overview ─────────────────────────────────────────────────────────
 
   const renderOverview = () => (
     <div className="space-y-8 animate-fade-in-up">
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Solicitudes Pendientes', value: stats.pendingAdmissions, icon: DocumentIcon, color: 'amber' },
-          { label: 'Tasa Grad. Inicial', value: stats.graduationRateInitial, icon: ChartIcon, color: 'blue' },
-          { label: 'Tasa Grad. Avanzado', value: stats.graduationRateAdvanced, icon: ChartIcon, color: 'purple' },
-          { label: 'Tasa Grad. PL', value: stats.graduationRatePL, icon: ChartIcon, color: 'emerald' }
+          {
+            label: 'Solicitudes Pendientes',
+            value: stats.pendingAdmissions,
+            sub: stats.pendingPayments > 0 ? `+${stats.pendingPayments} esperando pago` : 'Sin pendientes',
+            icon: DocumentIcon, colorCls: 'text-amber-600', bgCls: 'bg-amber-50',
+            urgent: stats.pendingAdmissions > 0,
+            onClick: () => setActiveTab('admissions'),
+          },
+          {
+            label: 'Alumnos Activos',
+            value: stats.activeStudents,
+            sub: `En ${stats.activeCycles} ciclo${stats.activeCycles !== 1 ? 's' : ''} activo${stats.activeCycles !== 1 ? 's' : ''}`,
+            icon: UsersIcon, colorCls: 'text-blue-600', bgCls: 'bg-blue-50',
+            urgent: false, onClick: () => setActiveTab('students'),
+          },
+          {
+            label: 'Ciclos en Cursada',
+            value: stats.activeCycles,
+            sub: 'Activos ahora mismo',
+            icon: CalendarIcon, colorCls: 'text-emerald-600', bgCls: 'bg-emerald-50',
+            urgent: false, onClick: () => setActiveTab('calendar'),
+          },
+          {
+            label: 'Grad. Inicial / Avanzado',
+            value: `${stats.graduationRateInitial} / ${stats.graduationRateAdvanced}`,
+            sub: `Plan Líder: ${stats.graduationRatePL}`,
+            icon: ChartIcon, colorCls: 'text-indigo-600', bgCls: 'bg-indigo-50',
+            urgent: false, onClick: undefined,
+          },
         ].map((stat, idx) => (
-          <div key={idx} className="formal-card p-6 hover:shadow-md transition-shadow">
-            <div className={`h-12 w-12 bg-${stat.color}-50 rounded-sm flex items-center justify-center text-${stat.color}-600 mb-4`}>
-              <stat.icon className="w-6 h-6" />
+          <div
+            key={idx}
+            onClick={stat.onClick}
+            className={`formal-card p-5 flex flex-col gap-3 transition-all
+              ${stat.onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''}
+              ${stat.urgent ? 'border-l-4 border-l-amber-400' : ''}
+            `}
+          >
+            <div className="flex items-center justify-between">
+              <div className={`w-10 h-10 ${stat.bgCls} rounded-sm flex items-center justify-center ${stat.colorCls}`}>
+                <stat.icon className="w-5 h-5" />
+              </div>
+              {stat.urgent && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />}
             </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{stat.value}</p>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{stat.label}</p>
+            <div>
+              <p className="text-3xl font-bold text-slate-900 leading-none">{stat.value}</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">{stat.label}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">{stat.sub}</p>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Recent Activity */}
-      <div className="formal-card p-8">
-        <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-          <span className="w-1.5 h-6 bg-blue-600"></span>
-          Actividad Reciente
-        </h3>
-        <div className="space-y-0 divide-y divide-slate-100">
-          {recentActivity.length === 0 ? (
-            <p className="text-slate-400 italic py-4">No hay actividad reciente.</p>
-          ) : (
-            recentActivity.map((activity, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-4 py-4 hover:bg-slate-50 transition-colors cursor-pointer px-2"
-                onClick={() => {
-                  if (activity.type === 'registration') {
-                    setActiveTab('admissions');
-                  }
-                }}
-              >
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                <div className="flex-1">
-                  <p className="text-slate-800 font-medium text-sm">{activity.text}</p>
-                  <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-tight">{activity.date}</p>
-                </div>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Actividad Reciente — 3/5 */}
+        <div className="lg:col-span-3 formal-card p-6 flex flex-col">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span className="w-1 h-5 bg-blue-600 rounded-full" />
+              Solicitudes Recientes
+            </h3>
+            <button onClick={() => setActiveTab('admissions')} className="text-[10px] font-bold text-blue-600 uppercase tracking-wider hover:text-blue-800 transition-colors">
+              Ver todas →
+            </button>
+          </div>
+          <div className="flex-1 divide-y divide-slate-50">
+            {isLoadingDashboard ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="w-6 h-6 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
               </div>
-            ))
-          )}
+            ) : recentActivity.length === 0 ? (
+              <p className="text-slate-400 italic py-8 text-center text-sm">No hay actividad reciente.</p>
+            ) : (
+              recentActivity.map((activity, idx) => {
+                const { label: statusLabel, cls: statusCls } = getStatusLabel(activity.status);
+                return (
+                  <div key={idx} className="flex items-center gap-3 py-3.5 hover:bg-slate-50 transition-colors cursor-pointer px-2 rounded-sm" onClick={() => setActiveTab('admissions')}>
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs flex-shrink-0">
+                      {activity.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{activity.name}</p>
+                      <p className="text-[10px] text-slate-400 font-medium">{activity.date}</p>
+                    </div>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-sm border uppercase tracking-wider flex-shrink-0 ${statusCls}`}>
+                      {statusLabel}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Próximas Sesiones — 2/5 */}
+        <div className="lg:col-span-2 formal-card p-6 flex flex-col">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span className="w-1 h-5 bg-emerald-500 rounded-full" />
+              Próximas Sesiones
+            </h3>
+            <button onClick={() => setActiveTab('calendar')} className="text-[10px] font-bold text-blue-600 uppercase tracking-wider hover:text-blue-800 transition-colors">
+              Calendario →
+            </button>
+          </div>
+          <div className="flex-1 space-y-3">
+            {isLoadingDashboard ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="w-6 h-6 border-2 border-slate-200 border-t-emerald-500 rounded-full animate-spin" />
+              </div>
+            ) : upcomingSessions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <CalendarIcon className="w-8 h-8 text-slate-200 mb-3" />
+                <p className="text-sm text-slate-400 font-medium">Sin sesiones en los próximos 6 días.</p>
+                {stats.activeCycles > 0 && (
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Hay {stats.activeCycles} ciclo{stats.activeCycles !== 1 ? 's' : ''} activo{stats.activeCycles !== 1 ? 's' : ''} sin sesiones agendadas.
+                  </p>
+                )}
+              </div>
+            ) : (
+              upcomingSessions.map((session, idx) => {
+                const { label, dateFormatted, isUrgent } = formatSessionDate(session.sessionDate);
+                const typeInfo = getCycleTypeInfo(session.cycleType);
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setActiveTab('calendar')}
+                    className={`p-3 rounded-sm border cursor-pointer hover:shadow-sm transition-all ${isUrgent ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100 hover:border-blue-200'}`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${typeInfo.color}`} />
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{typeInfo.label}</span>
+                      </div>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-sm uppercase tracking-widest ${isUrgent ? 'bg-amber-400 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        {label}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-800 truncate">{session.cycleName}</p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-[10px] text-slate-400">{dateFormatted}</p>
+                      <p className="text-[10px] font-bold text-slate-500">{session.enrolledCount} alumnos</p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
+
+  // ─── Render Communications ───────────────────────────────────────────────────
 
   const renderCommunications = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in-up">
@@ -192,7 +351,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         <h3 className="text-lg font-bold text-slate-900 mb-6">Plantillas</h3>
         <div className="space-y-2">
           {['Bienvenida Inicial', 'Recordatorio de Pago', 'Instrucciones Pre-Curso', 'Felicitaciones Graduación'].map((template, idx) => (
-            <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-sm hover:border-blue-400 cursor-pointer transition-colors flex items-center justify-between">
+            <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-sm hover:border-blue-400 cursor-pointer transition-colors">
               <span className="text-sm font-medium text-slate-700">{template}</span>
             </div>
           ))}
@@ -211,6 +370,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
       </div>
     </div>
   );
+
+  // ─── Nav Items ───────────────────────────────────────────────────────────────
 
   const isSuper = role === 'sysadmin';
 
@@ -233,8 +394,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     onLogout();
   };
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
+
   return (
     <div className="flex h-screen admin-reboot-container overflow-hidden">
+
       {/* Sidebar */}
       <aside className="formal-sidebar flex flex-col flex-shrink-0 z-20">
         <div className="p-8 border-b border-white/5">
@@ -247,13 +411,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as Tab)}
-              className={`w-[calc(100%-24px)] flex items-center gap-3 px-4 py-2.5 mx-3 rounded-sm text-sm font-medium transition-all group ${activeTab === item.id
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                }`}
+              className={`w-[calc(100%-24px)] flex items-center gap-3 px-4 py-2.5 mx-3 rounded-sm text-sm font-medium transition-all group ${
+                activeTab === item.id
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
             >
               <item.icon className={`w-4 h-4 flex-shrink-0 ${activeTab === item.id ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
               <span className="truncate">{item.label}</span>
+              {/* Badge de solicitudes pendientes en sidebar */}
+              {item.id === 'admissions' && stats.pendingAdmissions > 0 && (
+                <span className="ml-auto bg-amber-400 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
+                  {stats.pendingAdmissions}
+                </span>
+              )}
             </button>
           ))}
 
@@ -261,16 +432,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
             <>
               <div className="px-6 py-4 mt-4 mb-2">
                 <p className="text-[9px] uppercase font-bold text-slate-500 tracking-[0.2em]">Sysadmin Tools</p>
-                <div className="h-px w-full bg-white/5 mt-3"></div>
+                <div className="h-px w-full bg-white/5 mt-3" />
               </div>
               {sysadminItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id as Tab)}
-                  className={`w-[calc(100%-24px)] flex items-center gap-3 px-4 py-2.5 mx-3 rounded-sm text-sm font-medium transition-all group ${activeTab === item.id
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                    }`}
+                  className={`w-[calc(100%-24px)] flex items-center gap-3 px-4 py-2.5 mx-3 rounded-sm text-sm font-medium transition-all group ${
+                    activeTab === item.id
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
+                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                  }`}
                 >
                   <item.icon className={`w-4 h-4 flex-shrink-0 ${activeTab === item.id ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
                   <span className="truncate">{item.label}</span>
@@ -281,19 +453,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         </nav>
 
         <div className="p-6 border-t border-white/5 bg-black/20 space-y-3">
-          <a
-            href="/"
-            className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors"
-          >
+          <a href="/" className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
             <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
             </svg>
             Volver a la Web
           </a>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-red-400 transition-colors"
-          >
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-red-400 transition-colors">
             <LogoutIcon className="w-4 h-4 flex-shrink-0" />
             Cerrar Sesión
           </button>
@@ -317,10 +483,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                 onChange={(e) => setGlobalSearch(e.target.value)}
               />
               {globalSearch && (
-                <button 
-                  onClick={() => setGlobalSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
-                >
+                <button onClick={() => setGlobalSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors">
                   ✕
                 </button>
               )}
@@ -330,10 +493,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-end">
               <span className="text-sm font-bold text-slate-900 leading-none">{userEmail || 'Admin User'}</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase mt-1 ${role === 'sysadmin'
-                  ? 'bg-blue-100 text-blue-600 border border-blue-200'
-                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-                }`}>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase mt-1 ${
+                role === 'sysadmin' ? 'bg-blue-100 text-blue-600 border border-blue-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
+              }`}>
                 {role === 'sysadmin' ? 'Sysadmin' : 'Admin'}
               </span>
             </div>
@@ -343,7 +505,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
           </div>
         </header>
 
-        {/* Scrollable Content Area */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto bg-[#f8fafc] p-10">
           <div className="max-w-7xl mx-auto pb-20">
             <div className="mb-10">
@@ -364,7 +526,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
             ) : (
               <>
                 {(!isSuper && ['forms', 'communications', 'settings'].includes(activeTab)) ? (
-                  <div className="flex-1 flex flex-col items-center justify-center py-20 bg-[#f8fafc]">
+                  <div className="flex-1 flex flex-col items-center justify-center py-20">
                     <div className="text-center p-8 formal-card inline-block max-w-md w-full border-t-4 border-t-red-500">
                       <h2 className="text-xl font-bold text-slate-900 mb-2">Acceso Denegado</h2>
                       <p className="text-sm text-slate-500">No tenés los permisos necesarios para acceder a esta sección.</p>

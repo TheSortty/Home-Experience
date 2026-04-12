@@ -1,69 +1,133 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const IS_PROD = process.env.NODE_ENV === 'production'
+
 /**
- * Next.js middleware:
- * 1. Refreshes the Supabase session on every request (token rotation via cookies).
- * 2. Protects /admin routes — redirects to /auth/login if no active session.
+ * Normalize cookie options for the current environment.
+ * Supabase sets secure:true by default. On HTTP (localhost) the browser
+ * silently drops secure cookies — causing the split-brain between
+ * client (old token) and server (no cookie → RLS fails → empty page).
  */
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
+function cookieOptions(original: Record<string, any> = {}) {
+  return {
+    ...original,
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: IS_PROD, // false on localhost HTTP, true on production HTTPS
+    path: original.path ?? '/',
+  }
+}
+
+/**
+ * updateSession — The canonical @supabase/ssr session refresh pattern.
+ *
+ * Critical contract:
+ *  1. supabaseResponse MUST be built from NextResponse.next({ request }) so
+ *     Next.js can forward original request headers to Server Components.
+ *  2. setAll MUST write cookies to BOTH the mutable request (for downstream
+ *     middleware/server components in the same cycle) AND the response (so the
+ *     browser receives the rotated token).
+ *  3. If we need to redirect, we copy ALL cookies from supabaseResponse to
+ *     the redirect response — otherwise the rotated token is lost.
+ *  4. We NEVER call getSession() here. getUser() does a round-trip to the
+ *     Supabase Auth server, validates the JWT signature, and is the only call
+ *     that can detect a revoked or expired token reliably.
+ */
+export async function updateSession(request: NextRequest): Promise<NextResponse> {
+  // Step 1: Create a base response that preserves Next.js internals.
+  let supabaseResponse = NextResponse.next({ request })
+
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        // a) Patch the request so Server Components in this render cycle read
+        //    the fresh token (not the stale one from the original request).
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+
+        // b) Re-create the response AFTER patching the request so Next.js
+        //    picks up the mutated request headers.
+        supabaseResponse = NextResponse.next({ request })
+
+        // c) Write the fresh cookies with normalized options (secure=false on localhost).
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, cookieOptions(options))
+        )
+      },
+    },
   })
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qvdjpmcprbinvrcczyhp.supabase.co'
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2ZGpwbWNwcmJpbnZyY2N6eWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ3OTExODEsImV4cCI6MjA4MDM2NzE4MX0.vmTXYtXOFtbVHtpOZTN4ZNfBseR63utXat7o6hBRQy4'
-
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          // Write cookies to the request (so downstream reads see them) and
-          // also to the response (so the browser stores the refreshed token).
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  // Refresh session — IMPORTANT: do not remove this call.
-  // It rotates the access token and keeps the session alive.
+  // Step 2: Validate the session against the Auth server.
+  //   - getUser() ALWAYS does a network call — this is intentional.
+  //   - It's the only reliable way to detect expired/revoked sessions.
+  //   - Do NOT replace this with getSession() — it reads from the (possibly
+  //     stale) cookie and skips the Auth server validation.
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
 
-  // Protect /admin routes
-  if (
-    request.nextUrl.pathname.startsWith('/admin') &&
-    !user
-  ) {
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = '/auth/login'
-    return NextResponse.redirect(loginUrl)
+  const isAdminRoute = request.nextUrl.pathname.startsWith('/admin')
+  const isLoginRoute = request.nextUrl.pathname.startsWith('/auth/login')
+
+  // Step 3: Guard /admin — redirect to login if no valid user.
+  if (isAdminRoute && (error || !user)) {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = '/auth/login'
+    // Clear next param to avoid infinite loop if token is permanently invalid.
+    redirectUrl.searchParams.delete('next')
+
+    const redirectResponse = NextResponse.redirect(redirectUrl)
+
+    // CRITICAL: copy all session cookies onto the redirect response.
+    // Without this, the browser loses the Supabase cookie jar on redirect,
+    // causing the next request to have no session at all.
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+    })
+
+    return redirectResponse
   }
 
+  // Step 4: If the user is already logged in and hits /auth/login, bounce them
+  //   straight to the dashboard — eliminates the "Administración → login" bug.
+  if (isLoginRoute && user) {
+    const dashboardUrl = request.nextUrl.clone()
+    dashboardUrl.pathname = '/admin/dashboard'
+
+    const redirectResponse = NextResponse.redirect(dashboardUrl)
+
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+    })
+
+    return redirectResponse
+  }
+
+  // Step 5: Return the response with the (potentially refreshed) session cookies.
   return supabaseResponse
+}
+
+export async function middleware(request: NextRequest) {
+  return updateSession(request)
 }
 
 export const config = {
   matcher: [
     /*
-     * Match all request paths EXCEPT:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico, sitemap.xml, robots.txt
-     * - public folder assets
+     * Match every path EXCEPT:
+     *  - _next/static  → bundled JS/CSS assets
+     *  - _next/image   → Next.js image optimizer
+     *  - favicon.ico, sitemap.xml, robots.txt
+     *  - Static image extensions (svg, png, jpg, jpeg, gif, webp)
+     *
+     * We explicitly match /admin/* and /auth/* to ensure cookie refresh and
+     * route guards run for every navigation within the admin panel.
      */
     '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],

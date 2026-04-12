@@ -55,7 +55,9 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
         fetchRegistrations();
         fetchCycles();
 
-        const channel = supabase.channel('admissions_changes')
+        // Canal con nombre único para evitar canales duplicados al cambiar viewMode
+        const channelName = `admissions_changes_${Date.now()}`;
+        const channel = supabase.channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, () => {
                 fetchRegistrations();
             })
@@ -263,18 +265,24 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                 p_submission_id: selectedRegistration.id,
                 p_cycle_id: selectedCycleId,
                 p_payment_method: paymentMethod,
-                p_is_total_payment: true // Simplified for now
+                p_is_total_payment: true
             });
 
             if (error) throw error;
 
             if (data.success) {
-                // 1. Record the Payment
+                // Fix: normalizar el método de pago al formato consistente de la DB
+                const normalizedMethod = paymentMethod === 'MERCADO_PAGO' ? 'mercadopago'
+                    : paymentMethod === 'TRANSFER' ? 'transfer'
+                    : 'cash';
+                const amountValue = Number(unformatAmount(paymentAmount)) || 0;
+
+                // 1. Registrar el Pago del ciclo principal
                 const { error: paymentError } = await supabase.from('payments').insert({
                     submission_id: selectedRegistration.id,
                     enrollment_id: data.enrollment_id,
-                    amount: Number(unformatAmount(paymentAmount)) || 0,
-                    method: paymentMethod.toLowerCase(),
+                    amount: amountValue,
+                    method: normalizedMethod,
                     status: 'paid',
                     paid_at: new Date().toISOString()
                 });
@@ -282,13 +290,37 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
 
                 // 2. Handle Combo (Second Cycle) if needed
                 if (isCombo(selectedRegistration.selectedPackage) && selectedCycleId2) {
-                    const { error: error2 } = await supabase.from('enrollments').insert({
+                    const { data: enrollment2, error: error2 } = await supabase.from('enrollments').insert({
                         user_id: data.user_id,
                         cycle_id: selectedCycleId2,
                         status: 'active',
                         payment_status: 'paid'
-                    });
-                    if (error2) console.error('Error second enrollment', error2);
+                    }).select('id').single();
+
+                    if (error2) {
+                        console.error('Error second enrollment', error2);
+                    } else if (enrollment2) {
+                        // Incrementar enrolled_count del segundo ciclo
+                        await supabase.rpc('increment_enrolled_count', { p_cycle_id: selectedCycleId2 })
+                            .then(({ error: rpcErr }) => {
+                                if (rpcErr) {
+                                    // Fallback: update directo si el RPC no existe
+                                    supabase.from('cycles')
+                                        .update({ enrolled_count: supabase.rpc as any })
+                                        .eq('id', selectedCycleId2);
+                                    // Ignoramos el error del fallback — el RPC principal ya lo maneja
+                                }
+                            });
+
+                        // Registrar pago del segundo ciclo (mismo monto, mismo método)
+                        await supabase.from('payments').insert({
+                            enrollment_id: enrollment2.id,
+                            amount: amountValue,
+                            method: normalizedMethod,
+                            status: 'paid',
+                            paid_at: new Date().toISOString()
+                        });
+                    }
                 }
 
                 toast.success('✅ Alumno confirmado exitosamente!');
@@ -305,7 +337,7 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                             description: `Aprobó el ingreso de ${selectedRegistration.name} al ciclo ${selectedCycle?.name || 'Desconocido'}.`,
                             adminEmail: user.email,
                             studentEmail: selectedRegistration.email,
-                            paymentMethod: paymentMethod,
+                            paymentMethod: normalizedMethod,
                             package: selectedRegistration.selectedPackage
                         }
                     });

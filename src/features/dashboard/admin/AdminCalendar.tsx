@@ -72,7 +72,9 @@ const AdminCalendar: React.FC = () => {
         fetchCycles(); 
         fetchTrashCount(); 
 
-        const channel = supabase.channel('calendar_changes')
+        // Canal con nombre único para evitar duplicados al cambiar viewMode
+        const channelName = `calendar_changes_${Date.now()}`;
+        const channel = supabase.channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => {
                 fetchCycles();
             })
@@ -264,21 +266,18 @@ const AdminCalendar: React.FC = () => {
 
     // ─── Attendance Toggle ───────────────────────────────────────────────────
 
-    const handleAttendanceToggle = async (enrollmentId: string, sessionId: string, currentStatus: string | undefined) => {
-        const statuses = ['present', 'absent', 'late'];
-        const nextStatus = statuses[((currentStatus ? statuses.indexOf(currentStatus) : -1) + 1) % statuses.length];
-
+    const handleAttendanceToggle = async (enrollmentId: string, sessionId: string, desiredStatus: string) => {
         // Optimistic update
         setEnrolledStudents(prev => prev.map(s =>
             s.enrollmentId === enrollmentId
-                ? { ...s, attendanceMap: { ...s.attendanceMap, [sessionId]: nextStatus } }
+                ? { ...s, attendanceMap: { ...s.attendanceMap, [sessionId]: desiredStatus } }
                 : s
         ));
 
         await supabase.from('attendance').upsert({
             enrollment_id: enrollmentId,
             cycle_session_id: sessionId,
-            status: nextStatus,
+            status: desiredStatus,
             recorded_at: new Date().toISOString()
         }, { onConflict: 'enrollment_id, cycle_session_id' });
     };
@@ -550,7 +549,7 @@ const AdminCalendar: React.FC = () => {
                                                                 {(['present', 'absent', 'late'] as const).map(s => (
                                                                     <button
                                                                         key={s}
-                                                                        onClick={() => handleAttendanceToggle(student.enrollmentId, activeSessionId, status === s ? undefined : (() => { const arr = ['present','absent','late']; return arr[(arr.indexOf(s) - 1 + arr.length) % arr.length]; })())}
+                                                                        onClick={() => handleAttendanceToggle(student.enrollmentId, activeSessionId, s)}
                                                                         className={`px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider transition-all border ${status === s
                                                                             ? s === 'present' ? 'bg-emerald-600 text-white border-emerald-600'
                                                                                 : s === 'absent' ? 'bg-red-600 text-white border-red-600'

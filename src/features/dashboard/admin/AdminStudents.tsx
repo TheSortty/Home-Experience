@@ -22,7 +22,9 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
         fetchStudents(); 
         fetchTrashCount(); 
 
-        const channel = supabase.channel('students_changes')
+        // Canal con nombre único para evitar duplicados al cambiar viewMode
+        const channelName = `students_changes_${Date.now()}`;
+        const channel = supabase.channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
                 fetchStudents();
             })
@@ -57,9 +59,9 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
             .from('profiles')
             .select(`
                 id, first_name, last_name, email, phone, is_deleted,
-                enrollments!inner (
+                enrollments (
                     id, status, payment_status,
-                    cycle:cycles ( id, name, type ),
+                    cycle:cycles ( id, name, type, start_date ),
                     attendance ( id, status ),
                     payments ( amount, method, status, paid_at )
                 )
@@ -91,14 +93,15 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
                 const totalSess = cId ? (sessionsMap[cId] || 0) : 0;
                 const pay = e.payments?.[0];
                 
-                // Dynamic CONFLICT logic
-                const startDate = e.cycle?.start_date || '9999-12-31';
-                const isOverdue = new Date(startDate) < new Date() && e.payment_status !== 'paid';
+                // Fix: CONFLICT solo aplica a enrollments activos que no han pagado.
+                // No marcar como CONFLICT ciclos completados/graduados con pago pendiente histórico.
+                const startDate = e.cycle?.start_date || '9999-12-31'; // Necesario para el sort cronológico
+                const isOverdue = e.status === 'active' && e.payment_status !== 'paid';
                 let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' = 'ACTIVE';
-                
+
                 if (e.status === 'conflict' || isOverdue) {
                     derivedStatus = 'CONFLICT';
-                } else if (e.status === 'graduated') {
+                } else if (e.status === 'graduated' || e.status === 'completed') {
                     derivedStatus = 'GRADUATED';
                 }
 
