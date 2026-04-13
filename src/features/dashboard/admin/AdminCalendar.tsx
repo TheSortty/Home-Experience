@@ -274,13 +274,40 @@ const AdminCalendar: React.FC = () => {
                 : s
         ));
 
+        // Save attendance record
         await supabase.from('attendance').upsert({
             enrollment_id: enrollmentId,
             cycle_session_id: sessionId,
             status: desiredStatus,
             recorded_at: new Date().toISOString()
         }, { onConflict: 'enrollment_id, cycle_session_id' });
+
+        // Linear attendance conflict logic:
+        // For Inicial & Avanzado cycles (is_linear = true), a single absence
+        // triggers enrollment.status = 'conflict'. Reverting to present restores 'active'.
+        // This is handled by the handle_linear_attendance RPC in the database.
+        if (selectedCycle && (selectedCycle.type === 'initial' || selectedCycle.type === 'advanced')) {
+            const { data: rpcResult } = await supabase.rpc('handle_linear_attendance', {
+                p_enrollment_id: enrollmentId,
+                p_session_id: sessionId,
+                p_status: desiredStatus,
+            });
+
+            // If RPC changed conflict status, update local student state for immediate UI feedback
+            if (rpcResult?.action === 'marked_conflict') {
+                setEnrolledStudents(prev => prev.map(s =>
+                    s.enrollmentId === enrollmentId ? { ...s, conflictStatus: 'conflict' } : s
+                ));
+                toast.error('⚠️ Alumno marcado en CONFLICTO por ausencia en ciclo lineal.', { duration: 5000 });
+            } else if (rpcResult?.action === 'restored_active') {
+                setEnrolledStudents(prev => prev.map(s =>
+                    s.enrollmentId === enrollmentId ? { ...s, conflictStatus: 'active' } : s
+                ));
+                toast.success('✅ Enrollment restaurado a activo.', { duration: 3000 });
+            }
+        }
     };
+
 
     // ─── Open Student Detail (shared modal) ──────────────────────────────────
 

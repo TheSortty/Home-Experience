@@ -73,12 +73,36 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     const [activeProgramId, setActiveProgramId] = useState<string | null>(null);
     const [studentGoals, setStudentGoals] = useState<Goal[]>([]);
     const [isLoadingGoals, setIsLoadingGoals] = useState(false);
-    
+
     // Program Notes State
     const [programNotes, setProgramNotes] = useState<{ id: string, content: string, created_at: string }[]>([]);
     const [newNoteContent, setNewNoteContent] = useState('');
     const [isSavingNote, setIsSavingNote] = useState(false);
     const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+
+    // ── Carta de Enrolamiento (SYSADMIN ONLY) ──
+    const [carta, setCarta] = useState<any | null>(null);
+    const [isLoadingCarta, setIsLoadingCarta] = useState(false);
+    const [isSavingCarta, setIsSavingCarta] = useState(false);
+    const [cartaDraft, setCartaDraft] = useState<any>({});
+
+    // ── Planilla Magna (SYSADMIN ONLY) ──
+    const [checkins, setCheckins] = useState<any[]>([]);
+    const [isLoadingCheckins, setIsLoadingCheckins] = useState(false);
+    const [isSavingCheckin, setIsSavingCheckin] = useState(false);
+    const [editingWeek, setEditingWeek] = useState<number | null>(null);
+    const [weekDraft, setWeekDraft] = useState<Record<string, number>>({});
+
+    const GOAL_AREAS = [
+        { key: 'professional',  label: 'Profesional' },
+        { key: 'personal',      label: 'Personal' },
+        { key: 'relationships', label: 'Vínculos' },
+        { key: 'community',     label: 'Comunidad' },
+        { key: 'legacy',        label: 'Legado' },
+    ] as const;
+
+    // Find the PL enrollment for carta/checkins
+    const plEnrollment = student.programHistory?.find((p: any) => p.cycleType === 'plan_lider');
 
     useEffect(() => {
         if (detailTab === 'PROGRAMAS' && student.programHistory?.length > 0 && !activeProgramId) {
@@ -87,10 +111,14 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     }, [detailTab, student.programHistory, activeProgramId]);
 
     useEffect(() => {
-        if (activeProgramId) {
-            fetchProgramNotes(activeProgramId);
-        }
+        if (activeProgramId) fetchProgramNotes(activeProgramId);
     }, [activeProgramId]);
+
+    useEffect(() => {
+        if (detailTab === 'METAS') fetchGoals(student.id);
+        if (detailTab === 'CARTA' && plEnrollment) fetchCarta(plEnrollment.id);
+        if (detailTab === 'PLANILLA_PL' && plEnrollment) fetchCheckins(plEnrollment.id);
+    }, [detailTab, student.id, plEnrollment?.id]);
 
     const fetchProgramNotes = async (enrollmentId: string) => {
         setIsLoadingNotes(true);
@@ -98,10 +126,6 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         setProgramNotes(data || []);
         setIsLoadingNotes(false);
     };
-
-    useEffect(() => {
-        if (detailTab === 'METAS') fetchGoals(student.id);
-    }, [detailTab, student.id]);
 
     const fetchGoals = async (studentId: string) => {
         setIsLoadingGoals(true);
@@ -113,6 +137,47 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             setStudentGoals([]);
         }
         setIsLoadingGoals(false);
+    };
+
+    const fetchCarta = async (enrollmentId: string) => {
+        setIsLoadingCarta(true);
+        const { data } = await supabase.from('student_goals').select('*').eq('enrollment_id', enrollmentId).single();
+        setCarta(data || null);
+        setCartaDraft(data || { contrato: '', estiramiento: '', nabo_descripcion: '', equipo_asistencia: '', goals_data: {} });
+        setIsLoadingCarta(false);
+    };
+
+    const saveCarta = async () => {
+        if (!plEnrollment) return;
+        setIsSavingCarta(true);
+        await supabase.from('student_goals').upsert({
+            enrollment_id: plEnrollment.id,
+            ...cartaDraft,
+            updated_at: new Date().toISOString(),
+        }, { onConflict: 'enrollment_id' });
+        await fetchCarta(plEnrollment.id);
+        setIsSavingCarta(false);
+    };
+
+    const fetchCheckins = async (enrollmentId: string) => {
+        setIsLoadingCheckins(true);
+        const { data } = await supabase.from('weekly_checkins').select('*').eq('enrollment_id', enrollmentId).order('week_number', { ascending: true });
+        setCheckins(data || []);
+        setIsLoadingCheckins(false);
+    };
+
+    const saveWeekCheckin = async (weekNum: number) => {
+        if (!plEnrollment) return;
+        setIsSavingCheckin(true);
+        await supabase.from('weekly_checkins').upsert({
+            enrollment_id: plEnrollment.id,
+            week_number: weekNum,
+            scores: weekDraft,
+            updated_at: new Date().toISOString(),
+        }, { onConflict: 'enrollment_id,week_number' });
+        await fetchCheckins(plEnrollment.id);
+        setEditingWeek(null);
+        setIsSavingCheckin(false);
     };
 
     useEffect(() => {
@@ -185,26 +250,38 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                         <div className="space-y-2 relative">
                             {[
                                 {
-                                    id: 'PERSONAL', label: 'Perfil & Contacto',
+                                    id: 'PERSONAL', label: 'Perfil & Contacto', sysadmin: false,
                                     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                                 },
                                 {
-                                    id: 'MOTIVACIÓN', label: 'Propósito & Sueños',
+                                    id: 'MOTIVACIÓN', label: 'Propósito & Sueños', sysadmin: false,
                                     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                                 },
                                 {
-                                    id: 'SALUD', label: 'Ficha Médica',
+                                    id: 'SALUD', label: 'Ficha Médica', sysadmin: false,
                                     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
                                 },
                                 {
-                                    id: 'PROGRAMAS', label: 'Historial CRESER',
+                                    id: 'PROGRAMAS', label: 'Historial CRESER', sysadmin: false,
                                     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 },
                                 {
-                                    id: 'METAS', label: 'Seguimiento de Metas',
+                                    id: 'METAS', label: 'Seguimiento', sysadmin: true,
                                     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-                                }
-                                ].filter(s => s.id !== 'METAS' || role === 'sysadmin').map(section => (
+                                },
+                                {
+                                    id: 'CARTA', label: 'Carta PL', sysadmin: true,
+                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                },
+                                {
+                                    id: 'PLANILLA_PL', label: 'Planilla Magna', sysadmin: true,
+                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                                },
+                                {
+                                    id: 'CAMPUS', label: 'Campus (Beta)', sysadmin: true,
+                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                },
+                            ].filter(s => !s.sysadmin || role === 'sysadmin').map(section => (
                                 <button
                                     key={section.id}
                                     onClick={() => setDetailTab(section.id)}
@@ -234,20 +311,26 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                             
                             <div className="mb-12">
                                 <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-3">
-                                    {detailTab === 'PERSONAL' && 'Sección 01'}
-                                    {detailTab === 'MOTIVACIÓN' && 'Sección 02'}
-                                    {detailTab === 'SALUD' && 'Sección 03'}
-                                    {detailTab === 'OTROS' && 'Sección 04'}
-                                    {detailTab === 'PROGRAMAS' && 'Sección 05'}
-                                    {detailTab === 'METAS' && 'Sección 06'}
+                                    {detailTab === 'PERSONAL'    && 'Sección 01'}
+                                    {detailTab === 'MOTIVACIÓN'  && 'Sección 02'}
+                                    {detailTab === 'SALUD'       && 'Sección 03'}
+                                    {detailTab === 'OTROS'       && 'Sección 04'}
+                                    {detailTab === 'PROGRAMAS'   && 'Sección 05'}
+                                    {detailTab === 'METAS'       && 'Sección 06'}
+                                    {detailTab === 'CARTA'       && <span className="text-purple-600">SYSADMIN · Sección 07</span>}
+                                    {detailTab === 'PLANILLA_PL' && <span className="text-purple-600">SYSADMIN · Sección 08</span>}
+                                    {detailTab === 'CAMPUS'      && <span className="text-purple-600">SYSADMIN · Sección 09</span>}
                                 </h4>
                                 <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-                                    {detailTab === 'PERSONAL' && 'Información de Contacto y Perfil'}
-                                    {detailTab === 'MOTIVACIÓN' && 'Propósito, Sueños y Metas'}
-                                    {detailTab === 'SALUD' && 'Historial Médico y Emergencias'}
-                                    {detailTab === 'OTROS' && 'Información Adicional Recopilada'}
-                                    {detailTab === 'PROGRAMAS' && 'Historial de Programas CRESER'}
-                                    {detailTab === 'METAS' && 'Seguimiento de Plan Líder'}
+                                    {detailTab === 'PERSONAL'    && 'Información de Contacto y Perfil'}
+                                    {detailTab === 'MOTIVACIÓN'  && 'Propósito, Sueños y Metas'}
+                                    {detailTab === 'SALUD'       && 'Historial Médico y Emergencias'}
+                                    {detailTab === 'OTROS'       && 'Información Adicional Recopilada'}
+                                    {detailTab === 'PROGRAMAS'   && 'Historial de Programas CRESER'}
+                                    {detailTab === 'METAS'       && 'Seguimiento de Plan Líder'}
+                                    {detailTab === 'CARTA'       && 'Carta de Enrolamiento — Plan Líder'}
+                                    {detailTab === 'PLANILLA_PL' && 'Planilla Magna — Seguimiento 13 Semanas'}
+                                    {detailTab === 'CAMPUS'      && 'Campus Digital (Beta)'}
                                 </h2>
                                 <div className="h-1 w-12 bg-blue-600 mt-6 rounded-full"></div>
                             </div>
@@ -374,6 +457,174 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No hay historial de programas.</p>
                                         </div>
                                     )}
+                                </div>
+                            )}
+
+                            {/* ── TAB: CARTA DE ENROLAMIENTO (SYSADMIN) ──────────────────── */}
+                            {detailTab === 'CARTA' && (
+                                <div className="space-y-8">
+                                    {!plEnrollment ? (
+                                        <div className="py-16 text-center bg-slate-50 border border-dashed border-slate-200 rounded-sm">
+                                            <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Sin etapa PL activa</p>
+                                            <p className="text-xs text-slate-400 mt-1">El alumno no tiene un enrollment en Plan Líder.</p>
+                                        </div>
+                                    ) : isLoadingCarta ? (
+                                        <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-purple-100 border-t-purple-500 rounded-full animate-spin" /></div>
+                                    ) : (
+                                        <>
+                                            {/* Identidad */}
+                                            <div className="bg-purple-50 border border-purple-100 rounded-sm p-1">
+                                                <p className="text-[9px] font-black text-purple-500 uppercase tracking-widest px-4 pt-3 pb-1">Identidad & Contrato</p>
+                                                <div className="p-4 space-y-4">
+                                                    {[{key: 'contrato', label: 'Yo soy...'}, {key: 'estiramiento', label: 'Mi estiramiento es...'}, {key: 'nabo_descripcion', label: 'Mi patrón limitante (Nabo)'}, {key: 'equipo_asistencia', label: 'El equipo me ayuda a...'}].map(f => (
+                                                        <div key={f.key}>
+                                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">{f.label}</p>
+                                                            <textarea
+                                                                rows={2}
+                                                                className="w-full p-3 bg-white border border-slate-200 rounded-sm text-sm text-slate-700 focus:outline-none focus:border-purple-400 resize-none"
+                                                                value={cartaDraft[f.key] || ''}
+                                                                onChange={e => setCartaDraft((p: any) => ({...p, [f.key]: e.target.value}))}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Metas por área */}
+                                            <div>
+                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Metas por Área de Vida</p>
+                                                <div className="space-y-4">
+                                                    {GOAL_AREAS.map(area => {
+                                                        const areaData = (cartaDraft.goals_data || {})[area.key] || {goal: '', purpose: '', actions: [], metrics: ''};
+                                                        return (
+                                                            <div key={area.key} className="border border-slate-100 rounded-sm overflow-hidden">
+                                                                <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
+                                                                    <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">{area.label}</p>
+                                                                </div>
+                                                                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                    {[{k:'goal', l:'Meta'}, {k:'purpose', l:'Para qué'}, {k:'metrics', l:'Métrica'}].map(f2 => (
+                                                                        <div key={f2.k} className={f2.k === 'metrics' ? 'md:col-span-2' : ''}>
+                                                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{f2.l}</p>
+                                                                            <input
+                                                                                type="text"
+                                                                                className="w-full p-2.5 bg-white border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-purple-400"
+                                                                                value={areaData[f2.k] || ''}
+                                                                                onChange={e => setCartaDraft((p: any) => ({
+                                                                                    ...p,
+                                                                                    goals_data: {...(p.goals_data || {}), [area.key]: {...areaData, [f2.k]: e.target.value}}
+                                                                                }))}
+                                                                            />
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-end">
+                                                <button
+                                                    onClick={saveCarta}
+                                                    disabled={isSavingCarta}
+                                                    className="px-8 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm transition-all shadow-lg shadow-purple-200"
+                                                >
+                                                    {isSavingCarta ? 'Guardando...' : '💾 Guardar Carta'}
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── TAB: PLANILLA MAGNA (SYSADMIN) ──────────────────────── */}
+                            {detailTab === 'PLANILLA_PL' && (
+                                <div>
+                                    {!plEnrollment ? (
+                                        <div className="py-16 text-center bg-slate-50 border border-dashed border-slate-200 rounded-sm">
+                                            <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Sin etapa PL activa</p>
+                                        </div>
+                                    ) : isLoadingCheckins ? (
+                                        <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-purple-100 border-t-purple-500 rounded-full animate-spin" /></div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <div className="grid grid-cols-7 gap-1 text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">
+                                                <span className="col-span-1">Semana</span>
+                                                {GOAL_AREAS.map(a => <span key={a.key} className="text-center">{a.label.slice(0,4)}.</span>)}
+                                                <span className="text-right">Promedio</span>
+                                            </div>
+                                            {Array.from({length: 13}, (_, i) => i + 1).map(week => {
+                                                const existing = checkins.find(c => c.week_number === week);
+                                                const scores = existing?.scores || {};
+                                                const avg = GOAL_AREAS.length
+                                                    ? Math.round(GOAL_AREAS.reduce((s, a) => s + (scores[a.key] || 0), 0) / GOAL_AREAS.length)
+                                                    : 0;
+                                                const isEditing = editingWeek === week;
+                                                return (
+                                                    <div key={week} className={`border rounded-sm transition-all ${isEditing ? 'border-purple-300 bg-purple-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                                                        {isEditing ? (
+                                                            <div className="p-4 space-y-3">
+                                                                <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Semana {week} — Ingreso de Porcentajes</p>
+                                                                <div className="grid grid-cols-5 gap-3">
+                                                                    {GOAL_AREAS.map(area => (
+                                                                        <div key={area.key}>
+                                                                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">{area.label}</p>
+                                                                            <div className="flex items-center gap-1">
+                                                                                <input
+                                                                                    type="number" min={0} max={100}
+                                                                                    className="w-full p-2 border border-slate-200 rounded-sm text-sm text-center focus:outline-none focus:border-purple-400"
+                                                                                    value={weekDraft[area.key] ?? (scores[area.key] || 0)}
+                                                                                    onChange={e => setWeekDraft(p => ({...p, [area.key]: parseInt(e.target.value) || 0}))}
+                                                                                />
+                                                                                <span className="text-[10px] text-slate-400">%</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                <div className="flex justify-end gap-3">
+                                                                    <button onClick={() => setEditingWeek(null)} className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600">Cancelar</button>
+                                                                    <button onClick={() => saveWeekCheckin(week)} disabled={isSavingCheckin} className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm disabled:opacity-50">{isSavingCheckin ? 'Guardando...' : 'Guardar'}</button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <button className="w-full grid grid-cols-7 gap-1 px-3 py-3 items-center text-left" onClick={() => { setEditingWeek(week); setWeekDraft(scores); }}>
+                                                                <span className="text-[10px] font-bold text-slate-700 col-span-1">Sem. {week}</span>
+                                                                {GOAL_AREAS.map(a => (
+                                                                    <span key={a.key} className={`text-center text-[11px] font-bold ${(scores[a.key] || 0) >= 70 ? 'text-emerald-600' : (scores[a.key] || 0) >= 40 ? 'text-amber-600' : existing ? 'text-red-500' : 'text-slate-300'}`}>
+                                                                        {existing ? `${scores[a.key] || 0}%` : '—'}
+                                                                    </span>
+                                                                ))}
+                                                                <span className={`text-right text-[11px] font-black ${existing ? (avg >= 70 ? 'text-emerald-600' : avg >= 40 ? 'text-amber-600' : 'text-red-500') : 'text-slate-200'}`}>
+                                                                    {existing ? `${avg}%` : '+'}
+                                                                </span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ── TAB: CAMPUS BETA (SYSADMIN) ─────────────────────────── */}
+                            {detailTab === 'CAMPUS' && (
+                                <div className="space-y-6">
+                                    <div className="flex items-center gap-3 p-4 bg-purple-50 border border-purple-200 rounded-sm">
+                                        <svg className="w-5 h-5 text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        <p className="text-xs font-bold text-purple-700">Campus Digital en desarrollo. Esta sección contendrá el acceso a los 13 meses de seguimiento post-PL con videos, PDFs y acompañamiento mensual.</p>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {Array.from({length: 13}, (_, i) => i + 1).map(month => (
+                                            <div key={month} className="border border-dashed border-slate-200 rounded-sm p-6 text-center bg-slate-50 opacity-40">
+                                                <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center mx-auto mb-3">
+                                                    <span className="text-xs font-black text-slate-500">{month}</span>
+                                                </div>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mes {month}</p>
+                                                <p className="text-[9px] text-slate-300 mt-1">Próximamente</p>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
 
