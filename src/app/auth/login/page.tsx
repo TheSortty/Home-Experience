@@ -9,11 +9,30 @@ export default function LoginPage() {
   const router = useRouter()
   const [checking, setChecking] = useState(true)
 
+  const checkRoleAndRedirect = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+      
+      if (data && ['admin', 'sysadmin', 'super_admin'].includes(data.role)) {
+        router.replace('/admin/dashboard');
+      } else {
+        router.replace('/dashboard');
+      }
+    } catch (err) {
+      console.error("Error checking role:", err);
+      router.replace('/dashboard'); // fallback a estudiante
+    }
+  }
+
   useEffect(() => {
-    // Si ya hay sesión activa, saltar el login y ir directo al dashboard
+    // Si ya hay sesión activa, saltar el login y redirigir según rol
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.replace('/admin/dashboard')
+      if (session?.user) {
+        checkRoleAndRedirect(session.user.id);
       } else {
         setChecking(false)
       }
@@ -29,10 +48,20 @@ export default function LoginPage() {
     )
   }
 
+  const handleLoginSuccess = async () => {
+    setChecking(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      checkRoleAndRedirect(session.user.id);
+    } else {
+      router.push('/dashboard');
+    }
+  }
+
   return (
     <div className="w-full max-w-md mx-auto">
       <Login
-        onLoginSuccess={() => router.push('/admin/dashboard')}
+        onLoginSuccess={handleLoginSuccess}
         onBack={() => router.push('/')}
       />
     </div>

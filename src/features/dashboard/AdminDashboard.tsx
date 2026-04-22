@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import LogoutIcon from '../../ui/icons/LogoutIcon';
 import ChartIcon from '../../ui/icons/ChartIcon';
 import UsersIcon from '../../ui/icons/UsersIcon';
@@ -63,10 +63,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
 
+  // Refs so fetchDashboardData can always read the latest role/user
+  // without creating a new function reference on every auth state change.
+  // This eliminates the stale-closure bug that caused the dashboard to go blank.
+  const roleRef = useRef(role);
+  const userRef = useRef(user);
+  useEffect(() => { roleRef.current = role; }, [role]);
+  useEffect(() => { userRef.current = user; }, [user]);
+
   // ─── Data Fetching ──────────────────────────────────────────────────────────
 
+  // fetchDashboardData is stable (no deps on role/user objects).
+  // It reads from refs instead, so it never goes stale when the auth
+  // token is silently refreshed and user/role get new object references.
   const fetchDashboardData = useCallback(async () => {
-    if (!role || !user) return;
+    const currentRole = roleRef.current;
+    const currentUser = userRef.current;
+    if (!currentRole || !currentUser) return;
     setIsLoadingDashboard(true);
     try {
       const [
@@ -130,23 +143,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     } finally {
       setIsLoadingDashboard(false);
     }
-  }, [role, user]);
+    // No deps: stable function, reads from roleRef/userRef
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Fix hydration: canal Realtime con nombre único (evita duplicados al cambiar de tab y volver)
+  // ─── Overview data: Realtime + polling + visibility ─────────────────────────
   useEffect(() => {
-    if (role && user && activeTab === 'overview') {
-      fetchDashboardData();
+    if (activeTab !== 'overview') return;
 
-      const channelName = `dashboard_overview_${Date.now()}`;
-      const channel = supabase.channel(channelName)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, fetchDashboardData)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchDashboardData)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, fetchDashboardData)
-        .subscribe();
+    // Initial load (or after switching back to this tab)
+    fetchDashboardData();
 
-      return () => { supabase.removeChannel(channel); };
-    }
-  }, [role, user, activeTab, fetchDashboardData]);
+    // Realtime channel — one stable name per mount, not recreated on auth refresh
+    const channelName = 'dashboard_overview_stable';
+    const channel = supabase.channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, fetchDashboardData)
+      .subscribe();
+
+    // Polling fallback: every 60 s in case Realtime drops
+    const pollInterval = setInterval(fetchDashboardData, 60_000);
+
+    // Refetch when the browser tab regains focus
+    const handleVisible = () => {
+      if (!document.hidden) fetchDashboardData();
+    };
+    document.addEventListener('visibilitychange', handleVisible);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
+  // Only re-run when the user actually switches tabs inside the admin
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, fetchDashboardData]);
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabaseClient';
@@ -52,23 +52,36 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     const [registrationToDelete, setRegistrationToDelete] = useState<Registration | null>(null);
 
     useEffect(() => {
-        fetchRegistrations();
-        fetchCycles();
+    // Refetch on mount / viewMode change
+    fetchRegistrations();
+    fetchCycles();
 
-        // Canal con nombre único para evitar canales duplicados al cambiar viewMode
-        const channelName = `admissions_changes_${Date.now()}`;
-        const channel = supabase.channel(channelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, () => {
-                fetchRegistrations();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => {
-                fetchCycles();
-            })
-            .subscribe();
+    // Stable channel name — NOT date-stamped so it survives auth token refreshes
+    // without triggering a full remove/recreate loop.
+    const channelName = `admissions_changes_${viewMode}`;
+    const channel = supabase.channel(channelName)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, () => {
+            fetchRegistrations();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => {
+            fetchCycles();
+        })
+        .subscribe();
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
+    // Polling fallback in case Realtime WS drops (common on localhost)
+    const pollInterval = setInterval(fetchRegistrations, 60_000);
+
+    // Refetch when the tab regains visibility
+    const handleVisible = () => {
+        if (!document.hidden) { fetchRegistrations(); fetchCycles(); }
+    };
+    document.addEventListener('visibilitychange', handleVisible);
+
+    return () => {
+        supabase.removeChannel(channel);
+        clearInterval(pollInterval);
+        document.removeEventListener('visibilitychange', handleVisible);
+    };
     }, [viewMode]);
 
     useEffect(() => {

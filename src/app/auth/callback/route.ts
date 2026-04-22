@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { type EmailOtpType } from '@supabase/supabase-js'
 
 /**
  * OAuth / Magic Link callback handler.
@@ -15,19 +16,34 @@ import { createClient } from '@/utils/supabase/server'
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const token_hash = searchParams.get('token_hash')
+  const type = searchParams.get('type') as EmailOtpType | null
   const next = searchParams.get('next') ?? '/admin/dashboard'
 
-  if (code) {
-    const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+  const supabase = await createClient()
 
+  // Flujo PKCE directo desde emails (Invitaciones, Reset Password)
+  if (token_hash && type) {
+    const { error } = await supabase.auth.verifyOtp({
+      type,
+      token_hash,
+    })
     if (!error) {
-      // Redirect to the intended destination (or dashboard by default)
-      return NextResponse.redirect(`${origin}${next}`)
+      // Remover param next para evitar bucles si alguien copia la url
+      const redirectUrl = new URL(next, origin)
+      return NextResponse.redirect(redirectUrl)
+    }
+  } 
+  // Flujo tradicional (OAuth, Magic Links antiguos)
+  else if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) {
+      const redirectUrl = new URL(next, origin)
+      return NextResponse.redirect(redirectUrl)
     }
   }
 
-  // If the code is missing or exchange failed, send to login with an error flag
+  // Si falló o no hay código, redirigir al login
   const loginUrl = new URL('/auth/login', origin)
   loginUrl.searchParams.set('error', 'auth_callback_error')
   return NextResponse.redirect(loginUrl)

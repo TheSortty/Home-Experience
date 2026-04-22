@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+'use client';
+
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../services/supabaseClient';
 
@@ -26,11 +28,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [role, setRole] = useState<'admin' | 'sysadmin' | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isPasswordRecovery, setIsPasswordRecovery] = useState(() => {
-        // Sync check prevents React Router from stripping the hash before Supabase parses it.
         return typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
     });
 
-    const fetchRole = async (userId: string, retries = 2): Promise<void> => {
+    // Use ref to avoid stale closure: always holds latest role/session state
+    const mountedRef = useRef(true);
+
+    /**
+     * Fetch the user's role from the profiles table.
+     * Returns the role string so the caller can batch the state update.
+     * This avoids the two-render problem (setUser → setRole) that caused
+     * fetchDashboardData to run with role=null momentarily.
+     */
+    const resolveRole = async (userId: string, retries = 3): Promise<'admin' | 'sysadmin'> => {
         try {
             const { data, error } = await supabase
                 .from('profiles')
@@ -39,67 +49,137 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .single();
             
             if (error || !data) {
-                // RLS may block the query if the token hasn't fully propagated yet.
-                // Retry after a short delay before falling back.
                 if (retries > 0) {
-                    await new Promise(r => setTimeout(r, 500));
-                    return fetchRole(userId, retries - 1);
+                    await new Promise(r => setTimeout(r, 600));
+                    return resolveRole(userId, retries - 1);
                 }
-                setRole('admin');
-            } else {
-                setRole(data.role as any);
+                return 'admin'; // safe fallback
             }
-        } catch (err) {
+            return (data.role as 'admin' | 'sysadmin') ?? 'admin';
+        } catch {
             if (retries > 0) {
-                await new Promise(r => setTimeout(r, 500));
-                return fetchRole(userId, retries - 1);
+                await new Promise(r => setTimeout(r, 600));
+                return resolveRole(userId, retries - 1);
             }
-            setRole('admin');
+            return 'admin';
         }
     };
 
     useEffect(() => {
-        let mounted = true;
+        mountedRef.current = true;
 
+        /**
+         * Initialise auth state from the current cookie/localStorage session.
+         * We call getSession() (cheap, no network) then fetchUser() (validates token)
+         * so we display a fast initial UI while the real user object loads.
+         */
         const initializeAuth = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!mounted) return;
-            
-            setSession(session);
-            setUser(session?.user ?? null);
-            
-            if (session?.user) {
-                await fetchRole(session.user.id);
+            // Step 1: fast local check
+            const { data: { session: localSession } } = await supabase.auth.getSession();
+            if (!mountedRef.current) return;
+
+            if (localSession?.user) {
+                // Immediately set what we have so the UI isn't blocked
+                setSession(localSession);
+                setUser(localSession.user);
+
+                // Step 2: resolve role (may need a network round-trip)
+                const resolvedRole = await resolveRole(localSession.user.id);
+                if (!mountedRef.current) return;
+                setRole(resolvedRole);
             } else {
+                setSession(null);
+                setUser(null);
                 setRole(null);
             }
+
             setIsLoading(false);
         };
 
         initializeAuth();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (!mounted) return;
-            
-            setSession(session);
-            setUser(session?.user ?? null);
-            
-            if (session?.user) {
-                await fetchRole(session.user.id);
-            } else {
+        /**
+         * React to auth events (login, logout, token refresh, etc.).
+         * Key fix: we batch session + role into a single async handler and
+         * only call setState when BOTH values are ready → eliminates the
+         * intermediate render where user ≠ null but role === null.
+         */
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+            if (!mountedRef.current) return;
+
+            if (event === 'SIGNED_OUT' || !newSession?.user) {
+                setSession(null);
+                setUser(null);
                 setRole(null);
+                setIsLoading(false);
+                return;
             }
-            
-            setIsLoading(false);
-            
+
             if (event === 'PASSWORD_RECOVERY') {
                 setIsPasswordRecovery(true);
             }
+
+            // TOKEN_REFRESHED: just update the session/user object.
+            // The role NEVER changes during a token refresh — re-fetching it
+            // caused a brief role=null window that blanked the dashboard.
+            if (event === 'TOKEN_REFRESHED') {
+                setSession(newSession);
+                setUser(newSession.user);
+                // role stays unchanged — no setRole needed
+                setIsLoading(false);
+                return;
+            }
+
+            // INITIAL_SESSION is handled by initializeAuth() above.
+            // Skip it here to avoid a duplicate role fetch on first load.
+            if (event === 'INITIAL_SESSION') {
+                setIsLoading(false);
+                return;
+            }
+
+            // For SIGNED_IN and USER_UPDATED: fully resolve role + batch update
+            if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+                const resolvedRole = await resolveRole(newSession.user.id);
+                if (!mountedRef.current) return;
+                setSession(newSession);
+                setUser(newSession.user);
+                setRole(resolvedRole);
+                setIsLoading(false);
+            }
         });
 
+        /**
+         * Proactive token refresh every 8 minutes.
+         * Supabase tokens expire after 1 hour, but SHORT-lived dev setups or
+         * misconfigured projects can have much shorter expiries.
+         * This ensures we never silently lose a session while the admin
+         * is actively using the dashboard.
+         */
+        const refreshInterval = setInterval(async () => {
+            if (!mountedRef.current) return;
+            try {
+                const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
+                if (!mountedRef.current) return;
+
+                if (error || !refreshed) {
+                    // Session cannot be refreshed → sign out gracefully
+                    setSession(null);
+                    setUser(null);
+                    setRole(null);
+                } else {
+                    // Update session object without touching role (it didn't change)
+                    setSession(refreshed);
+                    setUser(refreshed.user);
+                }
+            } catch (err) {
+                console.warn('[AuthContext] Periodic refresh failed:', err);
+            }
+        }, 8 * 60 * 1000); // every 8 minutes
+
         return () => {
-            mounted = false;
+            mountedRef.current = false;
             subscription.unsubscribe();
+            clearInterval(refreshInterval);
         };
     }, []);
 

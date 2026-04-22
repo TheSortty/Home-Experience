@@ -72,8 +72,8 @@ const AdminCalendar: React.FC = () => {
         fetchCycles(); 
         fetchTrashCount(); 
 
-        // Canal con nombre único para evitar duplicados al cambiar viewMode
-        const channelName = `calendar_changes_${Date.now()}`;
+        // Stable channel name tied to viewMode
+        const channelName = `calendar_changes_${viewMode}`;
         const channel = supabase.channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => {
                 fetchCycles();
@@ -83,8 +83,17 @@ const AdminCalendar: React.FC = () => {
             })
             .subscribe();
 
+        // Polling fallback every 60s
+        const pollInterval = setInterval(fetchCycles, 60_000);
+
+        // Refetch when tab regains visibility
+        const handleVisible = () => { if (!document.hidden) { fetchCycles(); fetchTrashCount(); } };
+        document.addEventListener('visibilitychange', handleVisible);
+
         return () => {
             supabase.removeChannel(channel);
+            clearInterval(pollInterval);
+            document.removeEventListener('visibilitychange', handleVisible);
         };
     }, [viewMode]);
 

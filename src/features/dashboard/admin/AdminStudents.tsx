@@ -22,8 +22,8 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
         fetchStudents(); 
         fetchTrashCount(); 
 
-        // Canal con nombre único para evitar duplicados al cambiar viewMode
-        const channelName = `students_changes_${Date.now()}`;
+        // Stable channel name tied to viewMode — survives auth token refreshes
+        const channelName = `students_changes_${viewMode}`;
         const channel = supabase.channel(channelName)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
                 fetchStudents();
@@ -33,8 +33,17 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
             })
             .subscribe();
 
+        // Polling fallback every 60s
+        const pollInterval = setInterval(fetchStudents, 60_000);
+
+        // Refetch when tab regains visibility
+        const handleVisible = () => { if (!document.hidden) fetchStudents(); };
+        document.addEventListener('visibilitychange', handleVisible);
+
         return () => {
             supabase.removeChannel(channel);
+            clearInterval(pollInterval);
+            document.removeEventListener('visibilitychange', handleVisible);
         };
     }, [viewMode]);
 

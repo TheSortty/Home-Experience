@@ -14,7 +14,6 @@ const IS_PROD = process.env.NODE_ENV === 'production'
 function cookieOptions(original: Record<string, any> = {}) {
   return {
     ...original,
-    httpOnly: true,
     sameSite: 'lax' as const,
     secure: IS_PROD, // false on localhost HTTP, true on production HTTPS
     path: original.path ?? '/',
@@ -73,10 +72,11 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   } = await supabase.auth.getUser()
 
   const isAdminRoute = request.nextUrl.pathname.startsWith('/admin')
+  const isCampusRoute = ['/dashboard', '/cursos', '/comunidad', '/calendario', '/perfil'].some(path => request.nextUrl.pathname.startsWith(path))
   const isLoginRoute = request.nextUrl.pathname.startsWith('/auth/login')
 
-  // Step 3: Guard /admin — redirect to login if no valid user.
-  if (isAdminRoute && (error || !user)) {
+  // Step 3: Guard /admin and campus routes — redirect to login if no valid user.
+  if ((isAdminRoute || isCampusRoute) && (error || !user)) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = '/auth/login'
     // Clear next param to avoid infinite loop if token is permanently invalid.
@@ -85,8 +85,6 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     const redirectResponse = NextResponse.redirect(redirectUrl)
 
     // CRITICAL: copy all session cookies onto the redirect response.
-    // Without this, the browser loses the Supabase cookie jar on redirect,
-    // causing the next request to have no session at all.
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
     })
@@ -94,13 +92,16 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     return redirectResponse
   }
 
-  // Step 4: If the user is already logged in and hits /auth/login, bounce them
-  //   straight to the dashboard — eliminates the "Administración → login" bug.
+  // Step 4: Guard /admin specifically. A student shouldn't access /admin.
+  // Note: We don't fetch 'profiles' here to save DB hits in middleware.
+  // The actual role check for /admin should also happen inside /admin layouts or pages, 
+  // but if they hit /auth/login while logged in, let's just bounce them to /dashboard
+  // and the dashboard/page.tsx or layout can redirect admins to /admin/dashboard.
   if (isLoginRoute && user) {
-    const dashboardUrl = request.nextUrl.clone()
-    dashboardUrl.pathname = '/admin/dashboard'
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = '/dashboard' // Let the app handle role-based routing from here
 
-    const redirectResponse = NextResponse.redirect(dashboardUrl)
+    const redirectResponse = NextResponse.redirect(redirectUrl)
 
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
