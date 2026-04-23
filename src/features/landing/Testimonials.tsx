@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { supabase } from '../../services/supabaseClient';
 import { Testimonial } from '../../core/types';
 import StarIcon from '../../ui/icons/StarIcon';
-import TestimonialFormModal from './TestimonialFormModal';
 import { FcGoogle } from 'react-icons/fc';
+
 
 interface TestimonialsProps {
   onTestimonialClick: (testimonial: Testimonial) => void;
@@ -14,30 +13,21 @@ interface TestimonialsProps {
 
 const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewAllClick }) => {
   const [testimonials, setTestimonials] = useState<any[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
 
   React.useEffect(() => {
     const fetchTestimonials = async () => {
-      const { data } = await supabase
-        .from('testimonials')
-        .select('*')
-        .eq('status', 'approved')
-        .order('created_at', { ascending: false })
-        .limit(3);
-
-      if (data && data.length > 0) {
-        const mappedData = data.map((t: any) => ({
-          id: t.id,
-          author: t.author_name,
-          quote: t.quote,
-          roles: t.roles || [],
-          cycle: t.cycle_text,
-          status: t.status,
-          rating: t.rating || 5,
-          photoUrl: t.photo_url,
-          createdAt: t.created_at
-        }));
-        setTestimonials(mappedData);
+      try {
+        const res = await fetch('/api/reviews');
+        const json = await res.json();
+        if (json.data) {
+          // Mezclamos (shuffle) las reseñas directamente en el cliente (frontend)
+          // para evitar que la caché agresiva del servidor de Next.js
+          // nos devuelva siempre el mismo orden.
+          const shuffled = [...json.data].sort(() => Math.random() - 0.5);
+          setTestimonials(shuffled);
+        }
+      } catch (error) {
+        console.error('Error fetching testimonials from proxy:', error);
       }
     };
     fetchTestimonials();
@@ -80,7 +70,7 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
 
           <div className="flex gap-4">
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => window.open('https://g.page/r/CTDkXEC05638EAE/review', '_blank')}
               className="group relative px-6 py-3 bg-slate-900 text-white rounded-full font-medium overflow-hidden transition-all hover:shadow-lg hover:shadow-blue-900/20"
             >
               <span className="relative z-10 flex items-center gap-2">
@@ -96,7 +86,7 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
 
         {/* Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {testimonials.map((t, index) => (
+          {testimonials.slice(0, 5).map((t, index) => (
             <div
               key={t.id}
               className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col h-full"
@@ -104,16 +94,16 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
             >
               <div className="flex items-start gap-4 mb-3">
                 {t.photoUrl ? (
-                  <Image src={t.photoUrl} alt={t.author} width={40} height={40} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                  <Image src={t.photoUrl} alt={t.author || 'Reviewer'} width={40} height={40} className="w-10 h-10 rounded-full object-cover shrink-0" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white uppercase text-lg shrink-0">
-                    {t.author.charAt(0)}
+                    {t.author ? t.author.charAt(0) : 'U'}
                   </div>
                 )}
                 <div className="flex-1">
                   <h3 className="font-semibold text-slate-900 text-[15px]">{t.author}</h3>
                   <div className="text-[13px] text-slate-500 mt-0.5">
-                    {t.roles.length > 0 ? t.roles[0] : 'Alumno/a'} • {new Date(t.createdAt).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}
+                    {t.roles?.length > 0 ? t.roles[0] : 'En Google Maps'} • {new Date(t.createdAt).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}
                   </div>
                 </div>
                 <div className="shrink-0 flex items-start justify-end">
@@ -130,23 +120,20 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
           ))}
 
           {/* Empty State / CTA Card */}
-          {testimonials.length < 3 && (
-            <div
-              onClick={() => setIsModalOpen(true)}
-              className="bg-slate-50 p-6 rounded-2xl border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 flex flex-col justify-center items-center h-full cursor-pointer min-h-[250px]"
-            >
-              <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <div className="w-6 h-6"><FcGoogle size="100%" /></div>
-              </div>
-              <h3 className="font-semibold text-slate-900 mb-1">Dejanos tu reseña</h3>
-              <p className="text-slate-500 text-center text-sm">Tu experiencia ayuda a otros a dar el paso.</p>
+          <div
+            onClick={() => window.open('https://g.page/r/CTDkXEC05638EAE/review', '_blank')}
+            className="bg-slate-50 p-6 rounded-2xl border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 flex flex-col justify-center items-center h-full cursor-pointer min-h-[250px]"
+          >
+            <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+              <div className="w-6 h-6"><FcGoogle size="100%" /></div>
             </div>
-          )}
+            <h3 className="font-semibold text-slate-900 mb-1">Dejanos tu reseña</h3>
+            <p className="text-slate-500 text-center text-sm">Tu experiencia ayuda a otros a dar el paso.</p>
+          </div>
         </div>
 
       </div>
 
-      <TestimonialFormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </section>
   );
 };

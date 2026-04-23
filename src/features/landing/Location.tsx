@@ -50,9 +50,14 @@ const Location: React.FC = () => {
               </div>
             </div>
 
-            <div className="inline-block bg-white p-8 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-slate-100 max-w-sm">
+            <a 
+              href="https://g.page/r/CTDkXEC05638EAE"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block bg-white p-8 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-slate-100 max-w-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-200 transition-all cursor-pointer group"
+            >
               <div className="flex items-center mb-4">
-                <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-white mr-3">
+                <div className="w-10 h-10 rounded-full bg-slate-900 group-hover:bg-blue-600 transition-colors flex items-center justify-center text-white mr-3">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
@@ -65,13 +70,13 @@ const Location: React.FC = () => {
               </div>
 
               <div className="flex items-center pt-4 border-t border-slate-100">
-                <span className="font-bold text-slate-900 mr-2 text-xl">4.8</span>
+                <span className="font-bold text-slate-900 mr-2 text-xl">5.0</span>
                 <div className="flex mr-2">
-                  {Array.from({ length: 5 }).map((_, i) => <StarIcon key={i} className="h-4 w-4 text-amber-400" />)}
+                  {Array.from({ length: 5 }).map((_, i) => <StarIcon key={i} className="h-4 w-4 text-amber-400" fill="full" />)}
                 </div>
-                <span className="text-slate-400 text-xs">(120+ Reseñas)</span>
+                <span className="text-slate-400 text-xs">(13 Reseñas en Google)</span>
               </div>
-            </div>
+            </a>
           </div>
 
           <div className="relative">
@@ -80,7 +85,7 @@ const Location: React.FC = () => {
 
             <div className="rounded-xl shadow-2xl overflow-hidden h-96 md:h-[600px] bg-white relative z-10 border border-slate-200">
               <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3284.016546660654!2d-58.3762715497332!3d-34.608545950193516!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95bccacf768f9013%3A0xb0285525a162552e!2sAv.%20de%20Mayo%20695%2C%20C1084%20CABA!5e0!3m2!1ses!2sar"
+                src="https://maps.google.com/maps?q=Home%20Co-Creando%20Bienestar&t=&z=16&ie=UTF8&iwloc=&output=embed"
                 width="100%"
                 height="100%"
                 style={{ border: 0 }}

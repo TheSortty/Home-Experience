@@ -123,20 +123,18 @@ export default function HomePage() {
         <MomentsSwiper />
       </div>
 
-      {/* 7. TESTIMONIOS (sysadmin only) */}
-      {role === 'sysadmin' && (
-        <div className="relative reveal-on-scroll opacity-0">
-          <InteractivePoints />
-          <div className="relative z-10 pointer-events-none">
-            <div className="pointer-events-auto">
-              <Testimonials
-                onTestimonialClick={setSelectedTestimonial}
-                onViewAllClick={() => setIsViewAllTestimonialsOpen(true)}
-              />
-            </div>
+      {/* 7. TESTIMONIOS */}
+      <div className="relative reveal-on-scroll opacity-0">
+        <InteractivePoints />
+        <div className="relative z-10 pointer-events-none">
+          <div className="pointer-events-auto">
+            <Testimonials
+              onTestimonialClick={setSelectedTestimonial}
+              onViewAllClick={() => setIsViewAllTestimonialsOpen(true)}
+            />
           </div>
         </div>
-      )}
+      </div>
 
       {/* 8. IMPACTOS */}
       <div className="reveal-on-scroll opacity-0">
