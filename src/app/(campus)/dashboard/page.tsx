@@ -8,7 +8,7 @@ export default async function CampusDashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   let firstName = 'Alumno';
-  let enrollments = [];
+  let enrollments: any[] = [];
 
   if (user) {
     const { data: profile } = await supabase
