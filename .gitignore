@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+.claude
 node_modules
 dist
 dist-ssr
@@ -33,3 +34,9 @@ dist-ssr
 !.dev.vars.example
 .env*
 !.env.example
+
+# Build artifacts
+tsconfig.tsbuildinfo
+
+# Supabase temp
+supabase/.temp/

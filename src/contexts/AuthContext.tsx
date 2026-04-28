@@ -148,38 +148,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         });
 
-        /**
-         * Proactive token refresh every 8 minutes.
-         * Supabase tokens expire after 1 hour, but SHORT-lived dev setups or
-         * misconfigured projects can have much shorter expiries.
-         * This ensures we never silently lose a session while the admin
-         * is actively using the dashboard.
-         */
-        const refreshInterval = setInterval(async () => {
-            if (!mountedRef.current) return;
-            try {
-                const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
-                if (!mountedRef.current) return;
-
-                if (error || !refreshed) {
-                    // Session cannot be refreshed → sign out gracefully
-                    setSession(null);
-                    setUser(null);
-                    setRole(null);
-                } else {
-                    // Update session object without touching role (it didn't change)
-                    setSession(refreshed);
-                    setUser(refreshed.user);
-                }
-            } catch (err) {
-                console.warn('[AuthContext] Periodic refresh failed:', err);
-            }
-        }, 8 * 60 * 1000); // every 8 minutes
+        // The @supabase/ssr createBrowserClient handles token rotation automatically
+        // via its internal scheduler. A manual refreshSession() interval here runs
+        // concurrently with Supabase's own refresh, which can create race conditions
+        // where onAuthStateChange fires twice and momentarily clears role/user state.
 
         return () => {
             mountedRef.current = false;
             subscription.unsubscribe();
-            clearInterval(refreshInterval);
         };
     }, []);
 

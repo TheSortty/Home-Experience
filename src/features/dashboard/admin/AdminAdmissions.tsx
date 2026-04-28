@@ -68,9 +68,6 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
         })
         .subscribe();
 
-    // Polling fallback in case Realtime WS drops (common on localhost)
-    const pollInterval = setInterval(fetchRegistrations, 60_000);
-
     // Refetch when the tab regains visibility
     const handleVisible = () => {
         if (!document.hidden) { fetchRegistrations(); fetchCycles(); }
@@ -79,7 +76,6 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
 
     return () => {
         supabase.removeChannel(channel);
-        clearInterval(pollInterval);
         document.removeEventListener('visibilitychange', handleVisible);
     };
     }, [viewMode]);
@@ -313,17 +309,8 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                     if (error2) {
                         console.error('Error second enrollment', error2);
                     } else if (enrollment2) {
-                        // Incrementar enrolled_count del segundo ciclo
-                        await supabase.rpc('increment_enrolled_count', { p_cycle_id: selectedCycleId2 })
-                            .then(({ error: rpcErr }) => {
-                                if (rpcErr) {
-                                    // Fallback: update directo si el RPC no existe
-                                    supabase.from('cycles')
-                                        .update({ enrolled_count: supabase.rpc as any })
-                                        .eq('id', selectedCycleId2);
-                                    // Ignoramos el error del fallback — el RPC principal ya lo maneja
-                                }
-                            });
+                        const { error: rpcErr } = await supabase.rpc('increment_enrolled_count', { p_cycle_id: selectedCycleId2 });
+                        if (rpcErr) console.error('Error incrementando cupo del segundo ciclo:', rpcErr);
 
                         // Registrar pago del segundo ciclo (mismo monto, mismo método)
                         await supabase.from('payments').insert({

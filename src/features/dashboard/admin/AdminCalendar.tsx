@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
 import toast from 'react-hot-toast';
@@ -48,6 +48,7 @@ interface EnrolledStudent {
 const AdminCalendar: React.FC = () => {
     const [cycles, setCycles] = useState<Cycle[]>([]);
     const [loading, setLoading] = useState(true);
+    const hasLoadedOnceRef = useRef(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null);
@@ -68,9 +69,9 @@ const AdminCalendar: React.FC = () => {
     // Student detail modal (shared)
     const [selectedStudentForDetail, setSelectedStudentForDetail] = useState<StudentForModal | null>(null);
 
-    useEffect(() => { 
-        fetchCycles(); 
-        fetchTrashCount(); 
+    useEffect(() => {
+        fetchCycles();
+        fetchTrashCount();
 
         // Stable channel name tied to viewMode
         const channelName = `calendar_changes_${viewMode}`;
@@ -83,16 +84,12 @@ const AdminCalendar: React.FC = () => {
             })
             .subscribe();
 
-        // Polling fallback every 60s
-        const pollInterval = setInterval(fetchCycles, 60_000);
-
         // Refetch when tab regains visibility
         const handleVisible = () => { if (!document.hidden) { fetchCycles(); fetchTrashCount(); } };
         document.addEventListener('visibilitychange', handleVisible);
 
         return () => {
             supabase.removeChannel(channel);
-            clearInterval(pollInterval);
             document.removeEventListener('visibilitychange', handleVisible);
         };
     }, [viewMode]);
@@ -105,10 +102,11 @@ const AdminCalendar: React.FC = () => {
     };
 
     const fetchCycles = async () => {
-        setLoading(true);
+        const isFirstLoad = !hasLoadedOnceRef.current;
+        if (isFirstLoad) setLoading(true);
         const { data } = await supabase.from('cycles').select('*').eq('is_deleted', viewMode === 'trash').order('start_date', { ascending: true });
         setCycles(data || []);
-        setLoading(false);
+        if (isFirstLoad) { setLoading(false); hasLoadedOnceRef.current = true; }
         fetchTrashCount();
     };
 

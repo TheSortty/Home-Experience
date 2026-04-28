@@ -33,16 +33,12 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
             })
             .subscribe();
 
-        // Polling fallback every 60s
-        const pollInterval = setInterval(fetchStudents, 60_000);
-
         // Refetch when tab regains visibility
         const handleVisible = () => { if (!document.hidden) fetchStudents(); };
         document.addEventListener('visibilitychange', handleVisible);
 
         return () => {
             supabase.removeChannel(channel);
-            clearInterval(pollInterval);
             document.removeEventListener('visibilitychange', handleVisible);
         };
     }, [viewMode]);

@@ -15,6 +15,7 @@ import AdminAdmissions from './admin/AdminAdmissions';
 import AdminSettings from './admin/AdminSettings';
 import AdminForms from './admin/AdminForms';
 import AdminLogs from './admin/AdminLogs';
+import AdminCourses from './admin/AdminCourses';
 import { useAuth } from '../../contexts/AuthContext';
 
 import './admin/admin-reboot.css';
@@ -24,7 +25,7 @@ interface AdminDashboardProps {
   onRegisterTest: () => void;
 }
 
-type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'communications' | 'forms' | 'settings' | 'logs';
+type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'courses' | 'communications' | 'forms' | 'settings' | 'logs';
 
 interface DashboardStats {
   pendingAdmissions: number;
@@ -62,6 +63,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+  // Tracks whether the first load has completed — background refreshes never show spinners.
+  const hasLoadedOnceRef = useRef(false);
 
   // Refs so fetchDashboardData can always read the latest role/user
   // without creating a new function reference on every auth state change.
@@ -80,7 +83,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     const currentRole = roleRef.current;
     const currentUser = userRef.current;
     if (!currentRole || !currentUser) return;
-    setIsLoadingDashboard(true);
+
+    // Only show the loading spinner on the very first fetch.
+    // Background refreshes (Realtime push, visibility change) update data silently
+    // so the UI never flashes or gets stuck in a loading state.
+    const isFirstLoad = !hasLoadedOnceRef.current;
+    if (isFirstLoad) setIsLoadingDashboard(true);
+
+    // 15-second timeout: if any Supabase query hangs (network hiccup, token
+    // rotation in progress), we bail out and keep the previous data visible
+    // instead of showing a stuck spinner.
+    const abort = new AbortController();
+    const timeoutId = setTimeout(() => abort.abort(), 15_000);
+
     try {
       const [
         { count: pendingReviewCount },
@@ -91,18 +106,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         { data: recentRegs },
         { data: enrollmentsData },
       ] = await Promise.all([
-        supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('is_deleted', false),
-        supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('is_deleted', false),
-        supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-        supabase.from('cycles').select('id, name, type, enrolled_count, start_date').eq('status', 'active').eq('is_deleted', false).order('start_date', { ascending: true }),
+        supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('is_deleted', false).abortSignal(abort.signal),
+        supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('is_deleted', false).abortSignal(abort.signal),
+        supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'active').abortSignal(abort.signal),
+        supabase.from('cycles').select('id, name, type, enrolled_count, start_date').eq('status', 'active').eq('is_deleted', false).order('start_date', { ascending: true }).abortSignal(abort.signal),
         supabase.from('cycle_sessions')
           .select('session_date, cycle_id, cycle:cycles(name, type, enrolled_count)')
           .gte('session_date', new Date().toISOString().split('T')[0])
           .lte('session_date', new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
           .order('session_date', { ascending: true })
-          .limit(5),
-        supabase.from('form_submissions').select('id, data, created_at, status').order('created_at', { ascending: false }).limit(6),
-        supabase.from('enrollments').select('status, cycle:cycles(type)'),
+          .limit(5)
+          .abortSignal(abort.signal),
+        supabase.from('form_submissions').select('id, data, created_at, status').order('created_at', { ascending: false }).limit(6).abortSignal(abort.signal),
+        supabase.from('enrollments').select('status, cycle:cycles(type)').abortSignal(abort.signal),
       ]);
 
       // Graduation rates
@@ -138,10 +154,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         status: r.status,
       })));
 
+      hasLoadedOnceRef.current = true;
+
     } catch (error: any) {
-      console.error('Error fetching dashboard data:', error);
+      // AbortError means the timeout fired — keep previous data, don't crash.
+      if (error?.name !== 'AbortError') {
+        console.error('Error fetching dashboard data:', error);
+      }
     } finally {
-      setIsLoadingDashboard(false);
+      clearTimeout(timeoutId);
+      if (isFirstLoad) setIsLoadingDashboard(false);
     }
     // No deps: stable function, reads from roleRef/userRef
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -162,10 +184,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, fetchDashboardData)
       .subscribe();
 
-    // Polling fallback: every 60 s in case Realtime drops
-    const pollInterval = setInterval(fetchDashboardData, 60_000);
-
-    // Refetch when the browser tab regains focus
+    // Refetch when the browser tab regains focus (covers the "left and came back" case).
+    // We intentionally do NOT add a setInterval poll here: the Realtime subscription
+    // already pushes changes instantly, and polling every 60s was the root cause of
+    // the stuck-loading bug (race with Supabase token rotation).
     const handleVisible = () => {
       if (!document.hidden) fetchDashboardData();
     };
@@ -173,7 +195,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(pollInterval);
       document.removeEventListener('visibilitychange', handleVisible);
     };
   // Only re-run when the user actually switches tabs inside the admin
@@ -412,6 +433,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     { id: 'admissions', label: 'Admisiones', icon: DocumentIcon },
     { id: 'students', label: 'Alumnos', icon: UsersIcon },
     { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
+    { id: 'courses', label: 'Cursos LMS', icon: DocumentIcon },
   ];
 
   const sysadminItems = [
@@ -422,8 +444,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   ];
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    onLogout();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+    } finally {
+      window.location.href = '/auth/login';
+    }
   };
 
   // ─── Render ──────────────────────────────────────────────────────────────────
@@ -567,9 +594,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                 ) : (
                   <>
                     {activeTab === 'overview' && renderOverview()}
-                    {activeTab === 'admissions' && <AdminAdmissions searchTerm={globalSearch} />}
-                    {activeTab === 'students' && <AdminStudents role={role || 'admin'} />}
-                    {activeTab === 'calendar' && <AdminCalendar />}
+                    {/* Keep these three mounted to avoid state loss on tab switch */}
+                    <div style={{ display: activeTab === 'admissions' ? undefined : 'none' }}>
+                      <AdminAdmissions searchTerm={globalSearch} />
+                    </div>
+                    <div style={{ display: activeTab === 'students' ? undefined : 'none' }}>
+                      <AdminStudents role={role || 'admin'} />
+                    </div>
+                    <div style={{ display: activeTab === 'calendar' ? undefined : 'none' }}>
+                      <AdminCalendar />
+                    </div>
+                    {activeTab === 'courses' && <AdminCourses />}
                     {activeTab === 'communications' && renderCommunications()}
                     {activeTab === 'forms' && <AdminForms />}
                     {activeTab === 'settings' && <AdminSettings />}
