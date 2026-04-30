@@ -74,26 +74,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
          * so we display a fast initial UI while the real user object loads.
          */
         const initializeAuth = async () => {
-            // Step 1: fast local check
-            const { data: { session: localSession } } = await supabase.auth.getSession();
-            if (!mountedRef.current) return;
-
-            if (localSession?.user) {
-                // Immediately set what we have so the UI isn't blocked
-                setSession(localSession);
-                setUser(localSession.user);
-
-                // Step 2: resolve role (may need a network round-trip)
-                const resolvedRole = await resolveRole(localSession.user.id);
+            try {
+                // Step 1: fast local check
+                const { data: { session: localSession }, error } = await supabase.auth.getSession();
+                if (error) throw error;
                 if (!mountedRef.current) return;
-                setRole(resolvedRole);
-            } else {
+
+                if (localSession?.user) {
+                    // Immediately set what we have so the UI isn't blocked
+                    setSession(localSession);
+                    setUser(localSession.user);
+
+                    // Step 2: resolve role (may need a network round-trip)
+                    const resolvedRole = await resolveRole(localSession.user.id);
+                    if (!mountedRef.current) return;
+                    setRole(resolvedRole);
+                } else {
+                    setSession(null);
+                    setUser(null);
+                    setRole(null);
+                }
+            } catch (err) {
+                console.error("Error in initializeAuth:", err);
                 setSession(null);
                 setUser(null);
                 setRole(null);
+            } finally {
+                if (mountedRef.current) {
+                    setIsLoading(false);
+                }
             }
-
-            setIsLoading(false);
         };
 
         initializeAuth();
