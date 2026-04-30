@@ -1,13 +1,15 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Login from '@/src/features/auth/Login'
 import { supabase } from '@/src/services/supabaseClient'
 
 export default function LoginPage() {
-  const router = useRouter()
+  const router       = useRouter()
+  const searchParams = useSearchParams()
   const [checking, setChecking] = useState(true)
+  const passwordSet  = searchParams.get('message') === 'password_set'
 
   const checkRoleAndRedirect = async (userId: string) => {
     try {
@@ -60,6 +62,11 @@ export default function LoginPage() {
 
   return (
     <div className="w-full max-w-md mx-auto">
+      {passwordSet && (
+        <div className="mb-4 bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-medium px-4 py-3 rounded-lg text-center">
+          ¡Contraseña creada! Ya podés iniciar sesión.
+        </div>
+      )}
       <Login
         onLoginSuccess={handleLoginSuccess}
         onBack={() => router.push('/')}
