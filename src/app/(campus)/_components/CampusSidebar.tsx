@@ -2,13 +2,13 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   IoHomeOutline, IoBookOutline, IoCalendarOutline,
-  IoPeopleOutline, IoPersonOutline, IoLogOutOutline,
+  IoPeopleOutline, IoLogOutOutline,
   IoMenuOutline, IoCloseOutline,
 } from 'react-icons/io5';
-import { createClient } from '@/utils/supabase/client';
+import { logoutAction } from '../perfil/actions';
 
 export interface SidebarProfile {
   firstName: string;
@@ -100,19 +100,7 @@ function ProfileFooter({
 
 export default function CampusSidebar({ profile }: { profile: SidebarProfile }) {
   const pathname = usePathname();
-  const router   = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const handleLogout = async () => {
-    try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error);
-    } finally {
-      window.location.href = '/auth/login';
-    }
-  };
 
   return (
     <>
@@ -125,7 +113,7 @@ export default function CampusSidebar({ profile }: { profile: SidebarProfile }) 
           <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-medium">Campus</p>
         </div>
         <NavLinks pathname={pathname} />
-        <ProfileFooter profile={profile} pathname={pathname} onLogout={handleLogout} />
+        <ProfileFooter profile={profile} pathname={pathname} onLogout={logoutAction} />
       </aside>
 
       {/* ── Mobile: fixed hamburger ──────────────────────────────────────── */}
@@ -158,7 +146,7 @@ export default function CampusSidebar({ profile }: { profile: SidebarProfile }) 
               profile={profile}
               pathname={pathname}
               onNavigate={() => setMobileOpen(false)}
-              onLogout={handleLogout}
+              onLogout={logoutAction}
             />
           </aside>
           {/* Backdrop */}
