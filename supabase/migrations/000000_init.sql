@@ -913,6 +913,17 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id      ON public.notification
 CREATE INDEX IF NOT EXISTS idx_student_goals_enrollment_id ON public.student_goals(enrollment_id);
 
 -- ---------------------------------------------------------------------------
+-- 6.5 BACKFILL: form_submissions.email desde data->>'email'
+-- AdminStudents y AdminCalendar consultan por la columna indexada con .in('email', ...).
+-- Antes del fix en RegistrationForm.tsx la columna quedaba NULL.
+-- ---------------------------------------------------------------------------
+UPDATE public.form_submissions
+   SET email = LOWER(TRIM(data->>'email'))
+ WHERE email IS NULL
+   AND data ? 'email'
+   AND TRIM(data->>'email') <> '';
+
+-- ---------------------------------------------------------------------------
 -- 7. SEED: Configuración del sitio
 -- ---------------------------------------------------------------------------
 

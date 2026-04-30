@@ -689,12 +689,15 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
         setIsSubmitting(true);
 
         try {
-            // Submit to form_submissions table
+            // Submit to form_submissions table.
+            // Importante: poblar la columna email también (no solo data.email) porque
+            // AdminStudents y AdminCalendar consultan por la columna indexada con .in('email', ...).
             const { error } = await supabase
                 .from('form_submissions')
                 .insert([{
                     form_id: formId,
                     data: formData,
+                    email: (formData.email || '').trim().toLowerCase() || null,
                     status: 'pending'
                 }]);
 
