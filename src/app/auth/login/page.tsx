@@ -31,14 +31,15 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
-    // Si ya hay sesión activa, saltar el login y redirigir según rol
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        checkRoleAndRedirect(session.user.id);
-      } else {
-        setChecking(false)
-      }
-    })
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (session?.user) {
+          checkRoleAndRedirect(session.user.id);
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => setChecking(false));
   }, [router])
 
   // Mostrar pantalla de carga mientras verificamos la sesión

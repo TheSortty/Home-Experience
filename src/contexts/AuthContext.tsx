@@ -9,17 +9,13 @@ interface AuthContextType {
     user: User | null;
     role: 'admin' | 'sysadmin' | null;
     isLoading: boolean;
-    isPasswordRecovery: boolean;
-    setIsPasswordRecovery: (value: boolean) => void;
 }
 
-const AuthContext = createContext<AuthContextType>({ 
-    session: null, 
-    user: null, 
+const AuthContext = createContext<AuthContextType>({
+    session: null,
+    user: null,
     role: null,
     isLoading: true,
-    isPasswordRecovery: false,
-    setIsPasswordRecovery: () => {}
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -27,9 +23,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [user, setUser] = useState<User | null>(null);
     const [role, setRole] = useState<'admin' | 'sysadmin' | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [isPasswordRecovery, setIsPasswordRecovery] = useState(() => {
-        return typeof window !== 'undefined' && window.location.hash.includes('type=recovery');
-    });
 
     // Use ref to avoid stale closure: always holds latest role/session state
     const mountedRef = useRef(true);
@@ -125,10 +118,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return;
             }
 
-            if (event === 'PASSWORD_RECOVERY') {
-                setIsPasswordRecovery(true);
-            }
-
             // TOKEN_REFRESHED: just update the session/user object.
             // The role NEVER changes during a token refresh — re-fetching it
             // caused a brief role=null window that blanked the dashboard.
@@ -170,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     return (
-        <AuthContext.Provider value={{ session, user, role, isLoading, isPasswordRecovery, setIsPasswordRecovery }}>
+        <AuthContext.Provider value={{ session, user, role, isLoading }}>
             {children}
         </AuthContext.Provider>
     );

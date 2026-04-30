@@ -78,8 +78,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
     setError('');
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        // /auth/callback will exchange the recovery code, then redirect to dashboard
-        redirectTo: `${window.location.origin}/auth/callback?next=/admin/dashboard`
+        redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
       });
       if (error) {
         setError('Error al enviar el correo de recuperación.');
