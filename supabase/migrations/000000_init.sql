@@ -133,6 +133,19 @@ CREATE TABLE IF NOT EXISTS public.attendance (
     CONSTRAINT attendance_date_or_session_check CHECK (date IS NOT NULL OR cycle_session_id IS NOT NULL)
 );
 
+-- UNIQUE necesario para que el upsert con onConflict 'enrollment_id, cycle_session_id' funcione
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = 'public' AND indexname = 'attendance_enrollment_session_unique'
+    ) THEN
+        CREATE UNIQUE INDEX attendance_enrollment_session_unique
+            ON public.attendance(enrollment_id, cycle_session_id)
+            WHERE cycle_session_id IS NOT NULL;
+    END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.student_goals (
     id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     enrollment_id    UUID NOT NULL REFERENCES public.enrollments(id) ON DELETE CASCADE,
@@ -499,6 +512,7 @@ BEGIN
 
     RETURN jsonb_build_object(
         'success',       true,
+        'user_id',       v_profile_id,  -- alias por compatibilidad: representa profiles.id (enrollments.user_id FK)
         'profile_id',    v_profile_id,
         'enrollment_id', v_enrollment_id,
         'cycle_type',    v_cycle_type

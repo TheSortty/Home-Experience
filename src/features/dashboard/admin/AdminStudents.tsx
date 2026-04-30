@@ -151,9 +151,11 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
             const { data: { user } } = await supabase.auth.getUser();
             const { error } = await supabase.from('profiles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id);
             if (error) throw error;
-            
-            setStudents(prev => prev.map(s => s.id === id ? { ...s, is_deleted: true } : s));
+
+            // Sacarlo del listado actual (la query carga solo is_deleted = viewMode === 'trash')
+            setStudents(prev => prev.filter(s => s.id !== id));
             setSelectedStudent(null);
+            fetchTrashCount();
             toast.success('Movido a papelera');
         } catch (error: any) {
             toast.error('Error al borrar: ' + error.message);
@@ -167,9 +169,11 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
             setIsSubmitting(true);
             const { error } = await supabase.from('profiles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id);
             if (error) throw error;
-            
-            setStudents(prev => prev.map(s => s.id === id ? { ...s, is_deleted: false } : s));
+
+            // Sacarlo del listado actual (la query de papelera carga solo is_deleted = true)
+            setStudents(prev => prev.filter(s => s.id !== id));
             setSelectedStudent(null);
+            fetchTrashCount();
             toast.success('Restaurado correctamente');
         } catch (error: any) {
             toast.error('Error al restaurar: ' + error.message);
