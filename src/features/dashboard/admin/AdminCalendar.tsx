@@ -112,30 +112,56 @@ const AdminCalendar: React.FC = () => {
 
     const handleCreateCycle = async (e: React.FormEvent) => {
         e.preventDefault();
-        const form = e.target as HTMLFormElement;
-        const fd = new FormData(form);
-        await supabase.from('cycles').insert([{
-            name: fd.get('name'), start_date: fd.get('startDate'), end_date: fd.get('endDate'),
-            type: fd.get('type'), capacity: parseInt(fd.get('capacity') as string) || 30, status: 'active', enrolled_count: 0
-        }]);
-        fetchCycles(); setIsCreateModalOpen(false);
+        try {
+            const form = e.target as HTMLFormElement;
+            const fd = new FormData(form);
+            const { error } = await supabase.from('cycles').insert([{
+                name: fd.get('name'), start_date: fd.get('startDate'), end_date: fd.get('endDate'),
+                type: fd.get('type'), capacity: parseInt(fd.get('capacity') as string) || 30, status: 'active', enrolled_count: 0
+            }]);
+            if (error) throw error;
+            fetchCycles(); setIsCreateModalOpen(false);
+            toast.success('Ciclo creado correctamente');
+        } catch (error: any) {
+            toast.error('Error al crear ciclo: ' + error.message);
+        }
     };
 
     const handleSoftDelete = async (id: string) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        await supabase.from('cycles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id);
-        fetchCycles();
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase.from('cycles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id);
+            if (error) throw error;
+            setCycles(prev => prev.filter(c => c.id !== id));
+            toast.success('Movido a papelera');
+            fetchTrashCount();
+        } catch (error: any) {
+            toast.error('Error al borrar: ' + error.message);
+        }
     };
 
     const handleRestore = async (id: string) => {
-        await supabase.from('cycles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id);
-        fetchCycles();
+        try {
+            const { error } = await supabase.from('cycles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id);
+            if (error) throw error;
+            fetchCycles();
+            toast.success('Ciclo restaurado');
+        } catch (error: any) {
+            toast.error('Error al restaurar: ' + error.message);
+        }
     };
 
     const handlePermanentDelete = async () => {
         if (!cycleToDelete) return;
-        await supabase.from('cycles').delete().eq('id', cycleToDelete.id);
-        setIsConfirmDeleteOpen(false); setCycleToDelete(null); fetchCycles();
+        try {
+            const { error } = await supabase.from('cycles').delete().eq('id', cycleToDelete.id);
+            if (error) throw error;
+            setCycles(prev => prev.filter(c => c.id !== cycleToDelete.id));
+            setIsConfirmDeleteOpen(false); setCycleToDelete(null);
+            toast.success('Eliminado definitivamente');
+        } catch (error: any) {
+            toast.error('Error al eliminar: ' + error.message);
+        }
     };
 
     // ─── Fetch Cycle Detail (Students + Sessions + Attendance) ───────────────
@@ -254,64 +280,81 @@ const AdminCalendar: React.FC = () => {
 
     const handleAddSession = async () => {
         if (!newSessionDate || !selectedCycle) return;
-        const { error } = await supabase.from('cycle_sessions').insert([{
-            cycle_id: selectedCycle.id,
-            session_date: newSessionDate,
-            is_mandatory: true
-        }]);
-        if (error) { toast.error('Error: ' + error.message); return; }
-        setNewSessionDate(''); setIsAddingSession(false);
-        openCycleDetail(selectedCycle);
+        try {
+            const { error } = await supabase.from('cycle_sessions').insert([{
+                cycle_id: selectedCycle.id,
+                session_date: newSessionDate,
+                is_mandatory: true
+            }]);
+            if (error) throw error;
+            setNewSessionDate(''); setIsAddingSession(false);
+            openCycleDetail(selectedCycle);
+            toast.success('Sesión agregada');
+        } catch (error: any) {
+            toast.error('Error al agregar sesión: ' + error.message);
+        }
     };
 
     const handleDeleteSession = async (sessionId: string) => {
         if (!selectedCycle) return;
-        await supabase.from('attendance').delete().eq('cycle_session_id', sessionId);
-        await supabase.from('cycle_sessions').delete().eq('id', sessionId);
-        openCycleDetail(selectedCycle);
+        try {
+            const { error: err1 } = await supabase.from('attendance').delete().eq('cycle_session_id', sessionId);
+            if (err1) throw err1;
+            const { error: err2 } = await supabase.from('cycle_sessions').delete().eq('id', sessionId);
+            if (err2) throw err2;
+            openCycleDetail(selectedCycle);
+            toast.success('Sesión eliminada');
+        } catch (error: any) {
+            toast.error('Error al eliminar sesión: ' + error.message);
+        }
     };
 
     // ─── Attendance Toggle ───────────────────────────────────────────────────
 
     const handleAttendanceToggle = async (enrollmentId: string, sessionId: string, desiredStatus: string) => {
-        // Optimistic update
-        setEnrolledStudents(prev => prev.map(s =>
-            s.enrollmentId === enrollmentId
-                ? { ...s, attendanceMap: { ...s.attendanceMap, [sessionId]: desiredStatus } }
-                : s
-        ));
+        try {
+            // Optimistic update
+            setEnrolledStudents(prev => prev.map(s =>
+                s.enrollmentId === enrollmentId
+                    ? { ...s, attendanceMap: { ...s.attendanceMap, [sessionId]: desiredStatus } }
+                    : s
+            ));
 
-        // Save attendance record
-        await supabase.from('attendance').upsert({
-            enrollment_id: enrollmentId,
-            cycle_session_id: sessionId,
-            status: desiredStatus,
-            recorded_at: new Date().toISOString()
-        }, { onConflict: 'enrollment_id, cycle_session_id' });
+            // Save attendance record
+            const { error } = await supabase.from('attendance').upsert({
+                enrollment_id: enrollmentId,
+                cycle_session_id: sessionId,
+                status: desiredStatus,
+                recorded_at: new Date().toISOString()
+            }, { onConflict: 'enrollment_id, cycle_session_id' });
+            if (error) throw error;
 
-        // Linear attendance conflict logic:
-        // For Inicial & Avanzado cycles (is_linear = true), a single absence
-        // triggers enrollment.status = 'conflict'. Reverting to present restores 'active'.
-        // This is handled by the handle_linear_attendance RPC in the database.
-        if (selectedCycle && (selectedCycle.type === 'initial' || selectedCycle.type === 'advanced')) {
-            const { data: rpcResult } = await supabase.rpc('handle_linear_attendance', {
-                p_enrollment_id: enrollmentId,
-                p_session_id: sessionId,
-                p_status: desiredStatus,
-            });
+            // Linear attendance conflict logic:
+            if (selectedCycle && (selectedCycle.type === 'initial' || selectedCycle.type === 'advanced')) {
+                const { data: rpcResult, error: rpcError } = await supabase.rpc('handle_linear_attendance', {
+                    p_enrollment_id: enrollmentId,
+                    p_session_id: sessionId,
+                    p_status: desiredStatus,
+                });
+                if (rpcError) throw rpcError;
 
-            // If RPC changed conflict status, update local student state for immediate UI feedback
-            if (rpcResult?.action === 'marked_conflict') {
-                setEnrolledStudents(prev => prev.map(s =>
-                    s.enrollmentId === enrollmentId ? { ...s, conflictStatus: 'conflict' } : s
-                ));
-                toast.error('⚠️ Alumno marcado en CONFLICTO por ausencia en ciclo lineal.', { duration: 5000 });
-            } else if (rpcResult?.action === 'restored_active') {
-                setEnrolledStudents(prev => prev.map(s =>
-                    s.enrollmentId === enrollmentId ? { ...s, conflictStatus: 'active' } : s
-                ));
-                toast.success('✅ Enrollment restaurado a activo.', { duration: 3000 });
+                // If RPC changed conflict status, update local student state for immediate UI feedback
+                if (rpcResult?.action === 'marked_conflict') {
+                    setEnrolledStudents(prev => prev.map(s =>
+                        s.enrollmentId === enrollmentId ? { ...s, conflictStatus: 'conflict' } : s
+                    ));
+                    toast.error('⚠️ Alumno marcado en CONFLICTO por ausencia en ciclo lineal.', { duration: 5000 });
+                } else if (rpcResult?.action === 'restored_active') {
+                    setEnrolledStudents(prev => prev.map(s =>
+                        s.enrollmentId === enrollmentId ? { ...s, conflictStatus: 'active' } : s
+                    ));
+                    toast.success('✅ Enrollment restaurado a activo.', { duration: 3000 });
+                }
             }
+        } catch (error: any) {
+            toast.error('Error al actualizar asistencia: ' + error.message);
+            // Revertir optimismo (podría ser complejo, lo más fácil es recargar)
+            if (selectedCycle) openCycleDetail(selectedCycle);
         }
     };
 

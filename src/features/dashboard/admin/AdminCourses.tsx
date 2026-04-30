@@ -241,34 +241,49 @@ function LessonModal({
 
   const handleSave = async () => {
     if (!title.trim()) return;
-    setSaving(true);
-    const payload = {
-      title: title.trim(), description: desc.trim() || null,
-      video_url: videoUrl.trim() || null, duration_seconds: Math.round(duration),
-      order_index: order, is_published: published,
-    };
-    const { error } = lesson
-      ? await supabase.from('lessons').update(payload).eq('id', lesson.id)
-      : await supabase.from('lessons').insert({ module_id: moduleId, ...payload });
-    setSaving(false);
-    if (error) { toast.error(`Error: ${error.message}`); return; }
-    toast.success(lesson ? 'Clase actualizada.' : 'Clase creada.');
-    onSaved();
+    try {
+      setSaving(true);
+      const payload = {
+        title: title.trim(), description: desc.trim() || null,
+        video_url: videoUrl.trim() || null, duration_seconds: Math.round(duration),
+        order_index: order, is_published: published,
+      };
+      const { error } = lesson
+        ? await supabase.from('lessons').update(payload).eq('id', lesson.id)
+        : await supabase.from('lessons').insert({ module_id: moduleId, ...payload });
+      if (error) throw error;
+      toast.success(lesson ? 'Clase actualizada.' : 'Clase creada.');
+      onSaved();
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const addResource = async () => {
     if (!newResTitle.trim() || !newResUrl.trim() || !lesson) return;
-    const { data, error } = await supabase.from('lesson_resources').insert({
-      lesson_id: lesson.id, title: newResTitle.trim(), file_url: newResUrl.trim(), type: newResType,
-    }).select().single();
-    if (error) { toast.error('Error al agregar material.'); return; }
-    if (data) { setResources(prev => [...prev, data]); setNewResTitle(''); setNewResUrl(''); }
+    try {
+      const { data, error } = await supabase.from('lesson_resources').insert({
+        lesson_id: lesson.id, title: newResTitle.trim(), file_url: newResUrl.trim(), type: newResType,
+      }).select().single();
+      if (error) throw error;
+      if (data) { setResources(prev => [...prev, data]); setNewResTitle(''); setNewResUrl(''); }
+      toast.success('Material agregado');
+    } catch (err: any) {
+      toast.error('Error al agregar material: ' + err.message);
+    }
   };
 
   const deleteResource = async (id: string) => {
-    const { error } = await supabase.from('lesson_resources').delete().eq('id', id);
-    if (error) { toast.error('Error al eliminar.'); return; }
-    setResources(prev => prev.filter(r => r.id !== id));
+    try {
+      const { error } = await supabase.from('lesson_resources').delete().eq('id', id);
+      if (error) throw error;
+      setResources(prev => prev.filter(r => r.id !== id));
+      toast.success('Material eliminado');
+    } catch (err: any) {
+      toast.error('Error al eliminar: ' + err.message);
+    }
   };
 
   return (
@@ -410,37 +425,71 @@ export default function AdminCourses() {
 
   const deleteCourse = async (id: string) => {
     if (!confirm('¿Eliminar este curso y todo su contenido?')) return;
-    await supabase.from('courses').delete().eq('id', id);
-    setCourses(prev => prev.filter(c => c.id !== id));
-    if (selectedCourse?.id === id) backToList();
+    try {
+      const { error } = await supabase.from('courses').delete().eq('id', id);
+      if (error) throw error;
+      setCourses(prev => prev.filter(c => c.id !== id));
+      if (selectedCourse?.id === id) backToList();
+      toast.success('Curso eliminado');
+    } catch (err: any) {
+      toast.error('Error al eliminar curso: ' + err.message);
+    }
   };
 
   const deleteModule = async (id: string) => {
     if (!confirm('¿Eliminar este módulo y todas sus clases?')) return;
-    await supabase.from('modules').delete().eq('id', id);
-    if (selectedCourse) fetchCourseDetail(selectedCourse);
+    try {
+      const { error } = await supabase.from('modules').delete().eq('id', id);
+      if (error) throw error;
+      setModules(prev => prev.filter(m => m.id !== id));
+      toast.success('Módulo eliminado');
+    } catch (err: any) {
+      toast.error('Error al eliminar módulo: ' + err.message);
+    }
   };
 
   const deleteLesson = async (id: string) => {
     if (!confirm('¿Eliminar esta clase?')) return;
-    await supabase.from('lessons').delete().eq('id', id);
-    if (selectedCourse) fetchCourseDetail(selectedCourse);
+    try {
+      const { error } = await supabase.from('lessons').delete().eq('id', id);
+      if (error) throw error;
+      setLessons(prev => prev.filter(l => l.id !== id));
+      toast.success('Clase eliminada');
+    } catch (err: any) {
+      toast.error('Error al eliminar clase: ' + err.message);
+    }
   };
 
   const toggleLessonPublished = async (lesson: Lesson) => {
-    await supabase.from('lessons').update({ is_published: !lesson.is_published }).eq('id', lesson.id);
-    setLessons(prev => prev.map(l => l.id === lesson.id ? { ...l, is_published: !l.is_published } : l));
+    try {
+      const { error } = await supabase.from('lessons').update({ is_published: !lesson.is_published }).eq('id', lesson.id);
+      if (error) throw error;
+      setLessons(prev => prev.map(l => l.id === lesson.id ? { ...l, is_published: !l.is_published } : l));
+      toast.success('Estado actualizado');
+    } catch (err: any) {
+      toast.error('Error al actualizar estado: ' + err.message);
+    }
   };
 
   const linkCycle = async (cycleId: string) => {
     if (!selectedCourse) return;
-    await supabase.from('cycles').update({ course_id: selectedCourse.id }).eq('id', cycleId);
-    fetchCourseDetail(selectedCourse);
+    try {
+      const { error } = await supabase.from('cycles').update({ course_id: selectedCourse.id }).eq('id', cycleId);
+      if (error) throw error;
+      fetchCourseDetail(selectedCourse);
+    } catch (err: any) {
+      toast.error('Error al vincular: ' + err.message);
+    }
   };
 
   const unlinkCycle = async (cycleId: string) => {
-    await supabase.from('cycles').update({ course_id: null }).eq('id', cycleId);
-    if (selectedCourse) fetchCourseDetail(selectedCourse);
+    try {
+      const { error } = await supabase.from('cycles').update({ course_id: null }).eq('id', cycleId);
+      if (error) throw error;
+      if (selectedCourse) fetchCourseDetail(selectedCourse);
+    } catch (err: any) {
+      toast.error('Error al desvincular: ' + err.message);
+    }
   };
 
   const unlinkedCycles = allCycles.filter(c => c.course_id !== selectedCourse?.id && !linkedCycles.find(lc => lc.id === c.id));

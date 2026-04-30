@@ -103,99 +103,106 @@ const AdminForms: React.FC = () => {
 
     const saveFormSchema = async (newSchema: FormField[]) => {
         if (!selectedFormId) return;
-        const { error } = await supabase
-            .from('forms')
-            .update({ schema: newSchema })
-            .eq('id', selectedFormId);
+        try {
+            const { error } = await supabase
+                .from('forms')
+                .update({ schema: newSchema })
+                .eq('id', selectedFormId);
 
-        if (error) {
-            toast.error('Error guardando formulario');
-        } else {
-            // Update local state
+            if (error) throw error;
             setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, schema: newSchema } : f));
+            toast.success('Formulario guardado');
+        } catch (error: any) {
+            toast.error('Error guardando formulario: ' + error.message);
         }
     };
 
     const handleSoftDeleteForm = async (id: string) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        const { error } = await supabase
-            .from('forms')
-            .update({
-                is_deleted: true,
-                deleted_at: new Date().toISOString(),
-                deleted_by: user?.id || null
-            })
-            .eq('id', id);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase
+                .from('forms')
+                .update({
+                    is_deleted: true,
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: user?.id || null
+                })
+                .eq('id', id);
 
-        if (error) {
-            toast.error('Error al mover a la papelera');
-        } else {
-            fetchForms();
+            if (error) throw error;
+            setForms(prev => prev.map(f => f.id === id ? { ...f, is_deleted: true } : f));
+            toast.success('Movido a papelera');
+            fetchTrashCount(); // Mantiene sincronizado el count
+        } catch (error: any) {
+            toast.error('Error al mover a la papelera: ' + error.message);
         }
     };
 
     const handleRestoreForm = async (id: string) => {
-        const { error } = await supabase
-            .from('forms')
-            .update({
-                is_deleted: false,
-                deleted_at: null,
-                deleted_by: null
-            })
-            .eq('id', id);
+        try {
+            const { error } = await supabase
+                .from('forms')
+                .update({
+                    is_deleted: false,
+                    deleted_at: null,
+                    deleted_by: null
+                })
+                .eq('id', id);
 
-        if (error) {
-            toast.error('Error al restaurar');
-        } else {
-            fetchForms();
+            if (error) throw error;
+            setForms(prev => prev.map(f => f.id === id ? { ...f, is_deleted: false } : f));
+            toast.success('Restaurado correctamente');
+            fetchTrashCount();
+        } catch (error: any) {
+            toast.error('Error al restaurar: ' + error.message);
         }
     };
 
     const handlePermanentDeleteForm = async () => {
         if (!formToDelete) return;
 
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
 
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id) // It should be user_id, but keeping original logic as is just wrapping
+                .single();
 
-        if (profile?.role !== 'admin') {
-            setDeleteError('No tienes permisos suficientes (Admin) para eliminar permanentemente.');
-            return;
-        }
+            if (profile?.role !== 'admin') {
+                setDeleteError('No tienes permisos suficientes (Admin) para eliminar permanentemente.');
+                return;
+            }
 
-        // Protection: Check for submissions
-        const { count, error: countError } = await supabase
-            .from('form_submissions')
-            .select('*', { count: 'exact', head: true })
-            .eq('form_id', formToDelete.id);
+            // Protection: Check for submissions
+            const { count, error: countError } = await supabase
+                .from('form_submissions')
+                .select('*', { count: 'exact', head: true })
+                .eq('form_id', formToDelete.id);
 
-        if (countError) {
-            setDeleteError('Error al verificar respuestas existentes');
-            return;
-        }
+            if (countError) throw countError;
 
-        if (count && count > 0) {
-            setDeleteError(`No se puede eliminar: Este formulario tiene ${count} respuestas asociadas. Debes borrarlas primero para mantener la integridad de los datos.`);
-            return;
-        }
+            if (count && count > 0) {
+                setDeleteError(`No se puede eliminar: Este formulario tiene ${count} respuestas asociadas. Debes borrarlas primero para mantener la integridad de los datos.`);
+                return;
+            }
 
-        const { error } = await supabase
-            .from('forms')
-            .delete()
-            .eq('id', formToDelete.id);
+            const { error } = await supabase
+                .from('forms')
+                .delete()
+                .eq('id', formToDelete.id);
 
-        if (error) {
-            setDeleteError('Error al eliminar definitivamente: ' + error.message);
-        } else {
+            if (error) throw error;
+
+            setForms(prev => prev.filter(f => f.id !== formToDelete.id));
             setIsConfirmDeleteOpen(false);
             setFormToDelete(null);
             setDeleteError(null);
-            fetchForms();
+            toast.success('Eliminado definitivamente');
+        } catch (error: any) {
+            setDeleteError('Error al eliminar definitivamente: ' + error.message);
         }
     };
 

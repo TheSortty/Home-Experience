@@ -97,15 +97,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     const timeoutId = setTimeout(() => abort.abort(), 15_000);
 
     try {
-      const [
-        { count: pendingReviewCount },
-        { count: pendingPaymentCount },
-        { count: activeStudentsCount },
-        { data: activeCyclesData },
-        { data: sessionsData },
-        { data: recentRegs },
-        { data: enrollmentsData },
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('is_deleted', false).abortSignal(abort.signal),
         supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('is_deleted', false).abortSignal(abort.signal),
         supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'active').abortSignal(abort.signal),
@@ -120,6 +112,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         supabase.from('form_submissions').select('id, data, created_at, status').order('created_at', { ascending: false }).limit(6).abortSignal(abort.signal),
         supabase.from('enrollments').select('status, cycle:cycles(type)').abortSignal(abort.signal),
       ]);
+
+      const getRes = (res: any) => res.status === 'fulfilled' ? res.value : { data: null, count: null };
+
+      const pendingReviewCount = getRes(results[0]).count;
+      const pendingPaymentCount = getRes(results[1]).count;
+      const activeStudentsCount = getRes(results[2]).count;
+      const activeCyclesData = getRes(results[3]).data;
+      const sessionsData = getRes(results[4]).data;
+      const recentRegs = getRes(results[5]).data;
+      const enrollmentsData = getRes(results[6]).data;
 
       // Graduation rates
       const calculateRate = (type: string) => {

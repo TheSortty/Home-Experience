@@ -150,43 +150,49 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     };
 
     const handleStatusUpdate = async (reg: Registration, newStatus: string) => {
-        setIsSubmitting(true);
-        // Map UI status back to DB status
-        let dbStatus = 'pending';
-        if (newStatus === 'PENDING_REVIEW') dbStatus = 'pending';
-        if (newStatus === 'PENDING_PAYMENT') dbStatus = 'approved';
-        if (newStatus === 'APPROVED') dbStatus = 'enrolled';
-        if (newStatus === 'REJECTED') dbStatus = 'rejected';
+        try {
+            setIsSubmitting(true);
+            // Map UI status back to DB status
+            let dbStatus = 'pending';
+            if (newStatus === 'PENDING_REVIEW') dbStatus = 'pending';
+            if (newStatus === 'PENDING_PAYMENT') dbStatus = 'approved';
+            if (newStatus === 'APPROVED') dbStatus = 'enrolled';
+            if (newStatus === 'REJECTED') dbStatus = 'rejected';
 
-        const { error } = await supabase
-            .from('form_submissions')
-            .update({ status: dbStatus })
-            .eq('id', reg.id);
+            const { error } = await supabase
+                .from('form_submissions')
+                .update({ status: dbStatus })
+                .eq('id', reg.id);
 
-        if (error) {
-            toast.error('Error updating status');
-        } else {
-            await fetchRegistrations();
+            if (error) throw error;
+            
+            // Optimistic update
+            setRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, status: newStatus as any } : r));
             setSelectedRegistration(null);
+            toast.success('Estado actualizado');
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error al actualizar estado: ' + error.message);
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
 
     const handleSoftDelete = async (reg: Registration) => {
-        setIsSubmitting(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        const { error } = await supabase
-            .from('form_submissions')
-            .update({
-                is_deleted: true,
-                deleted_at: new Date().toISOString(),
-                deleted_by: user?.id || null
-            })
-            .eq('id', reg.id);
+        try {
+            setIsSubmitting(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase
+                .from('form_submissions')
+                .update({
+                    is_deleted: true,
+                    deleted_at: new Date().toISOString(),
+                    deleted_by: user?.id || null
+                })
+                .eq('id', reg.id);
 
-        if (error) {
-            toast.error('Error al mover a la papelera');
-        } else {
+            if (error) throw error;
+
             if (user) {
                 await supabase.from('activity_logs').insert({
                     user_id: user.id,
@@ -197,56 +203,70 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                     }
                 });
             }
-            await fetchRegistrations();
+            
+            setRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, is_deleted: true } : r));
             setSelectedRegistration(null);
+            toast.success('Enviado a papelera');
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error al mover a la papelera: ' + error.message);
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
 
     const handleRestore = async (id: string) => {
-        const { error } = await supabase
-            .from('form_submissions')
-            .update({
-                is_deleted: false,
-                deleted_at: null,
-                deleted_by: null,
-                status: 'pending'
-            })
-            .eq('id', id);
+        try {
+            setIsSubmitting(true);
+            const { error } = await supabase
+                .from('form_submissions')
+                .update({
+                    is_deleted: false,
+                    deleted_at: null,
+                    deleted_by: null,
+                    status: 'pending'
+                })
+                .eq('id', id);
 
-        if (error) {
-            toast.error('Error al restaurar');
-        } else {
-            fetchRegistrations();
+            if (error) throw error;
+            
+            setRegistrations(prev => prev.map(r => r.id === id ? { ...r, is_deleted: false, status: 'PENDING_REVIEW' } : r));
             setSelectedRegistration(null);
+            toast.success('Restaurado correctamente');
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error al restaurar: ' + error.message);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
     const handlePermanentDelete = async () => {
         if (!registrationToDelete) return;
 
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        try {
+            setIsSubmitting(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
 
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('user_id', user.id)
-            .single();
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('user_id', user.id)
+                .single();
 
-        if (profile?.role !== 'admin' && profile?.role !== 'sysadmin') {
-            toast.error('No tienes permisos suficientes para eliminar permanentemente.');
-            return;
-        }
+            if (profile?.role !== 'admin' && profile?.role !== 'sysadmin') {
+                toast.error('No tienes permisos suficientes para eliminar permanentemente.');
+                return;
+            }
 
-        const { error } = await supabase
-            .from('form_submissions')
-            .delete()
-            .eq('id', registrationToDelete.id);
+            const { error } = await supabase
+                .from('form_submissions')
+                .delete()
+                .eq('id', registrationToDelete.id);
 
-        if (error) {
-            toast.error('Error al eliminar definitivamente');
-        } else {
+            if (error) throw error;
+
             if (user) {
                 await supabase.from('activity_logs').insert({
                     user_id: user.id,
@@ -257,10 +277,17 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                     }
                 });
             }
+            
+            setRegistrations(prev => prev.filter(r => r.id !== registrationToDelete.id));
             setIsConfirmDeleteOpen(false);
             setRegistrationToDelete(null);
-            setSelectedRegistration(null); // Close the detail modal
-            fetchRegistrations();
+            setSelectedRegistration(null);
+            toast.success('Eliminado definitivamente');
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error al eliminar definitivamente: ' + error.message);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 

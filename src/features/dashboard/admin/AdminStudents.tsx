@@ -143,25 +143,63 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
         fetchTrashCount();
     };
 
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const handleSoftDelete = async (id: string) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        await supabase.from('profiles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id);
-        fetchStudents(); setSelectedStudent(null);
+        try {
+            setIsSubmitting(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase.from('profiles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id);
+            if (error) throw error;
+            
+            setStudents(prev => prev.map(s => s.id === id ? { ...s, is_deleted: true } : s));
+            setSelectedStudent(null);
+            toast.success('Movido a papelera');
+        } catch (error: any) {
+            toast.error('Error al borrar: ' + error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleRestore = async (id: string) => {
-        await supabase.from('profiles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id);
-        fetchStudents(); setSelectedStudent(null);
+        try {
+            setIsSubmitting(true);
+            const { error } = await supabase.from('profiles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id);
+            if (error) throw error;
+            
+            setStudents(prev => prev.map(s => s.id === id ? { ...s, is_deleted: false } : s));
+            setSelectedStudent(null);
+            toast.success('Restaurado correctamente');
+        } catch (error: any) {
+            toast.error('Error al restaurar: ' + error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handlePermanentDelete = async () => {
         if (!studentToDelete) return;
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single();
-      if (!['admin', 'sysadmin', 'super_admin'].includes(profile?.role)) { toast.error('Sin permisos.'); return; }
-        await supabase.from('profiles').delete().eq('id', studentToDelete.id);
-        setIsConfirmDeleteOpen(false); setStudentToDelete(null); setSelectedStudent(null); fetchStudents();
+        try {
+            setIsSubmitting(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single();
+            if (!['admin', 'sysadmin', 'super_admin'].includes(profile?.role)) { toast.error('Sin permisos.'); return; }
+            
+            const { error } = await supabase.from('profiles').delete().eq('id', studentToDelete.id);
+            if (error) throw error;
+
+            setStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
+            setIsConfirmDeleteOpen(false); 
+            setStudentToDelete(null); 
+            setSelectedStudent(null); 
+            toast.success('Eliminado definitivamente');
+        } catch (error: any) {
+            toast.error('Error al eliminar definitivamente: ' + error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const filteredStudents = students.filter(s => {
