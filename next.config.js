@@ -39,7 +39,7 @@ const nextConfig = {
       "script-src-elem 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
 
       // Conexiones: Supabase (REST + Realtime), Google Maps API, Cloudflare Insights reporting
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://cloudflareinsights.com https://static.cloudflareinsights.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://cloudflareinsights.com https://*.cloudflareinsights.com",
 
       // Imágenes: Supabase Storage, Google avatars, YouTube thumbs, Unsplash (cover de cursos), Picsum, Google Maps
       "img-src 'self' data: blob: https://*.supabase.co https://lh3.googleusercontent.com https://img.youtube.com https://images.unsplash.com https://picsum.photos https://maps.gstatic.com https://s3-us-west-2.amazonaws.com",
@@ -55,6 +55,9 @@ const nextConfig = {
 
       // Estilos: propios + Google Fonts CSS + inline (Tailwind)
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+
+      // Workers: Cloudflare service workers
+      "worker-src 'self' blob:",
     ].join('; ')
 
     return [

@@ -255,26 +255,26 @@ const RenderField = memo(({ field, value, error, onChange }: FieldProps) => {
 });
 
 const LoginIntroStep = ({ onNext }: { onNext: () => void }) => (
-    <div className="text-center max-w-2xl mx-auto py-8 animate-fade-in">
-        <h2 className="text-5xl font-serif font-bold text-slate-900 mb-6">Programa CRESER</h2>
-        <p className="text-xl text-slate-600 leading-relaxed mb-12">
+    <div className="text-center max-w-2xl mx-auto py-8 px-4 animate-fade-in">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-bold text-slate-900 mb-6">Programa CRESER</h2>
+        <p className="text-base sm:text-lg md:text-xl text-slate-600 leading-relaxed mb-12">
             Bienvenido/a. Este es el primer paso de tu viaje.<br />
             Por favor, tomate unos minutos para completar esta ficha con tranquilidad.
         </p>
 
-        <div className="bg-blue-50 p-8 rounded-2xl border border-blue-100 mb-12 text-left shadow-sm">
+        <div className="bg-blue-50 p-5 sm:p-8 rounded-2xl border border-blue-100 mb-12 text-left shadow-sm">
             <h3 className="text-lg font-bold text-blue-900 mb-3 flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 Información Importante
             </h3>
-            <p className="text-blue-800/80 text-lg">
+            <p className="text-blue-800/80 text-base sm:text-lg">
                 Tus respuestas son confidenciales y tienen carácter de <strong>declaración jurada</strong>.
             </p>
         </div>
 
-        <button onClick={onNext} className="inline-flex items-center gap-3 px-10 py-5 bg-slate-900 text-white text-xl font-bold rounded-full hover:bg-blue-600 transition-all shadow-xl hover:shadow-2xl transform hover:-translate-y-1">
+        <button onClick={onNext} className="inline-flex items-center gap-3 px-6 sm:px-10 py-4 sm:py-5 bg-slate-900 text-white text-base sm:text-xl font-bold rounded-full hover:bg-blue-600 transition-all shadow-xl hover:shadow-2xl transform hover:-translate-y-1">
             Comenzar Inscripción
-            <ArrowRightIcon className="w-6 h-6" />
+            <ArrowRightIcon className="w-5 h-5 sm:w-6 sm:h-6" />
         </button>
     </div>
 );

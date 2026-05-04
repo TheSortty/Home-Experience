@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/utils/supabase/client';
+import { supabase } from '@/src/services/supabaseClient';
 import { IoLockClosedOutline, IoEyeOutline, IoEyeOffOutline } from 'react-icons/io5';
 import '@/src/features/auth/Login.css';
 
@@ -20,7 +20,6 @@ export default function UpdatePasswordPage() {
 
   // Verificar si hay sesión activa (OTP de invitación ya canjeado en /auth/callback)
   useEffect(() => {
-    const supabase = createClient();
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
         setHasSession(!!session);
@@ -49,7 +48,6 @@ export default function UpdatePasswordPage() {
 
     setLoading(true);
     try {
-      const supabase = createClient();
       const { error: updateError } = await supabase.auth.updateUser({ password });
 
       if (updateError) {

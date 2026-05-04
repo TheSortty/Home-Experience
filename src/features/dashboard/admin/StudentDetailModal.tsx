@@ -547,7 +547,8 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                     ) : isLoadingCheckins ? (
                                         <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-purple-100 border-t-purple-500 rounded-full animate-spin" /></div>
                                     ) : (
-                                        <div className="space-y-3">
+                                        <div className="space-y-3 overflow-x-auto">
+                                          <div className="min-w-[560px] space-y-3">
                                             <div className="grid grid-cols-7 gap-1 text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">
                                                 <span className="col-span-1">Semana</span>
                                                 {GOAL_AREAS.map(a => <span key={a.key} className="text-center">{a.label.slice(0,4)}.</span>)}
@@ -565,7 +566,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                         {isEditing ? (
                                                             <div className="p-4 space-y-3">
                                                                 <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Semana {week} — Ingreso de Porcentajes</p>
-                                                                <div className="grid grid-cols-5 gap-3">
+                                                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                                                                     {GOAL_AREAS.map(area => (
                                                                         <div key={area.key}>
                                                                             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">{area.label}</p>
@@ -602,6 +603,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                     </div>
                                                 );
                                             })}
+                                          </div>
                                         </div>
                                     )}
                                 </div>
@@ -680,16 +682,15 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                         const dictionaries: Record<string, Record<string, string>> = {
                                             'PERSONAL': {
                                                 'firstName': 'Nombre', 'lastName': 'Apellido', 'preferredName': '¿Cómo te llaman?', 'email': 'Correo Electrónico',
-                                                'phone': 'Teléfono', 'age': 'Edad', 'dni': 'DNI', 'city': 'Ciudad',
+                                                'phone': 'Teléfono', 'age': 'Edad', 'dni': 'DNI',
                                                 'address': 'Dirección', 'occupation': 'Ocupación', 'birthDate': 'Fecha de Nac.',
                                                 'gender': 'Género', 'instagram': 'Instagram'
                                             },
                                             'MOTIVACIÓN': {
+                                                'intention': '¿Qué querés llevarte?',
                                                 'dream1': 'Sueño Principal', 'dream2': 'Segundo Sueño', 'dream3': 'Tercer Sueño',
-                                                'dreams': 'Sueños y Aspiraciones', 'intention': '¿Qué querés llevarte?', 'expectations': 'Expectativas del programa',
-                                                'whyNow': '¿Por qué ahora?', 'referral': '¿Cómo nos conociste?',
-                                                'referralChannel': 'Canal de llegada', 'referredBy': '¿Quién te invitó?',
-                                                'goals': 'Metas', 'qualities': 'Cualidades', 'context': 'Contexto actual',
+                                                'referredBy': '¿Quién te invitó?',
+                                                'qualities': 'Cualidades', 'context': 'Contexto actual',
                                                 'dailyRoutine': 'Un día tuyo', 'energyLeaks': 'Fugas de energía', 'lifeHistory': 'Historia de vida'
                                             },
                                             'SALUD': {

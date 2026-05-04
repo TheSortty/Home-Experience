@@ -5,12 +5,29 @@ import {
   IoTimeOutline, IoChevronForwardOutline, IoBookOutline, IoCalendarOutline,
 } from 'react-icons/io5';
 import { createClient } from '@/utils/supabase/server';
+import QuoteOfTheDay from '../_components/QuoteOfTheDay';
 
 const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
 function parseDateLocal(dateStr: string) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
+}
+
+// Saludo según la hora local en Argentina, no la hora del servidor.
+function getGreeting(): string {
+  const hour = parseInt(
+    new Intl.DateTimeFormat('es-AR', {
+      hour: 'numeric',
+      hour12: false,
+      timeZone: 'America/Argentina/Buenos_Aires',
+    }).format(new Date()),
+    10,
+  );
+  if (hour < 6) return 'Estás despierta';
+  if (hour < 12) return 'Buen día';
+  if (hour < 19) return 'Buenas tardes';
+  return 'Buenas noches';
 }
 
 function getYoutubeThumbnail(url: string | null): string | null {
@@ -129,15 +146,16 @@ export default async function CampusDashboardPage() {
     : null;
   const nextSessionLabel = nextSessionDate
     ? `${nextSessionDate.getDate()} ${MONTHS_ES[nextSessionDate.getMonth()]}`
-    : 'Sin eventos';
+    : 'Todavía nada';
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-12">
+    <div className="space-y-8 pb-12">
 
       {/* GREETING */}
-      <section>
-        <h1 className="text-3xl font-bold text-slate-900">Hola, {firstName} 👋</h1>
-        <p className="text-slate-500 mt-1 font-medium">"El éxito es la suma de pequeños esfuerzos repetidos día tras día."</p>
+      <section className="bg-cream rounded-2xl border border-cream-deep p-6 md:p-8">
+        <h1 className="font-serif text-4xl md:text-5xl font-medium tracking-tight text-ink">{getGreeting()}, {firstName}.</h1>
+        <p className="text-slate-600 mt-2 font-medium italic font-serif">¿Con qué llegás hoy?</p>
+        <QuoteOfTheDay />
       </section>
 
       {/* STATS */}
@@ -147,7 +165,7 @@ export default async function CampusDashboardPage() {
             <IoBookOutline size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Cursos Activos</p>
+            <p className="text-sm font-medium text-slate-500">Programas en curso</p>
             <p className="text-2xl font-bold text-slate-900">{activeCoursesCount}</p>
           </div>
         </div>
@@ -157,7 +175,7 @@ export default async function CampusDashboardPage() {
             <IoCheckmarkCircleOutline size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Clases Completadas</p>
+            <p className="text-sm font-medium text-slate-500">Clases atravesadas</p>
             <p className="text-2xl font-bold text-slate-900">{completedCount}</p>
           </div>
         </div>
@@ -167,7 +185,7 @@ export default async function CampusDashboardPage() {
             <IoFlameOutline size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Progreso General</p>
+            <p className="text-sm font-medium text-slate-500">Cuánto recorriste</p>
             <p className="text-2xl font-bold text-slate-900">{overallProgress}%</p>
           </div>
         </div>
@@ -177,7 +195,7 @@ export default async function CampusDashboardPage() {
             <IoTimeOutline size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Próxima Sesión</p>
+            <p className="text-sm font-medium text-slate-500">Próximo encuentro</p>
             <p className="text-base font-bold text-slate-900 truncate">{nextSessionLabel}</p>
           </div>
         </div>
@@ -186,7 +204,7 @@ export default async function CampusDashboardPage() {
       {/* CONTINUE LEARNING */}
       {nextLesson && (
         <section>
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Continuar Aprendiendo</h2>
+          <h2 className="font-serif text-2xl font-medium tracking-tight text-slate-900 mb-4">Por dónde vas</h2>
           <Link
             href={`/cursos/${nextLesson.courseId}/${nextLesson.lessonId}`}
             className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row group hover:shadow-md transition-shadow"
@@ -216,10 +234,10 @@ export default async function CampusDashboardPage() {
                 <span className="text-xs text-slate-400 font-medium">{nextLesson.moduleName}</span>
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">{nextLesson.lessonTitle}</h3>
-              <p className="text-slate-500 text-sm mb-6">Continuá donde lo dejaste.</p>
+              <p className="text-slate-500 text-sm mb-6">Volvé a lo último que dejaste abierto.</p>
               <div className="mt-auto">
                 <div className="flex justify-between text-xs font-medium text-slate-500 mb-2">
-                  <span>Progreso general</span>
+                  <span>Tu recorrido</span>
                   <span>{overallProgress}%</span>
                 </div>
                 <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -237,7 +255,7 @@ export default async function CampusDashboardPage() {
         {/* Programs — 2 cols */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Mis Programas</h2>
+            <h2 className="font-serif text-2xl font-medium tracking-tight text-slate-900">Tus programas</h2>
             <Link href="/cursos" className="text-sm font-medium text-[#00A9CE] hover:underline flex items-center gap-1">
               Ver todos <IoChevronForwardOutline />
             </Link>
@@ -263,7 +281,7 @@ export default async function CampusDashboardPage() {
                         />
                       )}
                       <div className="absolute top-3 right-3 px-2 py-1 bg-white/20 backdrop-blur-md rounded-md text-white text-xs font-bold">
-                        En curso
+                        Cursando
                       </div>
                     </div>
                     <div className="p-4 flex flex-col flex-1">
@@ -273,8 +291,8 @@ export default async function CampusDashboardPage() {
                       )}
                       <div className="mt-auto pt-4 border-t border-slate-100">
                         <div className="flex justify-between text-xs font-medium text-slate-500">
-                          <span>Estado</span>
-                          <span className="text-[#00A9CE]">Activo</span>
+                          <span>En este momento</span>
+                          <span className="text-[#00A9CE]">Lo estás transitando</span>
                         </div>
                       </div>
                     </div>
@@ -282,8 +300,8 @@ export default async function CampusDashboardPage() {
                 );
               })
             ) : (
-              <div className="col-span-2 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-500">
-                Aún no estás inscrito en ningún programa activo.
+              <div className="col-span-2 bg-cream border-2 border-dashed border-cream-deep rounded-xl p-8 text-center text-slate-600 font-serif italic">
+                Cuando arranques tu próximo programa, lo vas a ver acá.
               </div>
             )}
           </div>
@@ -292,7 +310,7 @@ export default async function CampusDashboardPage() {
         {/* Agenda — 1 col */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Agenda Sincrónica</h2>
+            <h2 className="font-serif text-2xl font-medium tracking-tight text-slate-900">Próximos encuentros</h2>
           </div>
 
           {upcomingSessions.length > 0 ? (
@@ -326,14 +344,14 @@ export default async function CampusDashboardPage() {
               })}
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-center text-slate-500 text-sm">
-              No tenés sesiones programadas próximamente.
+            <div className="bg-cream rounded-xl border border-cream-deep p-4 text-center text-slate-600 text-sm font-serif italic">
+              Por ahora, nada en agenda. Te avisamos cuando se sume un encuentro.
             </div>
           )}
 
           <Link href="/calendario" className="flex items-center justify-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors">
             <IoCalendarOutline size={16} />
-            Ver calendario completo
+            Abrir el calendario completo
           </Link>
         </div>
       </div>

@@ -110,9 +110,9 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
   const labelCls = 'block text-sm font-bold text-slate-700 mb-2';
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
-    { id: 'personal', label: 'Datos Personales', icon: IoPersonOutline },
-    { id: 'emergencia', label: 'Emergencia', icon: IoMedicalOutline },
-    { id: 'seguridad', label: 'Seguridad', icon: IoShieldCheckmarkOutline },
+    { id: 'personal', label: 'Quién sos', icon: IoPersonOutline },
+    { id: 'emergencia', label: 'Si pasa algo', icon: IoMedicalOutline },
+    { id: 'seguridad', label: 'Tu acceso', icon: IoShieldCheckmarkOutline },
   ];
 
   return (
@@ -121,11 +121,11 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
       {/* SIDEBAR */}
       <div className="md:col-span-1 space-y-6">
         {/* Avatar card */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 text-center flex flex-col items-center">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-[#00A9CE] to-blue-500 flex items-center justify-center text-white text-3xl font-bold mb-4 shadow-md select-none">
+        <div className="bg-cream rounded-2xl border border-cream-deep p-6 text-center flex flex-col items-center">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-terra to-terra-soft flex items-center justify-center text-white text-3xl font-medium font-serif mb-4 shadow-md select-none">
             {initials}
           </div>
-          <h2 className="text-xl font-bold text-slate-900">{pFirst} {pLast}</h2>
+          <h2 className="font-serif text-2xl font-medium tracking-tight text-slate-900">{pFirst} {pLast}</h2>
           <p className="text-sm text-slate-500 mt-1">{email}</p>
         </div>
 
@@ -154,7 +154,7 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
           {/* ── PERSONAL ── */}
           {activeTab === 'personal' && (
             <>
-              <h3 className="text-lg font-bold text-slate-900">Información Personal</h3>
+              <h3 className="font-serif text-2xl font-medium tracking-tight text-slate-900">Lo básico</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className={labelCls}>Nombre</label>
@@ -186,12 +186,12 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
               </div>
 
               <div>
-                <label className={labelCls}>Sobre mí</label>
+                <label className={labelCls}>De vos</label>
                 <textarea
                   rows={4}
                   value={pBio}
                   onChange={e => setPBio(e.target.value)}
-                  placeholder="Contale a la comunidad sobre vos..."
+                  placeholder="Lo que tengas ganas de contar — una frase, un lugar, una pregunta que te habita..."
                   className={inputCls}
                 />
               </div>
@@ -213,8 +213,8 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
           {/* ── EMERGENCIA ── */}
           {activeTab === 'emergencia' && (
             <>
-              <h3 className="text-lg font-bold text-slate-900">Información de Emergencia</h3>
-              <p className="text-sm text-slate-500 -mt-2">Esta información es confidencial y solo el equipo de CRESER puede verla.</p>
+              <h3 className="font-serif text-2xl font-medium tracking-tight text-slate-900">Por las dudas</h3>
+              <p className="text-sm text-slate-500 -mt-2">Esto queda entre vos y el equipo de CRESER. No lo ve nadie más.</p>
 
               <div className="flex items-center gap-3">
                 <input
@@ -277,8 +277,8 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
           {/* ── SEGURIDAD ── */}
           {activeTab === 'seguridad' && (
             <>
-              <h3 className="text-lg font-bold text-slate-900">Cambiar Contraseña</h3>
-              <p className="text-sm text-slate-500 -mt-2">Mínimo 6 caracteres.</p>
+              <h3 className="font-serif text-2xl font-medium tracking-tight text-slate-900">Cambiar tu contraseña</h3>
+              <p className="text-sm text-slate-500 -mt-2">Mínimo 6 caracteres. Elegí una que recuerdes.</p>
 
               <div>
                 <label className={labelCls}>Nueva contraseña</label>

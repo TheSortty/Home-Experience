@@ -148,7 +148,7 @@ export default async function CursoDetallePage({
   const courseResources = Object.values(resourcesByLesson).flat();
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-12">
+    <div className="space-y-8 pb-12">
 
       {/* BACK */}
       <div>

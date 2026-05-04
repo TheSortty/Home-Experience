@@ -1,14 +1,25 @@
 import React from 'react'
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Fraunces } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import { AuthProviderClient } from './_components/AuthProviderClient'
+import CookieConsent from '@/src/components/CookieConsent'
 
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-inter',
+})
+
+// Fraunces — variable serif for headings. Editorial warmth without feeling
+// corporate; pairs cleanly with Inter for body. Loaded as a CSS variable so
+// Tailwind's font-serif resolves to it everywhere.
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-fraunces',
+  axes: ['SOFT', 'opsz'],
 })
 
 export const metadata: Metadata = {
@@ -28,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" className={`${inter.variable}`}>
+    <html lang="es" className={`${inter.variable} ${fraunces.variable}`}>
       <body className="font-sans antialiased text-slate-900 bg-white">
         <AuthProviderClient>
           <Toaster
@@ -43,6 +54,7 @@ export default function RootLayout({
             }}
           />
           {children}
+          <CookieConsent />
         </AuthProviderClient>
       </body>
     </html>

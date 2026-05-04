@@ -337,9 +337,9 @@ function LessonModal({
                   </button>
                 </div>
               ))}
-              <div className="grid grid-cols-5 gap-2 mt-3">
-                <input className={`col-span-2 ${inputCls}`} value={newResTitle} onChange={e => setNewResTitle(e.target.value)} placeholder="Nombre del material" />
-                <input className={`col-span-2 ${inputCls}`} value={newResUrl} onChange={e => setNewResUrl(e.target.value)} placeholder="URL" />
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mt-3">
+                <input className={`sm:col-span-2 ${inputCls}`} value={newResTitle} onChange={e => setNewResTitle(e.target.value)} placeholder="Nombre del material" />
+                <input className={`sm:col-span-2 ${inputCls}`} value={newResUrl} onChange={e => setNewResUrl(e.target.value)} placeholder="URL" />
                 <select className={inputCls} value={newResType} onChange={e => setNewResType(e.target.value)}>
                   <option value="link">Link</option>
                   <option value="pdf">PDF</option>

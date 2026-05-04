@@ -685,17 +685,16 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                             const dictionaries: Record<string, Record<string, string>> = {
                                                 'PERSONAL': {
                                                     'firstName': 'Nombre', 'lastName': 'Apellido', 'preferredName': 'Nombre Preferido', 'email': 'Correo Electrónico',
-                                                    'phone': 'Teléfono', 'age': 'Edad', 'dni': 'DNI', 'city': 'Ciudad',
+                                                    'phone': 'Teléfono', 'age': 'Edad', 'dni': 'DNI',
                                                     'address': 'Dirección', 'occupation': 'Ocupación', 'birthDate': 'Fecha de Nac.',
                                                     'gender': 'Género', 'instagram': 'Instagram'
                                                 },
                                                 'MOTIVACIÓN': {
+                                                    'intention': 'Intención Principal',
                                                     'dream1': 'Sueño Principal', 'dream2': 'Segundo Sueño', 'dream3': 'Tercer Sueño',
-                                                    'dreams': 'Sueños y Aspiraciones', 'expectations': 'Expectativas del programa',
-                                                    'whyNow': '¿Por qué ahora?', 'referral': '¿Cómo nos conociste?',
-                                                    'referralChannel': 'Canal de llegada', 'referredBy': 'Recomendado por',
-                                                    'goals': 'Metas', 'qualities': 'Cualidades', 'context': 'Contexto actual',
-                                                    'intention': 'Intención Principal', 'energyLeaks': 'Fugas de energía',
+                                                    'referredBy': 'Recomendado por',
+                                                    'qualities': 'Cualidades', 'context': 'Contexto actual',
+                                                    'energyLeaks': 'Fugas de energía',
                                                     'lifeHistory': 'Historia de vida', 'dailyRoutine': 'Rutina diaria'
                                                 },
                                                 'SALUD': {

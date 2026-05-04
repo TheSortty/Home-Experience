@@ -42,27 +42,42 @@ export default async function CampusComunidadPage() {
       courses = Object.values(courseMap);
 
       if (courseIds.length > 0) {
-        // Load all posts (root + replies) for these courses
+        // Load all posts (root + replies) for these courses, joining lesson +
+        // module so we can show the precise "Módulo X · Clase Y" tag instead
+        // of guessing from the body text.
         const { data: rawPosts } = await supabase
           .from('forum_posts')
-          .select('id, course_id, user_id, title, body, parent_id, created_at, profiles(first_name, last_name)')
+          .select(`
+            id, course_id, user_id, title, body, parent_id, created_at, lesson_id,
+            profiles(first_name, last_name),
+            lessons(id, title, order_index, modules(id, title, order_index))
+          `)
           .in('course_id', courseIds)
           .order('created_at', { ascending: true });
 
-        // Build flat list with author names
-        const flat: ForumPost[] = (rawPosts || []).map((p: any) => ({
-          id: p.id,
-          course_id: p.course_id,
-          user_id: p.user_id,
-          author_name: p.profiles
-            ? `${p.profiles.first_name ?? ''} ${p.profiles.last_name ?? ''}`.trim() || 'Estudiante'
-            : 'Estudiante',
-          title: p.title,
-          body: p.body,
-          parent_id: p.parent_id,
-          created_at: p.created_at,
-          replies: [],
-        }));
+        // Build flat list with author + section context
+        const flat: ForumPost[] = (rawPosts || []).map((p: any) => {
+          const lesson = p.lessons;
+          const module = lesson?.modules;
+          return {
+            id: p.id,
+            course_id: p.course_id,
+            user_id: p.user_id,
+            author_name: p.profiles
+              ? `${p.profiles.first_name ?? ''} ${p.profiles.last_name ?? ''}`.trim() || 'Estudiante'
+              : 'Estudiante',
+            title: p.title,
+            body: p.body,
+            parent_id: p.parent_id,
+            created_at: p.created_at,
+            replies: [],
+            lesson_id: p.lesson_id ?? null,
+            lessonTitle: lesson?.title ?? null,
+            lessonOrder: lesson?.order_index ?? null,
+            moduleTitle: module?.title ?? null,
+            moduleOrder: module?.order_index ?? null,
+          };
+        });
 
         // Build tree: attach replies to their parent
         const postMap: Record<string, ForumPost> = {};
@@ -86,8 +101,6 @@ export default async function CampusComunidadPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-12">
-      <ForumClient profileId={profileId} courses={courses} initialPosts={initialPosts} />
-    </div>
+    <ForumClient profileId={profileId} courses={courses} initialPosts={initialPosts} />
   );
 }

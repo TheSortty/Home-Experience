@@ -247,8 +247,8 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto">
-                    <table className="formal-table">
+                <div className="flex-1 overflow-auto">
+                    <table className="formal-table min-w-[640px]">
                         <thead>
                             <tr>
                                 <th>Alumno</th>

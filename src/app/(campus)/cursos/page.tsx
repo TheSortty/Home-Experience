@@ -12,21 +12,21 @@ const GRADIENTS = [
 function StatusBadge({ status, progress }: { status: string; progress: number }) {
   if (status === 'completed' || progress === 100) {
     return (
-      <span className="px-2.5 py-1 bg-emerald-500/20 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1">
-        <IoCheckmarkCircleOutline size={12} /> Completado
+      <span className="px-2.5 py-1 bg-terra/30 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+        <IoCheckmarkCircleOutline size={12} /> Atravesado
       </span>
     );
   }
   if (progress > 0) {
     return (
       <span className="px-2.5 py-1 bg-[#00A9CE]/20 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1">
-        <IoPlayCircleOutline size={12} /> En curso
+        <IoPlayCircleOutline size={12} /> En camino
       </span>
     );
   }
   return (
     <span className="px-2.5 py-1 bg-white/20 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider">
-      Sin iniciar
+      Por empezar
     </span>
   );
 }
@@ -201,20 +201,20 @@ export default async function CampusCursosPage({
       : courses.filter((c) => c.enrollmentStatus !== 'completed' && c.progressPercent < 100);
 
   const tabs = [
-    { id: 'activos', label: 'Activos' },
-    { id: 'completados', label: 'Completados' },
+    { id: 'activos', label: 'En camino' },
+    { id: 'completados', label: 'Atravesados' },
     { id: 'todos', label: 'Todos' },
   ] as const;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-12">
+    <div className="space-y-8 pb-12">
 
       {/* HEADER */}
       <section className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Mis Programas</h1>
-          <p className="text-slate-500 mt-1 font-medium">
-            Gestioná tus cursos y seguí tu progreso de aprendizaje.
+          <h1 className="font-serif text-4xl md:text-5xl font-medium tracking-tight text-slate-900">Tu camino</h1>
+          <p className="text-slate-500 mt-2 font-medium">
+            Todo lo que estás transitando, en un solo lugar.
           </p>
         </div>
 
@@ -238,9 +238,9 @@ export default async function CampusCursosPage({
       {/* GRID */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filtered.length === 0 ? (
-          <div className="col-span-3 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
-            <IoBookOutline size={40} className="mx-auto text-slate-300 mb-3" />
-            <p className="text-slate-500 font-medium">No hay programas en esta categoría.</p>
+          <div className="col-span-3 bg-cream border-2 border-dashed border-cream-deep rounded-2xl p-12 text-center">
+            <IoBookOutline size={40} className="mx-auto text-terra-soft mb-3" />
+            <p className="text-slate-600 font-serif italic">Por ahora no hay nada en esta categoría.</p>
           </div>
         ) : (
           filtered.map((course, idx) => {
@@ -266,7 +266,7 @@ export default async function CampusCursosPage({
                     {!course.hasLms && (
                       <div className="absolute bottom-3 left-3 flex items-center gap-1.5 text-white/80 text-xs font-medium">
                         <IoCalendarOutline size={14} />
-                        Programa sincrónico
+                        Encuentros en vivo
                       </div>
                     )}
                   </div>
@@ -299,9 +299,9 @@ export default async function CampusCursosPage({
                           </div>
                         </>
                       ) : course.hasLms ? (
-                        <p className="text-xs text-slate-400 font-medium">Contenido próximamente</p>
+                        <p className="text-xs text-slate-400 font-medium">Las clases llegan en breve</p>
                       ) : (
-                        <p className="text-xs text-slate-400 font-medium">Ver sesiones en calendario →</p>
+                        <p className="text-xs text-slate-400 font-medium">Tus encuentros en el calendario →</p>
                       )}
                     </div>
                   </div>
@@ -312,14 +312,14 @@ export default async function CampusCursosPage({
         )}
 
         {/* Discover more */}
-        <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center p-8 text-center hover:bg-slate-100 hover:border-slate-400 transition-colors cursor-pointer">
-          <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm mb-4">
+        <div className="rounded-2xl border-2 border-dashed border-cream-deep bg-cream flex flex-col items-center justify-center p-8 text-center hover:bg-cream-deep hover:border-terra-soft transition-colors cursor-pointer">
+          <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-terra shadow-sm mb-4">
             <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 512 512" height="28px" width="28px" xmlns="http://www.w3.org/2000/svg">
               <path fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32" d="M256 112v288m144-144H112" />
             </svg>
           </div>
-          <h3 className="font-bold text-slate-900 mb-2">Descubrí más programas</h3>
-          <p className="text-sm text-slate-500">Explorá nuestro catálogo y continuá tu camino.</p>
+          <h3 className="font-serif text-2xl font-medium tracking-tight text-ink mb-2">¿Qué sigue?</h3>
+          <p className="text-sm text-slate-600">Mirá los demás programas y elegí por dónde seguir.</p>
         </div>
       </section>
     </div>

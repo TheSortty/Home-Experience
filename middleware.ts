@@ -71,9 +71,12 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     error,
   } = await supabase.auth.getUser()
 
-  const isAdminRoute = request.nextUrl.pathname.startsWith('/admin')
-  const isCampusRoute = ['/dashboard', '/cursos', '/comunidad', '/calendario', '/perfil'].some(path => request.nextUrl.pathname.startsWith(path))
-  const isLoginRoute = request.nextUrl.pathname.startsWith('/auth/login')
+  const pathname = request.nextUrl.pathname
+  // Match exact prefix or prefix followed by '/' so /cursos-archivados doesn't match /cursos.
+  const matchesPrefix = (prefix: string) => pathname === prefix || pathname.startsWith(prefix + '/')
+  const isAdminRoute = matchesPrefix('/admin')
+  const isCampusRoute = ['/dashboard', '/cursos', '/comunidad', '/calendario', '/perfil'].some(matchesPrefix)
+  const isLoginRoute = matchesPrefix('/auth/login')
 
   // Step 3: Guard /admin and campus routes — redirect to login if no valid user.
   if ((isAdminRoute || isCampusRoute) && (error || !user)) {

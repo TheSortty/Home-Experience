@@ -35,11 +35,11 @@ export default async function CampusPerfilPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
       <section className="border-b border-slate-200 pb-6">
-        <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
-          <IoPersonOutline className="text-[#00A9CE]" /> Mi Perfil
+        <h1 className="font-serif text-4xl md:text-5xl font-medium tracking-tight text-slate-900 flex items-center gap-3">
+          <IoPersonOutline className="text-[#00A9CE] shrink-0" /> Tu espacio
         </h1>
-        <p className="text-slate-500 mt-1 font-medium">
-          Gestioná tu información personal y preferencias.
+        <p className="text-slate-500 mt-2 font-medium">
+          Lo que querés que sepamos de vos.
         </p>
       </section>
 

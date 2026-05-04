@@ -8,6 +8,7 @@ import CalendarIcon from '../../ui/icons/CalendarIcon';
 import SettingsIcon from '../../ui/icons/SettingsIcon';
 import DocumentIcon from '../../ui/icons/DocumentIcon';
 import MailIcon from '../../ui/icons/MailIcon';
+import { IoMenuOutline, IoCloseOutline } from 'react-icons/io5';
 import { supabase } from '../../services/supabaseClient';
 import AdminCalendar from './admin/AdminCalendar';
 import AdminStudents from './admin/AdminStudents';
@@ -48,8 +49,27 @@ interface UpcomingSession {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTest }) => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [globalSearch, setGlobalSearch] = useState('');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { role, user, isLoading: isLoadingAuth } = useAuth();
   const userEmail = user?.email || '';
+  const isAdmin = role === 'admin' || role === 'sysadmin';
+
+  // ─── Admin Guard: redirect unauthorized users ───────────────────────────────
+  // Uses window.location.href (full navigation) instead of router.replace()
+  // because client-side RSC navigation fails when the session is gone,
+  // causing "Failed to fetch RSC payload" errors in the console.
+  useEffect(() => {
+    if (isLoadingAuth) return; // still resolving — wait
+
+    if (!user) {
+      // Signed out or no session → go to login
+      window.location.href = '/auth/login';
+    } else if (!isAdmin) {
+      // Logged in but not admin/sysadmin → go to student dashboard
+      console.warn('[AdminDashboard] User is not admin, redirecting. Role:', role);
+      window.location.href = '/dashboard';
+    }
+  }, [isLoadingAuth, user, isAdmin, role]);
 
   const [stats, setStats] = useState<DashboardStats>({
     pendingAdmissions: 0,
@@ -457,21 +477,48 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
   // ─── Render ──────────────────────────────────────────────────────────────────
 
+  // Close the mobile sidebar whenever the user picks a tab
+  const handleSelectTab = (tab: Tab) => {
+    setActiveTab(tab);
+    setMobileSidebarOpen(false);
+  };
+
   return (
     <div className="flex h-screen admin-reboot-container overflow-hidden">
 
-      {/* Sidebar */}
-      <aside className="formal-sidebar flex flex-col flex-shrink-0 z-20">
-        <div className="p-8 border-b border-white/5">
-          <h1 className="text-2xl font-bold tracking-tight text-white">HOME <span className="text-blue-500">.</span></h1>
-          <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-[0.2em]">Management System</p>
+      {/* Mobile backdrop */}
+      {mobileSidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-30"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — fixed/overlay on mobile, static on md+ */}
+      <aside
+        className={`formal-sidebar flex flex-col flex-shrink-0 z-40 fixed md:static inset-y-0 left-0 transform transition-transform duration-200 ease-out ${
+          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
+        <div className="p-8 border-b border-white/5 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">HOME <span className="text-blue-500">.</span></h1>
+            <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-[0.2em]">Management System</p>
+          </div>
+          <button
+            onClick={() => setMobileSidebarOpen(false)}
+            className="md:hidden p-2 -mr-2 text-slate-400 hover:text-white"
+            aria-label="Cerrar menú"
+          >
+            <IoCloseOutline size={22} />
+          </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-6 space-y-1">
           {adminItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id as Tab)}
+              onClick={() => handleSelectTab(item.id as Tab)}
               className={`w-[calc(100%-24px)] flex items-center gap-3 px-4 py-2.5 mx-3 rounded-sm text-sm font-medium transition-all group ${
                 activeTab === item.id
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
@@ -498,7 +545,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
               {sysadminItems.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id as Tab)}
+                  onClick={() => handleSelectTab(item.id as Tab)}
                   className={`w-[calc(100%-24px)] flex items-center gap-3 px-4 py-2.5 mx-3 rounded-sm text-sm font-medium transition-all group ${
                     activeTab === item.id
                       ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
@@ -530,9 +577,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
         {/* Top Bar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 flex-shrink-0 z-10">
-          <div className="flex items-center gap-6 flex-1">
-            <div className="formal-search-container max-w-sm">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 flex-shrink-0 z-10 gap-3">
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className="md:hidden p-2 -ml-2 text-slate-600 hover:text-slate-900"
+            aria-label="Abrir menú"
+          >
+            <IoMenuOutline size={24} />
+          </button>
+
+          <div className="flex items-center gap-6 flex-1 min-w-0">
+            <div className="formal-search-container max-w-sm hidden sm:flex">
               <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
@@ -551,9 +606,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="flex flex-col items-end">
-              <span className="text-sm font-bold text-slate-900 leading-none">{userEmail || 'Admin User'}</span>
+          <div className="flex items-center gap-3 md:gap-6 shrink-0">
+            <div className="hidden sm:flex flex-col items-end">
+              <span className="text-sm font-bold text-slate-900 leading-none truncate max-w-[180px]">{userEmail || 'Admin User'}</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase mt-1 ${
                 role === 'sysadmin' ? 'bg-blue-100 text-blue-600 border border-blue-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
               }`}>
@@ -567,10 +622,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-[#f8fafc] p-10">
+        <div className="flex-1 overflow-y-auto bg-[#f8fafc] p-4 sm:p-6 md:p-10">
           <div className="max-w-7xl mx-auto pb-20">
-            <div className="mb-10">
-              <h2 className="text-2xl font-bold text-slate-900">
+            <div className="mb-6 md:mb-10">
+              <h2 className="text-xl md:text-2xl font-bold text-slate-900">
                 {[...adminItems, ...sysadminItems].find(i => i.id === activeTab)?.label}
               </h2>
               <div className="flex items-center gap-2 mt-2">
@@ -580,9 +635,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
               </div>
             </div>
 
-            {isLoadingAuth ? (
+            {(isLoadingAuth || !isAdmin) ? (
               <div className="flex items-center justify-center h-64">
-                <div className="w-12 h-12 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin" />
+                {!isLoadingAuth && !isAdmin ? (
+                  <div className="text-center p-8 formal-card inline-block max-w-md w-full border-t-4 border-t-amber-400">
+                    <h2 className="text-xl font-bold text-slate-900 mb-2">Acceso Restringido</h2>
+                    <p className="text-sm text-slate-500 mb-4">Tu cuenta no tiene permisos de administrador. Redirigiendo...</p>
+                    <div className="w-6 h-6 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin mx-auto" />
+                  </div>
+                ) : (
+                  <div className="w-12 h-12 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin" />
+                )}
               </div>
             ) : (
               <>
