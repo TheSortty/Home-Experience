@@ -225,33 +225,47 @@ export default function LessonViewer({
                 <p className="text-slate-400 italic">No hay materiales adjuntos para esta clase.</p>
               ) : (
                 <ul className="space-y-3">
-                  {resources.map((r) => (
-                    <li key={r.id}>
-                      <button
-                        onClick={() => trackAndOpen(r.id, r.file_url)}
-                        className="w-full flex items-center gap-4 group p-4 border border-slate-200 rounded-xl hover:border-[#00A9CE] hover:shadow-sm transition-all bg-white text-left"
-                      >
-                        <div
-                          className={`p-3 rounded-lg transition-colors shrink-0 ${
-                            r.type === 'pdf'
-                              ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white'
-                              : 'bg-blue-50 text-blue-500 group-hover:bg-blue-500 group-hover:text-white'
-                          }`}
+                  {resources.map((r) => {
+                    const url = r.file_url.toLowerCase();
+                    let iconColor = 'bg-blue-50 text-blue-500 group-hover:bg-blue-500 group-hover:text-white';
+                    let typeLabel = r.type;
+
+                    if (url.endsWith('.pdf') || r.type === 'pdf') {
+                      iconColor = 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white';
+                      typeLabel = 'PDF';
+                    } else if (url.endsWith('.doc') || url.endsWith('.docx')) {
+                      iconColor = 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white';
+                      typeLabel = 'Word';
+                    } else if (url.endsWith('.xls') || url.endsWith('.xlsx') || url.endsWith('.csv')) {
+                      iconColor = 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white';
+                      typeLabel = 'Planilla';
+                    } else if (url.endsWith('.ppt') || url.endsWith('.pptx')) {
+                      iconColor = 'bg-orange-50 text-orange-600 group-hover:bg-orange-600 group-hover:text-white';
+                      typeLabel = 'Presentación';
+                    }
+
+                    return (
+                      <li key={r.id}>
+                        <button
+                          onClick={() => trackAndOpen(r.id, r.file_url)}
+                          className="w-full flex items-center gap-4 group p-4 border border-slate-200 rounded-xl hover:border-[#00A9CE] hover:shadow-sm transition-all bg-white text-left"
                         >
-                          <IoDocumentTextOutline size={24} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-900 group-hover:text-[#00A9CE] transition-colors truncate">
-                            {r.title}
-                          </p>
-                          <p className="text-xs text-slate-500 capitalize">{r.type}</p>
-                        </div>
-                        <span className="text-xs font-bold text-[#00A9CE] bg-[#00A9CE]/10 px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hidden md:block shrink-0">
-                          Abrir
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                          <div className={`p-3 rounded-lg transition-colors shrink-0 ${iconColor}`}>
+                            <IoDocumentTextOutline size={24} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-900 group-hover:text-[#00A9CE] transition-colors truncate">
+                              {r.title}
+                            </p>
+                            <p className="text-xs text-slate-500 capitalize">{typeLabel}</p>
+                          </div>
+                          <span className="text-xs font-bold text-[#00A9CE] bg-[#00A9CE]/10 px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hidden md:block shrink-0">
+                            Abrir
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

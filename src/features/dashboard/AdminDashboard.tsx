@@ -233,7 +233,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   };
 
   const formatSessionDate = (dateStr: string) => {
-    const d = new Date(dateStr + 'T12:00:00');
+    const d = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const diff = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     return {
@@ -323,12 +323,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
             ) : recentActivity.length === 0 ? (
               <p className="text-slate-400 italic py-8 text-center text-sm">No hay actividad reciente.</p>
             ) : (
-              recentActivity.map((activity, idx) => {
+              recentActivity.map((activity) => {
                 const { label: statusLabel, cls: statusCls } = getStatusLabel(activity.status);
                 return (
-                  <div key={idx} className="flex items-center gap-3 py-3.5 hover:bg-slate-50 transition-colors cursor-pointer px-2 rounded-sm" onClick={() => setActiveTab('admissions')}>
+                  <div key={activity.id} className="flex items-center gap-3 py-3.5 hover:bg-slate-50 transition-colors cursor-pointer px-2 rounded-sm" onClick={() => setActiveTab('admissions')}>
                     <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs flex-shrink-0">
-                      {activity.name.charAt(0).toUpperCase()}
+                      {(activity.name || '?').charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-800 truncate">{activity.name}</p>
@@ -371,12 +371,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                 )}
               </div>
             ) : (
-              upcomingSessions.map((session, idx) => {
+              upcomingSessions.map((session) => {
                 const { label, dateFormatted, isUrgent } = formatSessionDate(session.sessionDate);
                 const typeInfo = getCycleTypeInfo(session.cycleType);
                 return (
                   <div
-                    key={idx}
+                    key={`${session.cycleId}-${session.sessionDate}`}
                     onClick={() => setActiveTab('calendar')}
                     className={`p-3 rounded-sm border cursor-pointer hover:shadow-sm transition-all ${isUrgent ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-100 hover:border-blue-200'}`}
                   >
@@ -547,6 +547,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         </nav>
 
         <div className="p-6 border-t border-white/5 bg-black/20 space-y-3">
+          <a href="/dashboard?preview=true" target="_blank" rel="noopener noreferrer" className="w-full flex items-center gap-3 px-4 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest text-blue-400 border border-blue-400/20 hover:bg-blue-400/10 transition-all group">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            Vista Previa (Alumno)
+          </a>
           <a href="/" className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
             <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -602,7 +609,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
               </span>
             </div>
             <div className="w-10 h-10 rounded-sm bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200 shadow-sm uppercase">
-              {userEmail ? userEmail.substring(0, 2) : 'AD'}
+              {(userEmail || 'Admin').substring(0, 2).toUpperCase()}
             </div>
           </div>
         </header>

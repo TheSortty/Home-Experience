@@ -18,9 +18,6 @@ export default async function CampusLayout({ children }: { children: React.React
   if (!user) redirect('/auth/login');
 
   const role = await resolveRole(supabase, user.id);
-  if (isAdminRole(role)) {
-    redirect('/admin/dashboard');
-  }
 
   const { data: profile } = await supabase
     .from('profiles')

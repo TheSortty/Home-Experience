@@ -5,11 +5,13 @@ import {
   IoTimeOutline, IoChevronForwardOutline, IoBookOutline, IoCalendarOutline,
 } from 'react-icons/io5';
 import { createClient } from '@/utils/supabase/server';
+import { resolveRole } from '@/src/services/roleService';
 import QuoteOfTheDay from '../_components/QuoteOfTheDay';
 
 const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
 function parseDateLocal(dateStr: string) {
+  if (!dateStr) return new Date();
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
@@ -38,7 +40,13 @@ function getYoutubeThumbnail(url: string | null): string | null {
   return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
 }
 
-export default async function CampusDashboardPage() {
+export default async function CampusDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { preview } = await searchParams;
+  const isPreview = preview === 'true';
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -59,13 +67,37 @@ export default async function CampusDashboardPage() {
     if (profile?.first_name) firstName = profile.first_name;
 
     if (profile?.id) {
-      const { data: userEnrollments } = await supabase
-        .from('enrollments')
-        .select('id, status, cycles(id, name, course_id, courses(id, title, cover_image_url))')
-        .eq('user_id', profile.id)
-        .eq('status', 'active');
+      const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
+      const canSeeEverything = isAdmin && isPreview;
 
-      enrollments = userEnrollments || [];
+      if (canSeeEverything) {
+        // Fetch all published courses for preview
+        const { data: allCourses } = await supabase
+          .from('courses')
+          .select('id, title, cover_image_url')
+          .eq('is_published', true);
+
+        if (allCourses) {
+          enrollments = allCourses.map(c => ({
+            id: `preview-${c.id}`,
+            status: 'active',
+            cycles: {
+              id: `preview-cycle-${c.id}`,
+              name: 'Ciclo Preview',
+              course_id: c.id,
+              courses: c
+            }
+          }));
+        }
+      } else {
+        const { data: userEnrollments } = await supabase
+          .from('enrollments')
+          .select('id, status, cycles(id, name, course_id, courses(id, title, cover_image_url))')
+          .eq('user_id', profile.id)
+          .eq('status', 'active');
+
+        enrollments = userEnrollments || [];
+      }
 
       const cycleIds = enrollments.map((e: any) => e.cycles?.id).filter(Boolean);
       const courseIds = enrollments.map((e: any) => e.cycles?.course_id).filter(Boolean);

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MockDatabase } from '../services/mockDatabase';
+import { supabase } from '../services/supabaseClient';
 import { Testimonial, TestimonialRole } from '../core/types';
 import StarIcon from './icons/StarIcon';
 
@@ -16,9 +16,28 @@ const TestimonialListModal: React.FC<TestimonialListModalProps> = ({ isVisible, 
     const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
 
     React.useEffect(() => {
-        const allTestimonials = MockDatabase.getTestimonials();
-        const approved = allTestimonials.filter(t => t.status === 'approved');
-        setTestimonials(approved);
+        const fetchTestimonials = async () => {
+            const { data, error } = await supabase
+                .from('testimonials')
+                .select('*')
+                .eq('status', 'approved');
+            
+            if (!error && data) {
+                // Map DB structure to expected type if necessary
+                const mapped = data.map((t: any) => ({
+                    id: t.id,
+                    author: t.author_name,
+                    quote: t.quote,
+                    roles: t.roles || [],
+                    status: t.status,
+                    createdAt: t.created_at
+                }));
+                setTestimonials(mapped);
+            }
+        };
+        if (isVisible) {
+            fetchTestimonials();
+        }
     }, [isVisible]);
 
     const filteredTestimonials = useMemo(() => {

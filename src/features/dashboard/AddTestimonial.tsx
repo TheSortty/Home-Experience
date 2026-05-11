@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import PhotoIcon from '../../ui/icons/PhotoIcon';
 import { TestimonialRole } from '../../core/types';
-import { MockDatabase } from '../../services/mockDatabase';
 import { supabase } from '../../services/supabaseClient';
 import toast from 'react-hot-toast';
 

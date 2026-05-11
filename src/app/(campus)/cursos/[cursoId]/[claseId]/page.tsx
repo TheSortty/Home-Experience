@@ -36,12 +36,15 @@ function formatUnlockDate(iso: string) {
   });
 }
 
-export default async function ClaseDetallePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ cursoId: string; claseId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { cursoId, claseId } = await params;
+  const { preview } = await searchParams;
+  const isPreview = preview === 'true';
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -49,11 +52,14 @@ export default async function ClaseDetallePage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id')
+    .select('id, role')
     .eq('user_id', user.id)
     .single();
 
   if (!profile) notFound();
+
+  const isAdmin = profile.role === 'admin' || profile.role === 'sysadmin';
+  const canPreview = isAdmin && isPreview;
 
   // Verify enrollment
   const { data: courseCycles } = await supabase
@@ -72,7 +78,7 @@ export default async function ClaseDetallePage({
     .in('status', ['active', 'completed'])
     .maybeSingle();
 
-  if (!enrollment) notFound();
+  if (!enrollment && !canPreview) notFound();
 
   // Fetch the lesson (include lifecycle columns)
   const { data: lesson } = await supabase
@@ -274,7 +280,7 @@ export default async function ClaseDetallePage({
 
   // ── Locked gate ───────────────────────────────────────────────────────────
 
-  const isLocked = lesson.status === 'scheduled';
+  const isLocked = lesson.status === 'scheduled' && !canPreview;
 
   return (
     <div className="pb-12">

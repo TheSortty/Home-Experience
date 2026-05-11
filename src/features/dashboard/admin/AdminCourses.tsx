@@ -226,6 +226,7 @@ function LessonModal({
   const [published, setPublished] = useState(lesson?.is_published ?? false);
 
   const [resources, setResources] = useState<LessonResource[]>([]);
+  const [pendingResources, setPendingResources] = useState<{ title: string; url: string; type: string }[]>([]);
   const [newResTitle, setNewResTitle] = useState('');
   const [newResUrl, setNewResUrl] = useState('');
   const [newResType, setNewResType] = useState('link');
@@ -244,14 +245,42 @@ function LessonModal({
     try {
       setSaving(true);
       const payload = {
-        title: title.trim(), description: desc.trim() || null,
-        video_url: videoUrl.trim() || null, duration_seconds: Math.round(duration),
-        order_index: order, is_published: published,
+        title: title.trim(),
+        description: desc.trim() || null,
+        video_url: videoUrl.trim() || null,
+        duration_seconds: Math.round(duration),
+        order_index: order,
+        is_published: published,
       };
-      const { error } = lesson
-        ? await supabase.from('lessons').update(payload).eq('id', lesson.id)
-        : await supabase.from('lessons').insert({ module_id: moduleId, ...payload });
-      if (error) throw error;
+
+      let lessonId = lesson?.id;
+
+      if (lessonId) {
+        const { error } = await supabase.from('lessons').update(payload).eq('id', lessonId);
+        if (error) throw error;
+      } else {
+        const { data: newLesson, error } = await supabase
+          .from('lessons')
+          .insert({ module_id: moduleId, ...payload })
+          .select()
+          .single();
+        if (error) throw error;
+        lessonId = newLesson.id;
+      }
+
+      // Save pending resources if any
+      if (pendingResources.length > 0 && lessonId) {
+        const { error: resError } = await supabase.from('lesson_resources').insert(
+          pendingResources.map(r => ({
+            lesson_id: lessonId,
+            title: r.title,
+            file_url: r.url,
+            type: r.type,
+          }))
+        );
+        if (resError) toast.error('Error al guardar algunos materiales.');
+      }
+
       toast.success(lesson ? 'Clase actualizada.' : 'Clase creada.');
       onSaved();
     } catch (err: any) {
@@ -262,7 +291,16 @@ function LessonModal({
   };
 
   const addResource = async () => {
-    if (!newResTitle.trim() || !newResUrl.trim() || !lesson) return;
+    if (!newResTitle.trim() || !newResUrl.trim()) return;
+
+    if (!lesson) {
+      // Adding to pending list before saving the lesson
+      setPendingResources(prev => [...prev, { title: newResTitle.trim(), url: newResUrl.trim(), type: newResType }]);
+      setNewResTitle('');
+      setNewResUrl('');
+      return;
+    }
+
     try {
       const { data, error } = await supabase.from('lesson_resources').insert({
         lesson_id: lesson.id, title: newResTitle.trim(), file_url: newResUrl.trim(), type: newResType,
@@ -321,40 +359,75 @@ function LessonModal({
             </div>
           </div>
 
-          {/* Resources — only when editing an existing lesson */}
-          {lesson && (
-            <div className="pt-4 border-t border-slate-100">
-              <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-1.5">
-                <IoDocumentTextOutline size={16} /> Materiales de apoyo
-              </h3>
-              {resources.map(r => (
+          {/* Resources */}
+          <div className="pt-4 border-t border-slate-100">
+            <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-1.5">
+              <IoDocumentTextOutline size={16} /> Materiales de apoyo
+            </h3>
+            
+            {/* Existing resources */}
+            {resources.map(r => {
+              const url = r.file_url.toLowerCase();
+              let iconColor = 'text-[#00A9CE]';
+              if (url.endsWith('.pdf') || r.type === 'pdf') iconColor = 'text-red-500';
+              else if (url.endsWith('.doc') || url.endsWith('.docx')) iconColor = 'text-blue-600';
+              else if (url.endsWith('.xls') || url.endsWith('.xlsx') || url.endsWith('.csv')) iconColor = 'text-emerald-600';
+              else if (url.endsWith('.ppt') || url.endsWith('.pptx')) iconColor = 'text-orange-600';
+
+              return (
                 <div key={r.id} className="flex items-center gap-2 mb-2 bg-slate-50 rounded-lg p-2">
-                  <IoLinkOutline size={14} className="text-slate-400 shrink-0" />
-                  <a href={r.file_url} target="_blank" rel="noopener noreferrer" className="flex-1 text-sm text-[#00A9CE] truncate hover:underline">{r.title}</a>
+                  <IoDocumentTextOutline size={14} className={`${iconColor} shrink-0`} />
+                  <a href={r.file_url} target="_blank" rel="noopener noreferrer" className={`flex-1 text-sm ${iconColor} truncate hover:underline`}>{r.title}</a>
                   <span className="text-xs text-slate-400 shrink-0">{r.type}</span>
                   <button onClick={() => deleteResource(r.id)} className="text-red-400 hover:text-red-600 shrink-0">
                     <IoTrashOutline size={14} />
                   </button>
                 </div>
-              ))}
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mt-3">
-                <input className={`sm:col-span-2 ${inputCls}`} value={newResTitle} onChange={e => setNewResTitle(e.target.value)} placeholder="Nombre del material" />
-                <input className={`sm:col-span-2 ${inputCls}`} value={newResUrl} onChange={e => setNewResUrl(e.target.value)} placeholder="URL" />
-                <select className={inputCls} value={newResType} onChange={e => setNewResType(e.target.value)}>
-                  <option value="link">Link</option>
-                  <option value="pdf">PDF</option>
-                  <option value="audio">Audio</option>
-                </select>
-              </div>
-              <button
-                onClick={addResource}
-                disabled={!newResTitle.trim() || !newResUrl.trim()}
-                className="mt-2 flex items-center gap-1 text-xs font-bold text-[#00A9CE] hover:underline disabled:opacity-40"
-              >
-                <IoAddOutline size={14} /> Agregar material
-              </button>
+              );
+            })}
+
+            {/* Pending resources (not yet saved in DB) */}
+            {pendingResources.map((r, idx) => {
+              const url = r.url.toLowerCase();
+              let iconColor = 'text-amber-400';
+              if (url.endsWith('.pdf') || r.type === 'pdf') iconColor = 'text-red-400';
+              else if (url.endsWith('.doc') || url.endsWith('.docx')) iconColor = 'text-blue-400';
+              else if (url.endsWith('.xls') || url.endsWith('.xlsx') || url.endsWith('.csv')) iconColor = 'text-emerald-400';
+              else if (url.endsWith('.ppt') || url.endsWith('.pptx')) iconColor = 'text-orange-400';
+
+              return (
+                <div key={`pending-${idx}`} className="flex items-center gap-2 mb-2 bg-amber-50/50 border border-amber-100 rounded-lg p-2">
+                  <IoDocumentTextOutline size={14} className={`${iconColor} shrink-0`} />
+                  <span className="flex-1 text-sm text-slate-700 truncate">{r.title} <span className="text-[10px] uppercase font-bold text-amber-500 opacity-60">(pendiente)</span></span>
+                  <span className="text-xs text-slate-400 shrink-0">{r.type}</span>
+                  <button onClick={() => setPendingResources(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 shrink-0">
+                    <IoTrashOutline size={14} />
+                  </button>
+                </div>
+              );
+            })}
+
+            {resources.length === 0 && pendingResources.length === 0 && (
+              <p className="text-xs text-slate-400 italic mb-3">No hay materiales todavía.</p>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mt-3">
+              <input className={`sm:col-span-2 ${inputCls}`} value={newResTitle} onChange={e => setNewResTitle(e.target.value)} placeholder="Nombre del material" />
+              <input className={`sm:col-span-2 ${inputCls}`} value={newResUrl} onChange={e => setNewResUrl(e.target.value)} placeholder="URL de Material (Google Drive Public Link)" />
+              <select className={inputCls} value={newResType} onChange={e => setNewResType(e.target.value)}>
+                <option value="link">Link</option>
+                <option value="pdf">PDF</option>
+                <option value="audio">Audio</option>
+              </select>
             </div>
-          )}
+            <button
+              onClick={addResource}
+              disabled={!newResTitle.trim() || !newResUrl.trim()}
+              className="mt-2 flex items-center gap-1 text-xs font-bold text-[#00A9CE] hover:underline disabled:opacity-40"
+            >
+              <IoAddOutline size={14} /> Agregar material
+            </button>
+          </div>
         </div>
         <div className="flex justify-end gap-3 p-5 border-t border-slate-100 flex-shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Cancelar</button>

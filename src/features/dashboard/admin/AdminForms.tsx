@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../services/supabaseClient';
 import toast from 'react-hot-toast';
-import { FormField, FormSubmission } from '../../../services/mockDatabase';
+import { FormField, FormSubmission } from '../../../core/types/forms';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 import { createPortal } from 'react-dom';
 

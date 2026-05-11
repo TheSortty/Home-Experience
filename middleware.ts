@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { resolveRole } from './src/services/roleService'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -78,42 +79,72 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const isCampusRoute = ['/dashboard', '/cursos', '/comunidad', '/calendario', '/perfil'].some(matchesPrefix)
   const isLoginRoute = matchesPrefix('/auth/login')
 
-  // Step 3: Guard /admin and campus routes — redirect to login if no valid user.
-  if ((isAdminRoute || isCampusRoute) && (error || !user)) {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/auth/login'
-    // Clear next param to avoid infinite loop if token is permanently invalid.
-    redirectUrl.searchParams.delete('next')
+  // Step 3: Role-based Redirection Logic
+  const role = user ? await resolveRole(supabase, user.id) : null
+  const isAdmin = role === 'admin' || role === 'sysadmin'
+  const isPreview = request.nextUrl.searchParams.get('preview') === 'true'
 
-    const redirectResponse = NextResponse.redirect(redirectUrl)
-
-    // CRITICAL: copy all session cookies onto the redirect response.
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
-    })
-
-    return redirectResponse
-  }
-
-  // Step 4: Guard /admin specifically. A student shouldn't access /admin.
-  // Note: We don't fetch 'profiles' here to save DB hits in middleware.
-  // The actual role check for /admin should also happen inside /admin layouts or pages, 
-  // but if they hit /auth/login while logged in, let's just bounce them to /dashboard
-  // and the dashboard/page.tsx or layout can redirect admins to /admin/dashboard.
+  // If logged in and hitting login page, redirect to appropriate dashboard
   if (isLoginRoute && user) {
     const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/dashboard' // Let the app handle role-based routing from here
-
+    redirectUrl.pathname = isAdmin ? '/admin/dashboard' : '/dashboard'
+    
     const redirectResponse = NextResponse.redirect(redirectUrl)
-
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
     })
-
     return redirectResponse
   }
 
-  // Step 5: Return the response with the (potentially refreshed) session cookies.
+  // Guard /admin routes — only admins allowed
+  if (isAdminRoute) {
+    if (!user) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/auth/login'
+      redirectUrl.searchParams.delete('next')
+      const redirectResponse = NextResponse.redirect(redirectUrl)
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+      })
+      return redirectResponse
+    }
+    
+    if (!isAdmin) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/dashboard'
+      const redirectResponse = NextResponse.redirect(redirectUrl)
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+      })
+      return redirectResponse
+    }
+  }
+
+  // Guard campus routes — students allowed, admins allowed ONLY if isPreview
+  if (isCampusRoute) {
+    if (!user) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/auth/login'
+      redirectUrl.searchParams.delete('next')
+      const redirectResponse = NextResponse.redirect(redirectUrl)
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+      })
+      return redirectResponse
+    }
+
+    if (isAdmin && !isPreview) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/admin/dashboard'
+      const redirectResponse = NextResponse.redirect(redirectUrl)
+      supabaseResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+      })
+      return redirectResponse
+    }
+  }
+
+  // Step 4: Return the response with the (potentially refreshed) session cookies.
   return supabaseResponse
 }
 

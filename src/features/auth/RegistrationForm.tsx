@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import toast from 'react-hot-toast';
-import { MockDatabase, FormField } from '../../services/mockDatabase';
+import { FormField } from '../../core/types/forms';
 import ArrowRightIcon from '../../ui/icons/ArrowRightIcon';
 import CheckIcon from '../../ui/icons/CheckIcon';
 import PhoneInput from '../../ui/inputs/PhoneInput';
@@ -534,23 +534,10 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
             } else {
                 throw new Error('No schema found');
             }
-        } catch (err) {
             console.error('Error fetching form schema, using fallback:', err);
-            let loadedFields = [...MockDatabase.getFormFields()];
-            loadedFields = injectSelectedService(loadedFields);
-            setFields(loadedFields);
-            
-            // Initialize data for fallback fields
-            setFormData(prev => {
-                const initialData = { ...prev };
-                loadedFields.forEach((field: FormField) => {
-                    if (initialData[field.id] === undefined) {
-                        initialData[field.id] = '';
-                    }
-                });
-                return initialData;
-            });
-        } finally {
+            // Fallback: Use empty schema or show error
+            setFields([]);
+            toast.error('No se pudo cargar el formulario. Por favor intenta más tarde.');
             setIsLoadingSchema(false);
         }
     };

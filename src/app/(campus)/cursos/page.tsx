@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
+import { resolveRole } from '@/src/services/roleService';
 import Link from 'next/link';
 import { IoBookOutline, IoCheckmarkCircleOutline, IoPlayCircleOutline, IoCalendarOutline } from 'react-icons/io5';
 
@@ -34,9 +35,10 @@ function StatusBadge({ status, progress }: { status: string; progress: number })
 export default async function CampusCursosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { tab = 'activos' } = await searchParams;
+  const { tab = 'activos', preview } = await searchParams;
+  const isPreview = preview === 'true';
   const activeTab = (['activos', 'completados', 'todos'] as const).includes(tab as any)
     ? (tab as 'activos' | 'completados' | 'todos')
     : 'activos';
@@ -69,19 +71,43 @@ export default async function CampusCursosPage({
       .single();
 
     if (profile) {
-      const { data: enrollments } = await supabase
-        .from('enrollments')
-        .select(`
-          id, status,
-          cycles (
-            id, name,
-            courses (
-              id, title, description, cover_image_url
+      const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
+      const canSeeEverything = isAdmin && isPreview;
+
+      let enrollments: any[] = [];
+
+      if (canSeeEverything) {
+        const { data: allCourses } = await supabase
+          .from('courses')
+          .select('id, title, description, cover_image_url')
+          .eq('is_published', true);
+
+        enrollments = (allCourses || []).map(c => ({
+          id: `preview-${c.id}`,
+          status: 'active',
+          cycles: {
+            id: `preview-cycle-${c.id}`,
+            name: 'Ciclo Preview',
+            courses: c
+          }
+        }));
+      } else {
+        const { data: userEnrollments } = await supabase
+          .from('enrollments')
+          .select(`
+            id, status,
+            cycles (
+              id, name,
+              courses (
+                id, title, description, cover_image_url
+              )
             )
-          )
-        `)
-        .eq('user_id', profile.id)
-        .in('status', ['active', 'completed']);
+          `)
+          .eq('user_id', profile.id)
+          .in('status', ['active', 'completed']);
+        
+        enrollments = userEnrollments || [];
+      }
 
       if (enrollments?.length) {
         // Collect course IDs that have LMS content linked
