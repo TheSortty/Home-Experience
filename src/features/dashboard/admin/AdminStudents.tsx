@@ -117,7 +117,7 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
         
         if (isFirstLoad) setIsLoading(false);
         fetchTrashCount();
-    }, [viewMode, fetchTrashCount]);
+    }, [viewMode, fetchTrashCount]); // Linter fix: Removed supabase
 
     useEffect(() => { 
         fetchStudents(); 

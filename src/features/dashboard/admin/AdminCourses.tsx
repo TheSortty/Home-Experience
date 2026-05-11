@@ -474,7 +474,7 @@ export default function AdminCourses() {
     }
     
     if (isFirstLoad) setLoadingCourses(false);
-  }, []);
+  }, []); // Linter fix: Removed supabase
 
   const fetchCourseDetail = useCallback(async (course: Course) => {
     setLoadingDetail(true);

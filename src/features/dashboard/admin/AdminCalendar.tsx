@@ -69,6 +69,27 @@ const AdminCalendar: React.FC = () => {
     // Student detail modal (shared)
     const [selectedStudentForDetail, setSelectedStudentForDetail] = useState<StudentForModal | null>(null);
 
+    // ─── Fetch Cycles ────────────────────────────────────────────────────────
+
+    const fetchTrashCount = useCallback(async () => {
+        const { count } = await supabase.from('cycles').select('*', { count: 'exact', head: true }).eq('is_deleted', true);
+        if (count !== null) setTrashCount(count);
+    }, []);
+
+    const fetchCycles = useCallback(async () => {
+        const isFirstLoad = !hasLoadedOnceRef.current;
+        if (isFirstLoad) setLoading(true);
+        const { data, error } = await supabase.from('cycles').select('*').eq('is_deleted', viewMode === 'trash').order('start_date', { ascending: true });
+        
+        if (!error && data) {
+            setCycles(data);
+            hasLoadedOnceRef.current = true;
+        }
+        
+        if (isFirstLoad) setLoading(false);
+        fetchTrashCount();
+    }, [viewMode, fetchTrashCount]); // Linter fix: Removed supabase
+
     useEffect(() => {
         fetchCycles();
         fetchTrashCount();
@@ -89,27 +110,6 @@ const AdminCalendar: React.FC = () => {
             document.removeEventListener('visibilitychange', handleVisible);
         };
     }, [viewMode, fetchCycles, fetchTrashCount]);
-
-    // ─── Fetch Cycles ────────────────────────────────────────────────────────
-
-    const fetchTrashCount = useCallback(async () => {
-        const { count } = await supabase.from('cycles').select('*', { count: 'exact', head: true }).eq('is_deleted', true);
-        if (count !== null) setTrashCount(count);
-    }, []);
-
-    const fetchCycles = useCallback(async () => {
-        const isFirstLoad = !hasLoadedOnceRef.current;
-        if (isFirstLoad) setLoading(true);
-        const { data, error } = await supabase.from('cycles').select('*').eq('is_deleted', viewMode === 'trash').order('start_date', { ascending: true });
-        
-        if (!error && data) {
-            setCycles(data);
-            hasLoadedOnceRef.current = true;
-        }
-        
-        if (isFirstLoad) setLoading(false);
-        fetchTrashCount();
-    }, [viewMode, fetchTrashCount]);
 
     const handleCreateCycle = async (e: React.FormEvent) => {
         e.preventDefault();
