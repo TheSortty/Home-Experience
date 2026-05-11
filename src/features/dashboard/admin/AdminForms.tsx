@@ -404,6 +404,27 @@ const AdminForms: React.FC = () => {
                                                     <option value="extra">OTROS</option>
                                                 </select>
                                             </div>
+                                            {(field.type === 'select' || field.type === 'radio') && (
+                                                <div className="col-span-1 md:col-span-3 mt-2">
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Opciones (separadas por comas)</label>
+                                                    <input
+                                                        type="text"
+                                                        value={Array.isArray(field.options) ? field.options.join(', ') : (field.options || '')}
+                                                        onChange={(e) => {
+                                                            const updated = formFields.map(f => f.id === field.id ? { ...f, options: e.target.value } : f);
+                                                            setFormFields(updated);
+                                                        }}
+                                                        onBlur={() => {
+                                                            const optionsVal = typeof field.options === 'string' 
+                                                                ? field.options.split(',').map(s => s.trim()).filter(s => s !== '')
+                                                                : field.options;
+                                                            handleUpdateField(field.id, { options: optionsVal });
+                                                        }}
+                                                        placeholder="Ej: Opción 1, Opción 2, Opción 3"
+                                                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-sm text-sm focus:bg-white focus:ring-1 focus:ring-blue-400 outline-none transition-all"
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-6 min-w-[150px] justify-end">
                                             <label className="flex items-center gap-2 cursor-pointer group">

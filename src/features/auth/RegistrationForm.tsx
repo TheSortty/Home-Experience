@@ -172,7 +172,10 @@ const RenderField = memo(({ field, value, error, onChange }: FieldProps) => {
                             onChange={(e) => onChange(field.id, e.target.value)}
                         >
                             <option value="">Seleccionar opción...</option>
-                            {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            {(Array.isArray(field.options) 
+                              ? field.options 
+                              : (typeof field.options === 'string' ? field.options.split(',').map(s => s.trim()) : [])
+                            ).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                         </select>
                         <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -186,7 +189,10 @@ const RenderField = memo(({ field, value, error, onChange }: FieldProps) => {
                 <div id={field.id} className="col-span-1 md:col-span-2">
                     <label className={labelClass}>{field.label} {field.required && '*'}</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {field.options?.map(opt => {
+                        {(Array.isArray(field.options) 
+                          ? field.options 
+                          : (typeof field.options === 'string' ? field.options.split(',').map(s => s.trim()) : [])
+                        ).map(opt => {
                             const isSelected = value === opt;
                             return (
                                 <label key={opt} className={`cursor-pointer p-5 rounded-xl border-2 transition-all flex items-center justify-between group ${isSelected

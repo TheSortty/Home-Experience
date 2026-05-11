@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Registration**: Removed all legacy `MockDatabase` fallback logic. The form now relies exclusively on Supabase for schema fetching and submission.
 - **Middleware**: Optimized role-based redirection using direct RPC calls in a consolidated "Step 4" resolution phase.
 - **UI Stability**: Completed the transition to stable UUID-based keys for all dashboard components.
+- **Forms**: Fixed critical "TypeError: e.map is not a function" bug by implementing a defensive shield for form options in `RegistrationForm.tsx`.
+- **Admin Forms**: Added an options editor to `AdminForms.tsx` and implemented automatic string-to-array conversion to ensure correct JSON schema structure in Supabase.
 
 ### Removed
 - **Legacy Mocks**: Physically deleted `src/services/mockDatabase.ts` and removed all remaining references. Switched `TestimonialListModal` and `RegistrationForm` to use real Supabase data.
