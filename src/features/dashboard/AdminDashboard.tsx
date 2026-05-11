@@ -119,48 +119,57 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         supabase.from('enrollments').select('status, cycle:cycles(type)').abortSignal(abort.signal),
       ]);
 
-      const getRes = (res: any) => res.status === 'fulfilled' ? res.value : { data: null, count: null };
+      const getRes = (res: any) => res.status === 'fulfilled' ? res.value : null;
 
-      const pendingReviewCount = getRes(results[0]).count;
-      const pendingPaymentCount = getRes(results[1]).count;
-      const activeStudentsCount = getRes(results[2]).count;
-      const activeCyclesData = getRes(results[3]).data;
-      const sessionsData = getRes(results[4]).data;
-      const recentRegs = getRes(results[5]).data;
-      const enrollmentsData = getRes(results[6]).data;
+      const sessionsData = getRes(results[4])?.data;
+      const recentRegs = getRes(results[5])?.data;
+      const enrollmentsData = getRes(results[6])?.data;
 
-      // Graduation rates
+      // Graduation rates - safe version
       const calculateRate = (type: string) => {
-        const relevant = (enrollmentsData || []).filter((e: any) => e.cycle?.type === type);
-        if (relevant.length === 0) return 'N/A';
+        if (!enrollmentsData) return null;
+        const relevant = enrollmentsData.filter((e: any) => e.cycle?.type === type);
+        if (relevant.length === 0) return '0%';
         const graduated = relevant.filter((e: any) => ['completed', 'graduated'].includes(e.status)).length;
         return Math.round((graduated / relevant.length) * 100) + '%';
       };
 
-      setStats({
-        pendingAdmissions: pendingReviewCount || 0,
-        pendingPayments: pendingPaymentCount || 0,
-        activeStudents: activeStudentsCount || 0,
-        activeCycles: activeCyclesData?.length || 0,
-        graduationRateInitial: calculateRate('initial'),
-        graduationRateAdvanced: calculateRate('advanced'),
-        graduationRatePL: calculateRate('plan_lider'),
-      });
+      // Update ONLY if we have at least partial success on stats
+      if (results[0].status === 'fulfilled' || results[3].status === 'fulfilled') {
+        const activeCycles = getRes(results[3])?.data;
+        const rateInitial = calculateRate('initial');
+        const rateAdvanced = calculateRate('advanced');
+        const ratePL = calculateRate('plan_lider');
 
-      setUpcomingSessions((sessionsData || []).map((s: any) => ({
-        cycleId: s.cycle_id,
-        cycleName: s.cycle?.name || 'Desconocido',
-        cycleType: s.cycle?.type || 'initial',
-        sessionDate: s.session_date,
-        enrolledCount: s.cycle?.enrolled_count || 0,
-      })));
+        setStats(prev => ({
+          pendingAdmissions: getRes(results[0])?.count ?? prev.pendingAdmissions,
+          pendingPayments: getRes(results[1])?.count ?? prev.pendingPayments,
+          activeStudents: getRes(results[2])?.count ?? prev.activeStudents,
+          activeCycles: activeCycles?.length ?? prev.activeCycles,
+          graduationRateInitial: rateInitial ?? prev.graduationRateInitial,
+          graduationRateAdvanced: rateAdvanced ?? prev.graduationRateAdvanced,
+          graduationRatePL: ratePL ?? prev.graduationRatePL,
+        }));
+      }
 
-      setRecentActivity((recentRegs || []).map((r: any) => ({
-        id: r.id,
-        name: `${r.data?.firstName || ''} ${r.data?.lastName || ''}`.trim() || 'Sin nombre',
-        date: new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
-        status: r.status,
-      })));
+      if (sessionsData) {
+        setUpcomingSessions(sessionsData.map((s: any) => ({
+          cycleId: s.cycle_id,
+          cycleName: s.cycle?.name || 'Desconocido',
+          cycleType: s.cycle?.type || 'initial',
+          sessionDate: s.session_date,
+          enrolledCount: s.cycle?.enrolled_count || 0,
+        })));
+      }
+
+      if (recentRegs) {
+        setRecentActivity(recentRegs.map((r: any) => ({
+          id: r.id,
+          name: `${r.data?.firstName || ''} ${r.data?.lastName || ''}`.trim() || 'Sin nombre',
+          date: new Date(r.created_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+          status: r.status,
+        })));
+      }
 
       hasLoadedOnceRef.current = true;
 
@@ -186,6 +195,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
     // Realtime channel — one stable name per mount, not recreated on auth refresh
     const channelName = 'dashboard_overview_stable';
+    
+    // Cleanup existing channels with same name to prevent TIMED_OUT in Strict Mode
+    supabase.getChannels().forEach(ch => {
+      if (ch.topic.includes(channelName)) supabase.removeChannel(ch);
+    });
+
     const channel = supabase.channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, fetchDashboardData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchDashboardData)

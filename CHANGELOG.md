@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI Stability**: Completed the transition to stable UUID-based keys for all dashboard components.
 - **Forms**: Fixed critical "TypeError: e.map is not a function" bug by implementing a defensive shield for form options in `RegistrationForm.tsx`.
 - **Admin Forms**: Added an options editor to `AdminForms.tsx` and implemented automatic string-to-array conversion to ensure correct JSON schema structure in Supabase.
+- **Production**: Implemented a Cloudflare-ready HTTPS detection patch in `middleware.ts` to prevent "split-brain" cookie issues.
+- **Dashboard**: Added an anti-data-erasure shield in `AdminDashboard.tsx` to prevent states from being overwritten with zeros/nulls during network timeouts or browser inactivity.
+- **Realtime**: Optimized Supabase Realtime channel management in the dashboard to avoid connection timeouts and duplicates in React Strict Mode.
 
 ### Removed
 - **Legacy Mocks**: Physically deleted `src/services/mockDatabase.ts` and removed all remaining references. Switched `TestimonialListModal` and `RegistrationForm` to use real Supabase data.

@@ -12,11 +12,14 @@ const IS_PROD = process.env.NODE_ENV === 'production'
  * silently drops secure cookies — causing the split-brain between
  * client (old token) and server (no cookie → RLS fails → empty page).
  */
-function cookieOptions(original: Record<string, any> = {}) {
+function cookieOptions(original: Record<string, any> = {}, request?: NextRequest) {
+  const isSecure = process.env.NODE_ENV === 'production' || 
+                   request?.url.startsWith('https://') || 
+                   request?.headers.get('x-forwarded-proto') === 'https';
   return {
     ...original,
     sameSite: 'lax' as const,
-    secure: IS_PROD, // false on localhost HTTP, true on production HTTPS
+    secure: isSecure,
     path: original.path ?? '/',
   }
 }
@@ -56,7 +59,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
         // c) Write the fresh cookies with normalized options (secure=false on localhost).
         cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, cookieOptions(options))
+          supabaseResponse.cookies.set(name, value, cookieOptions(options, request))
         )
       },
     },
@@ -92,7 +95,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
       redirectUrl.searchParams.delete('next')
       const redirectResponse = NextResponse.redirect(redirectUrl)
       supabaseResponse.cookies.getAll().forEach((cookie) => {
-        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))
       })
       return redirectResponse
     }
@@ -102,7 +105,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
       redirectUrl.pathname = '/dashboard'
       const redirectResponse = NextResponse.redirect(redirectUrl)
       supabaseResponse.cookies.getAll().forEach((cookie) => {
-        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))
       })
       return redirectResponse
     }
@@ -116,7 +119,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
       redirectUrl.searchParams.delete('next')
       const redirectResponse = NextResponse.redirect(redirectUrl)
       supabaseResponse.cookies.getAll().forEach((cookie) => {
-        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))
       })
       return redirectResponse
     }
@@ -126,7 +129,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
       redirectUrl.pathname = '/admin/dashboard'
       const redirectResponse = NextResponse.redirect(redirectUrl)
       supabaseResponse.cookies.getAll().forEach((cookie) => {
-        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))
       })
       return redirectResponse
     }
@@ -144,7 +147,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     
     const redirectResponse = NextResponse.redirect(redirectUrl)
     supabaseResponse.cookies.getAll().forEach((cookie) => {
-      redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))
     })
     return redirectResponse
   }
