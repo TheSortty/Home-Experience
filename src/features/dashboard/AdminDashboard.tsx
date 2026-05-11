@@ -279,9 +279,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
             icon: ChartIcon, colorCls: 'text-indigo-600', bgCls: 'bg-indigo-50',
             urgent: false, onClick: undefined,
           },
-        ].map((stat, idx) => (
+        ].map((stat) => (
           <div
-            key={idx}
+            key={stat.label}
             onClick={stat.onClick}
             className={`formal-card p-5 flex flex-col gap-3 transition-all
               ${stat.onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''}
@@ -411,8 +411,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
       <div className="lg:col-span-1 formal-card p-6">
         <h3 className="text-lg font-bold text-slate-900 mb-6">Plantillas</h3>
         <div className="space-y-2">
-          {['Bienvenida Inicial', 'Recordatorio de Pago', 'Instrucciones Pre-Curso', 'Felicitaciones Graduación'].map((template, idx) => (
-            <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-sm hover:border-blue-400 cursor-pointer transition-colors">
+          {['Bienvenida Inicial', 'Recordatorio de Pago', 'Instrucciones Pre-Curso', 'Felicitaciones Graduación'].map((template) => (
+            <div key={template} className="p-3 bg-slate-50 border border-slate-200 rounded-sm hover:border-blue-400 cursor-pointer transition-colors">
               <span className="text-sm font-medium text-slate-700">{template}</span>
             </div>
           ))}

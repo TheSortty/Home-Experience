@@ -534,10 +534,11 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
             } else {
                 throw new Error('No schema found');
             }
-            console.error('Error fetching form schema, using fallback:', err);
-            // Fallback: Use empty schema or show error
+        } catch (err) {
+            console.error('Error fetching form schema:', err);
             setFields([]);
             toast.error('No se pudo cargar el formulario. Por favor intenta más tarde.');
+        } finally {
             setIsLoadingSchema(false);
         }
     };

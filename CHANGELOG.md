@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Stability Fixes**: Fixed critical "split" errors in Admin and Campus dashboards by adding safe null/undefined checks for dates and user emails.
 - **Stability Fixes**: Resolved "Unique Key Prop" warnings in the Admin Dashboard by ensuring all mapped elements have stable UUID-based keys.
 - **Auth**: Ensured `handleLogout` performs a full client-side redirect to guarantee a clean state after mock removal.
+- **Registration**: Removed all legacy `MockDatabase` fallback logic. The form now relies exclusively on Supabase for schema fetching and submission.
+- **Middleware**: Optimized role-based redirection using direct RPC calls in a consolidated "Step 4" resolution phase.
+- **UI Stability**: Completed the transition to stable UUID-based keys for all dashboard components.
 
 ### Removed
 - **Legacy Mocks**: Physically deleted `src/services/mockDatabase.ts` and removed all remaining references. Switched `TestimonialListModal` and `RegistrationForm` to use real Supabase data.

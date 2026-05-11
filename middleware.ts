@@ -84,18 +84,6 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const isAdmin = role === 'admin' || role === 'sysadmin'
   const isPreview = request.nextUrl.searchParams.get('preview') === 'true'
 
-  // If logged in and hitting login page, redirect to appropriate dashboard
-  if (isLoginRoute && user) {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = isAdmin ? '/admin/dashboard' : '/dashboard'
-    
-    const redirectResponse = NextResponse.redirect(redirectUrl)
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
-    })
-    return redirectResponse
-  }
-
   // Guard /admin routes — only admins allowed
   if (isAdminRoute) {
     if (!user) {
@@ -144,7 +132,23 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     }
   }
 
-  // Step 4: Return the response with the (potentially refreshed) session cookies.
+  // Step 4: Final Response & Global Redirects
+  // If the user is logged in and tries to access the landing page or login,
+  // we redirect them to their respective dashboard based on their real-time role.
+  if (user && (pathname === '/' || isLoginRoute)) {
+    const { data: role } = await supabase.rpc('get_user_role')
+    const isAdminRole = role === 'admin' || role === 'sysadmin'
+    
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = isAdminRole ? '/admin/dashboard' : '/dashboard'
+    
+    const redirectResponse = NextResponse.redirect(redirectUrl)
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie))
+    })
+    return redirectResponse
+  }
+
   return supabaseResponse
 }
 
