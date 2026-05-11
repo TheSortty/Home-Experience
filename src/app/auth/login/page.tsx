@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Login from '@/src/features/auth/Login'
 import { supabase } from '@/src/services/supabaseClient'
+import { resolveRole, isAdminRole } from '@/src/services/roleService'
 
 export default function LoginPage() {
   const router       = useRouter()
@@ -12,40 +13,10 @@ export default function LoginPage() {
   const passwordSet  = searchParams.get('message') === 'password_set'
 
   const checkRoleAndRedirect = async (userId: string) => {
-    const ADMIN_ROLES = ['admin', 'sysadmin', 'super_admin'];
-    
-    // Strategy 1: RPC (preferred — bypasses RLS)
-    try {
-      const { data, error } = await supabase.rpc('get_user_role');
-      if (!error && data && ADMIN_ROLES.includes(data as string)) {
-        router.replace('/admin/dashboard');
-        return;
-      }
-      if (!error && data) {
-        // RPC worked but user is not admin
-        router.replace('/dashboard');
-        return;
-      }
-      // RPC failed — fall through to strategy 2
-    } catch {
-      // RPC doesn't exist — fall through
-    }
-
-    // Strategy 2: Direct profiles query (fallback)
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
-      
-      if (!error && data && ADMIN_ROLES.includes(data.role)) {
-        router.replace('/admin/dashboard');
-      } else {
-        router.replace('/dashboard');
-      }
-    } catch (err) {
-      console.error("Error checking role:", err);
+    const role = await resolveRole(supabase, userId);
+    if (isAdminRole(role)) {
+      router.replace('/admin/dashboard');
+    } else {
       router.replace('/dashboard');
     }
   }

@@ -3,11 +3,12 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../services/supabaseClient';
+import { resolveRole as resolveRoleService, UserRole } from '../services/roleService';
 
 interface AuthContextType {
     session: Session | null;
     user: User | null;
-    role: 'admin' | 'sysadmin' | 'student' | null;
+    role: UserRole | null;
     isLoading: boolean;
 }
 
@@ -21,54 +22,15 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
-    const [role, setRole] = useState<'admin' | 'sysadmin' | 'student' | null>(null);
+    const [role, setRole] = useState<UserRole | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     // Use ref to avoid stale closure: always holds latest role/session state
     const mountedRef = useRef(true);
 
-    /**
-     * Fetch the user's role. Two strategies for resilience:
-     *
-     * 1. RPC get_user_role() — SECURITY DEFINER, bypasses RLS. Preferred.
-     * 2. Direct profiles query — fallback if the RPC doesn't exist yet.
-     *
-     * This ensures the app works whether or not the SQL migration has been run.
-     */
-    const resolveRole = async (userId: string): Promise<'admin' | 'sysadmin' | 'student'> => {
-        // Strategy 1: RPC (preferred — bypasses RLS)
-        try {
-            const { data, error } = await supabase.rpc('get_user_role');
-            if (!error && data) {
-                const role = data as string;
-                console.log('[AuthContext] Role resolved via RPC:', role);
-                return (role as 'admin' | 'sysadmin' | 'student') || 'student';
-            }
-            // RPC failed (might not exist yet) — fall through to strategy 2
-            if (error) console.warn('[AuthContext] RPC fallback — get_user_role not available:', error.message);
-        } catch {
-            console.warn('[AuthContext] RPC call failed, trying direct query');
-        }
-
-        // Strategy 2: Direct profiles query (works when RLS allows own profile read)
-        try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('user_id', userId)
-                .single();
-
-            if (!error && data?.role) {
-                console.log('[AuthContext] Role resolved via direct query:', data.role);
-                return data.role as 'admin' | 'sysadmin' | 'student';
-            }
-        } catch {
-            console.warn('[AuthContext] Direct profiles query also failed');
-        }
-
-        // Both strategies failed — default to student (safe, admin guard will redirect)
-        console.warn('[AuthContext] Could not resolve role, defaulting to student');
-        return 'student';
+    // We use the central role service now.
+    const resolveRole = async (userId: string): Promise<UserRole> => {
+        return await resolveRoleService(supabase, userId);
     };
 
     useEffect(() => {
@@ -87,13 +49,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (!mountedRef.current) return;
 
                 if (localSession?.user) {
-                    // Immediately set what we have so the UI isn't blocked
-                    setSession(localSession);
-                    setUser(localSession.user);
-
-                    // Step 2: resolve role (may need a network round-trip)
+                    // Resolve role first before updating any state, to prevent UI race conditions
                     const resolvedRole = await resolveRole(localSession.user.id);
                     if (!mountedRef.current) return;
+                    
+                    setSession(localSession);
+                    setUser(localSession.user);
                     setRole(resolvedRole);
                 } else {
                     setSession(null);

@@ -47,8 +47,8 @@ const nextConfig = {
       // Videos: YouTube embed + Cloudinary (videos de fondo en la landing)
       "media-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://res.cloudinary.com",
 
-      // iframes: YouTube player
-      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+      // iframes: YouTube player + Google Maps
+      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://maps.google.com https://www.google.com",
 
       // Fuentes: propias + Google Fonts
       "font-src 'self' data: https://fonts.gstatic.com",

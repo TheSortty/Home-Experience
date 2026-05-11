@@ -54,22 +54,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   const userEmail = user?.email || '';
   const isAdmin = role === 'admin' || role === 'sysadmin';
 
-  // ─── Admin Guard: redirect unauthorized users ───────────────────────────────
-  // Uses window.location.href (full navigation) instead of router.replace()
-  // because client-side RSC navigation fails when the session is gone,
-  // causing "Failed to fetch RSC payload" errors in the console.
-  useEffect(() => {
-    if (isLoadingAuth) return; // still resolving — wait
-
-    if (!user) {
-      // Signed out or no session → go to login
-      window.location.href = '/auth/login';
-    } else if (!isAdmin) {
-      // Logged in but not admin/sysadmin → go to student dashboard
-      console.warn('[AdminDashboard] User is not admin, redirecting. Role:', role);
-      window.location.href = '/dashboard';
-    }
-  }, [isLoadingAuth, user, isAdmin, role]);
+  // The admin route is securely guarded by the server-side Layout (src/app/admin/layout.tsx).
+  // We do not need a client-side redirect here, which avoids race conditions and infinite loops.
 
   const [stats, setStats] = useState<DashboardStats>({
     pendingAdmissions: 0,

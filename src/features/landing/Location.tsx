@@ -51,7 +51,7 @@ const Location: React.FC = () => {
             </div>
 
             <a 
-              href="https://g.page/r/CTDkXEC05638EAE"
+              href="https://maps.app.goo.gl/nbNngbRtBYeSvYvQ7"
               target="_blank"
               rel="noopener noreferrer"
               className="block bg-white p-8 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-slate-100 max-w-sm hover:shadow-xl hover:-translate-y-1 hover:border-blue-200 transition-all cursor-pointer group"
@@ -85,7 +85,7 @@ const Location: React.FC = () => {
 
             <div className="rounded-xl shadow-2xl overflow-hidden h-96 md:h-[600px] bg-white relative z-10 border border-slate-200">
               <iframe
-                src="https://maps.google.com/maps?q=Home%20Co-Creando%20Bienestar&t=&z=16&ie=UTF8&iwloc=&output=embed"
+                src="https://maps.google.com/maps?q=Av.%20de%20Mayo%20695,%20Cdad.%20Aut%C3%B3noma%20de%20Buenos%20Aires&t=&z=16&ie=UTF8&iwloc=&output=embed"
                 width="100%"
                 height="100%"
                 style={{ border: 0 }}

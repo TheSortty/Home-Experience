@@ -12,47 +12,44 @@ export async function GET() {
   }
 
   try {
-    // We make two requests: one for most_relevant (default) and one for newest
-    // This allows us to potentially capture up to 10 unique reviews instead of just 5.
-    const urlRelevant = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=reviews&language=es&reviews_sort=most_relevant&key=${apiKey}`;
-    const urlNewest = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=reviews&language=es&reviews_sort=newest&key=${apiKey}`;
+    const url = `https://places.googleapis.com/v1/places/${placeId}?languageCode=es`;
 
-    const [resRelevant, resNewest] = await Promise.all([
-      fetch(urlRelevant, { next: { revalidate: 3600 } }),
-      fetch(urlNewest, { next: { revalidate: 3600 } })
-    ]);
+    const res = await fetch(url, {
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'reviews'
+      },
+      next: { revalidate: 3600 }
+    });
 
-    const dataRelevant = await resRelevant.json();
-    const dataNewest = await resNewest.json();
+    const data = await res.json();
 
-    if (dataRelevant.status !== 'OK' && dataNewest.status !== 'OK') {
+    if (!res.ok || data.error) {
+      console.error('Google Places API Error:', data.error || data);
       return NextResponse.json({ error: 'Failed to fetch reviews.' }, { status: 500 });
     }
 
-    const reviewsRelevant = dataRelevant.result?.reviews || [];
-    const reviewsNewest = dataNewest.result?.reviews || [];
-
-    // Combine and deduplicate
-    const combinedReviews = [...reviewsRelevant, ...reviewsNewest];
-    
-    // Deduplicate by author_name and time
+    const reviews = data.reviews || [];
     const uniqueReviews: any[] = [];
     const seen = new Set();
     
-    for (const review of combinedReviews) {
-      const key = `${review.author_name}-${review.time}`;
-      if (!seen.has(key) && review.text && review.text.length > 5) {
+    for (const review of reviews) {
+      const displayName = review.authorAttribution?.displayName || 'Usuario de Google';
+      const key = `${displayName}-${review.publishTime}`;
+      const quote = review.text?.text || '';
+
+      if (!seen.has(key) && quote.length > 5) {
         seen.add(key);
         uniqueReviews.push({
-          id: `google-${review.time}-${review.author_name.replace(/\s+/g, '')}`,
-          author: review.author_name,
-          quote: review.text,
+          id: `google-${review.publishTime}-${displayName.replace(/\s+/g, '')}`,
+          author: displayName,
+          quote: quote,
           roles: ['En Google Maps'],
           cycle: '',
           status: 'approved',
           rating: review.rating,
-          photoUrl: review.profile_photo_url ? review.profile_photo_url.replace(/s128-/, 's256-') : null,
-          createdAt: new Date(review.time * 1000).toISOString(),
+          photoUrl: review.authorAttribution?.photoUri ? review.authorAttribution.photoUri.replace(/s128-/, 's256-') : null,
+          createdAt: review.publishTime,
         });
       }
     }

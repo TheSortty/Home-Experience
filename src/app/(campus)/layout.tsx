@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
+import { resolveRole, isAdminRole } from '@/src/services/roleService';
 import CampusNav from './_components/CampusNav';
 import ProfileMenu from './_components/ProfileMenu';
 
@@ -15,6 +16,11 @@ export default async function CampusLayout({ children }: { children: React.React
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect('/auth/login');
+
+  const role = await resolveRole(supabase, user.id);
+  if (isAdminRole(role)) {
+    redirect('/admin/dashboard');
+  }
 
   const { data: profile } = await supabase
     .from('profiles')
