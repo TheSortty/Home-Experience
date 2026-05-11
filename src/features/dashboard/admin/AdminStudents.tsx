@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
 import TrashIcon from '../../../ui/icons/TrashIcon';
@@ -17,49 +17,18 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
     const [trashCount, setTrashCount] = useState(0);
     const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
     const [studentToDelete, setStudentToDelete] = useState<StudentForModal | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const hasLoadedOnceRef = useRef(false);
 
-    useEffect(() => { 
-        fetchStudents(); 
-        fetchTrashCount(); 
-
-        // Stable channel name tied to viewMode — survives auth token refreshes
-        const channelName = `students_changes_${viewMode}`;
-        const channel = supabase.channel(channelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-                fetchStudents();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => {
-                fetchStudents();
-            })
-            .subscribe();
-
-        // Refetch when tab regains visibility
-        const handleVisible = () => { if (!document.hidden) fetchStudents(); };
-        document.addEventListener('visibilitychange', handleVisible);
-
-        return () => {
-            supabase.removeChannel(channel);
-            document.removeEventListener('visibilitychange', handleVisible);
-        };
-    }, [viewMode]);
-
-    useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                setSelectedStudent(null);
-                setIsConfirmDeleteOpen(false);
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    }, []);
-
-    const fetchTrashCount = async () => {
+    const fetchTrashCount = useCallback(async () => {
         const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_deleted', true);
         if (count !== null) setTrashCount(count);
-    };
+    }, []);
 
-    const fetchStudents = async () => {
+    const fetchStudents = useCallback(async () => {
+        const isFirstLoad = !hasLoadedOnceRef.current;
+        if (isFirstLoad) setIsLoading(true);
+
         const { data, error } = await supabase
             .from('profiles')
             .select(`
@@ -74,74 +43,110 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
             .eq('role', 'student')
             .eq('is_deleted', viewMode === 'trash');
 
-        if (error) { console.error('Error:', error); return; }
-
-        const emails = data.map((p: any) => p.email).filter(Boolean);
-        const { data: submissions } = await supabase.from('form_submissions').select('email, data').in('email', emails);
-        const submissionsMap = (submissions || []).reduce((acc: any, c: any) => { acc[c.email] = c.data; return acc; }, {});
-
-        const profileIds = data.map((p: any) => p.id);
-        const { data: medicalData } = await supabase.from('medical_info').select('*').in('user_id', profileIds);
-        const medicalMap = (medicalData || []).reduce((acc: any, c: any) => { acc[c.user_id] = c; return acc; }, {});
-
-        const cycleIds = data.flatMap((p: any) => p.enrollments?.map((e: any) => e.cycle?.id)).filter(Boolean);
-        let sessionsMap: Record<string, number> = {};
-        if (cycleIds.length > 0) {
-            const { data: sessions } = await supabase.from('cycle_sessions').select('cycle_id').in('cycle_id', cycleIds);
-            sessionsMap = (sessions || []).reduce((acc: any, s: any) => { acc[s.cycle_id] = (acc[s.cycle_id] || 0) + 1; return acc; }, {});
+        if (error) { 
+            console.error('Error fetching students:', error); 
+            if (isFirstLoad) setIsLoading(false);
+            return; 
         }
 
-        const formatted: StudentForModal[] = data.map((p: any) => {
-            const history: any[] = (p.enrollments || []).map((e: any) => {
-                const attCount = e.attendance?.filter((a: any) => ['present', 'late'].includes(a.status)).length || 0;
-                const cId = e.cycle?.id;
-                const totalSess = cId ? (sessionsMap[cId] || 0) : 0;
-                const pay = e.payments?.[0];
-                
-                // Fix: CONFLICT solo aplica a enrollments activos que no han pagado.
-                // No marcar como CONFLICT ciclos completados/graduados con pago pendiente histórico.
-                const startDate = e.cycle?.start_date || '9999-12-31'; // Necesario para el sort cronológico
-                const isOverdue = e.status === 'active' && e.payment_status !== 'paid';
-                let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' = 'ACTIVE';
+        if (data) {
+            const emails = data.map((p: any) => p.email).filter(Boolean);
+            const { data: submissions } = await supabase.from('form_submissions').select('email, data').in('email', emails);
+            const submissionsMap = (submissions || []).reduce((acc: any, c: any) => { acc[c.email] = c.data; return acc; }, {});
 
-                if (e.status === 'conflict' || isOverdue) {
-                    derivedStatus = 'CONFLICT';
-                } else if (e.status === 'graduated' || e.status === 'completed') {
-                    derivedStatus = 'GRADUATED';
-                }
+            const profileIds = data.map((p: any) => p.id);
+            const { data: medicalData } = await supabase.from('medical_info').select('*').in('user_id', profileIds);
+            const medicalMap = (medicalData || []).reduce((acc: any, c: any) => { acc[c.user_id] = c; return acc; }, {});
+
+            const cycleIds = data.flatMap((p: any) => p.enrollments?.map((e: any) => e.cycle?.id)).filter(Boolean);
+            let sessionsMap: Record<string, number> = {};
+            if (cycleIds.length > 0) {
+                const { data: sessions } = await supabase.from('cycle_sessions').select('cycle_id').in('cycle_id', cycleIds);
+                sessionsMap = (sessions || []).reduce((acc: any, s: any) => { acc[s.cycle_id] = (acc[s.cycle_id] || 0) + 1; return acc; }, {});
+            }
+
+            const formatted: StudentForModal[] = data.map((p: any) => {
+                const history: any[] = (p.enrollments || []).map((e: any) => {
+                    const attCount = e.attendance?.filter((a: any) => ['present', 'late'].includes(a.status)).length || 0;
+                    const cId = e.cycle?.id;
+                    const totalSess = cId ? (sessionsMap[cId] || 0) : 0;
+                    const pay = e.payments?.[0];
+                    
+                    const startDate = e.cycle?.start_date || '9999-12-31';
+                    const isOverdue = e.status === 'active' && e.payment_status !== 'paid';
+                    let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' = 'ACTIVE';
+
+                    if (e.status === 'conflict' || isOverdue) {
+                        derivedStatus = 'CONFLICT';
+                    } else if (e.status === 'graduated' || e.status === 'completed') {
+                        derivedStatus = 'GRADUATED';
+                    }
+
+                    return {
+                        id: e.id,
+                        cycleName: e.cycle?.name || 'Desconocido',
+                        cycleType: e.cycle?.type || 'initial',
+                        status: derivedStatus,
+                        attendanceCount: attCount,
+                        totalSessions: totalSess,
+                        paymentInfo: pay ? {
+                            amount: pay.amount,
+                            method: pay.method === 'mercadopago' ? 'Mercado Pago' : (pay.method === 'transfer' ? 'Transferencia' : 'Efectivo'),
+                            status: pay.status === 'paid' ? 'Pagado' : (e.payment_status === 'paid' ? 'Pagado' : 'Pendiente'),
+                            paidAt: pay.paid_at ? new Date(pay.paid_at).toLocaleDateString() : '-'
+                        } : null,
+                        notes: e.notes || '',
+                        startDate: startDate
+                    };
+                }).sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 
                 return {
-                    id: e.id,
-                    cycleName: e.cycle?.name || 'Desconocido',
-                    cycleType: e.cycle?.type || 'initial',
-                    status: derivedStatus,
-                    attendanceCount: attCount,
-                    totalSessions: totalSess,
-                    paymentInfo: pay ? {
-                        amount: pay.amount,
-                        method: pay.method === 'mercadopago' ? 'Mercado Pago' : (pay.method === 'transfer' ? 'Transferencia' : 'Efectivo'),
-                        status: pay.status === 'paid' ? 'Pagado' : (e.payment_status === 'paid' ? 'Pagado' : 'Pendiente'),
-                        paidAt: pay.paid_at ? new Date(pay.paid_at).toLocaleDateString() : '-'
-                    } : null,
-                    notes: e.notes || '',
-                    startDate: startDate
+                    id: p.id,
+                    name: `${p.first_name} ${p.last_name}`,
+                    email: p.email,
+                    phone: p.phone || submissionsMap[p.email]?.phone || '-',
+                    programHistory: history,
+                    formData: submissionsMap[p.email] || {},
+                    medicalInfo: medicalMap[p.id] || null,
+                    is_deleted: p.is_deleted
                 };
-            }).sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-
-            return {
-                id: p.id,
-                name: `${p.first_name} ${p.last_name}`,
-                email: p.email,
-                phone: p.phone || submissionsMap[p.email]?.phone || '-',
-                programHistory: history,
-                formData: submissionsMap[p.email] || {},
-                medicalInfo: medicalMap[p.id] || null,
-                is_deleted: p.is_deleted
-            };
-        });
-        setStudents(formatted);
+            });
+            setStudents(formatted);
+            hasLoadedOnceRef.current = true;
+        }
+        
+        if (isFirstLoad) setIsLoading(false);
         fetchTrashCount();
-    };
+    }, [viewMode, fetchTrashCount]);
+
+    useEffect(() => { 
+        fetchStudents(); 
+        fetchTrashCount(); 
+
+        const channelName = `students_changes_${viewMode}`;
+        const channel = supabase.channel(channelName)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchStudents)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchStudents)
+            .subscribe();
+
+        const handleVisible = () => { if (!document.hidden) fetchStudents(); };
+        document.addEventListener('visibilitychange', handleVisible);
+
+        return () => {
+            supabase.removeChannel(channel);
+            document.removeEventListener('visibilitychange', handleVisible);
+        };
+    }, [viewMode, fetchStudents, fetchTrashCount]);
+    useEffect(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setSelectedStudent(null);
+                setIsConfirmDeleteOpen(false);
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, []);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -248,7 +253,13 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
                 </div>
 
                 <div className="flex-1 overflow-auto">
-                    <table className="formal-table min-w-[640px]">
+                    {isLoading ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                             <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mb-4" />
+                             <p className="text-sm font-medium">Cargando alumnos...</p>
+                        </div>
+                    ) : (
+                        <table className="formal-table min-w-[640px]">
                         <thead>
                             <tr>
                                 <th>Alumno</th>
@@ -304,6 +315,7 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
                             )}
                         </tbody>
                     </table>
+                    )}
                 </div>
             </div>
 

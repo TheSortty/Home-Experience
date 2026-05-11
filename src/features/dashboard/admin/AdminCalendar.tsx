@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
 import toast from 'react-hot-toast';
@@ -76,12 +76,8 @@ const AdminCalendar: React.FC = () => {
         // Stable channel name tied to viewMode
         const channelName = `calendar_changes_${viewMode}`;
         const channel = supabase.channel(channelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => {
-                fetchCycles();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => {
-                fetchCycles();
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, fetchCycles)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchCycles)
             .subscribe();
 
         // Refetch when tab regains visibility
@@ -92,23 +88,28 @@ const AdminCalendar: React.FC = () => {
             supabase.removeChannel(channel);
             document.removeEventListener('visibilitychange', handleVisible);
         };
-    }, [viewMode]);
+    }, [viewMode, fetchCycles, fetchTrashCount]);
 
     // ─── Fetch Cycles ────────────────────────────────────────────────────────
 
-    const fetchTrashCount = async () => {
+    const fetchTrashCount = useCallback(async () => {
         const { count } = await supabase.from('cycles').select('*', { count: 'exact', head: true }).eq('is_deleted', true);
         if (count !== null) setTrashCount(count);
-    };
+    }, []);
 
-    const fetchCycles = async () => {
+    const fetchCycles = useCallback(async () => {
         const isFirstLoad = !hasLoadedOnceRef.current;
         if (isFirstLoad) setLoading(true);
-        const { data } = await supabase.from('cycles').select('*').eq('is_deleted', viewMode === 'trash').order('start_date', { ascending: true });
-        setCycles(data || []);
-        if (isFirstLoad) { setLoading(false); hasLoadedOnceRef.current = true; }
+        const { data, error } = await supabase.from('cycles').select('*').eq('is_deleted', viewMode === 'trash').order('start_date', { ascending: true });
+        
+        if (!error && data) {
+            setCycles(data);
+            hasLoadedOnceRef.current = true;
+        }
+        
+        if (isFirstLoad) setLoading(false);
         fetchTrashCount();
-    };
+    }, [viewMode, fetchTrashCount]);
 
     const handleCreateCycle = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -188,92 +189,97 @@ const AdminCalendar: React.FC = () => {
             return;
         }
 
-        // Fetch form submissions for referredBy
-        const emails = enrollments.map((e: any) => e.user?.email).filter(Boolean);
-        const { data: submissions } = await supabase.from('form_submissions').select('email, data').in('email', emails);
-        const subMap = (submissions || []).reduce((acc: any, c: any) => { acc[c.email] = c.data; return acc; }, {});
+        try {
+            // Fetch form submissions for referredBy
+            const emails = enrollments.map((e: any) => e.user?.email).filter(Boolean);
+            const { data: submissions } = await supabase.from('form_submissions').select('email, data').in('email', emails);
+            const subMap = (submissions || []).reduce((acc: any, c: any) => { acc[c.email] = c.data; return acc; }, {});
 
-        // Fetch medical info
-        const userIds = enrollments.map((e: any) => e.user?.id).filter(Boolean);
-        const { data: medicalData } = await supabase.from('medical_info').select('*').in('user_id', userIds);
-        const medMap = (medicalData || []).reduce((acc: any, c: any) => { acc[c.user_id] = c; return acc; }, {});
+            // Fetch medical info
+            const userIds = enrollments.map((e: any) => e.user?.id).filter(Boolean);
+            const { data: medicalData } = await supabase.from('medical_info').select('*').in('user_id', userIds);
+            const medMap = (medicalData || []).reduce((acc: any, c: any) => { acc[c.user_id] = c; return acc; }, {});
 
-        // Fetch ALL enrollments for these users to build program history
-        const { data: allUserEnrollments } = await supabase.from('enrollments').select(`
-            id, status, payment_status, user_id,
-            cycle:cycles ( id, name, type, start_date ),
-            attendance ( id, status ),
-            payments ( amount, method, status, paid_at )
-        `).in('user_id', userIds);
+            // Fetch ALL enrollments for these users to build program history
+            const { data: allUserEnrollments } = await supabase.from('enrollments').select(`
+                id, status, payment_status, user_id,
+                cycle:cycles ( id, name, type, start_date ),
+                attendance ( id, status ),
+                payments ( amount, method, status, paid_at )
+            `).in('user_id', userIds);
 
-        // Fetch session counts for these historical cycles
-        const allCycleIds = (allUserEnrollments || []).map((e: any) => e.cycle?.id).filter(Boolean);
-        let sessionsMap: Record<string, number> = {};
-        if (allCycleIds.length > 0) {
-            const { data: sessions } = await supabase.from('cycle_sessions').select('cycle_id').in('cycle_id', allCycleIds);
-            sessionsMap = (sessions || []).reduce((acc: any, s: any) => { acc[s.cycle_id] = (acc[s.cycle_id] || 0) + 1; return acc; }, {});
-        }
+            // Fetch session counts for these historical cycles
+            const allCycleIds = (allUserEnrollments || []).map((e: any) => e.cycle?.id).filter(Boolean);
+            let sessionsMap: Record<string, number> = {};
+            if (allCycleIds.length > 0) {
+                const { data: sessions } = await supabase.from('cycle_sessions').select('cycle_id').in('cycle_id', allCycleIds);
+                sessionsMap = (sessions || []).reduce((acc: any, s: any) => { acc[s.cycle_id] = (acc[s.cycle_id] || 0) + 1; return acc; }, {});
+            }
 
-        // Group enrollments into programHistory per user
-        const historyMap: Record<string, any[]> = {};
-        (allUserEnrollments || []).forEach((e: any) => {
-            if (!historyMap[e.user_id]) historyMap[e.user_id] = [];
-            const attCount = e.attendance?.filter((a: any) => ['present', 'late'].includes(a.status)).length || 0;
-            const cycleId = e.cycle?.id;
-            const totalSess = cycleId ? (sessionsMap[cycleId] || 0) : 0;
-            const pay = e.payments?.[0];
-            historyMap[e.user_id].push({
-                id: e.id,
-                cycleName: e.cycle?.name || 'Desconocido',
-                cycleType: e.cycle?.type || 'initial',
-                status: e.status === 'active' ? 'ACTIVE' : (e.status === 'conflict' ? 'CONFLICT' : 'GRADUATED'),
-                attendanceCount: attCount,
-                totalSessions: totalSess,
-                paymentInfo: pay ? {
-                    amount: pay.amount,
-                    method: pay.method === 'mercadopago' ? 'Mercado Pago' : (pay.method === 'transfer' ? 'Transferencia' : 'Efectivo'),
-                    status: pay.status === 'paid' ? 'Pagado' : 'Pendiente',
-                    paidAt: pay.paid_at ? new Date(pay.paid_at).toLocaleDateString() : '-'
-                } : null,
-                notes: e.notes || '',
-                startDate: e.cycle?.start_date || '9999-12-31'
+            // Group enrollments into programHistory per user
+            const historyMap: Record<string, any[]> = {};
+            (allUserEnrollments || []).forEach((e: any) => {
+                if (!historyMap[e.user_id]) historyMap[e.user_id] = [];
+                const attCount = e.attendance?.filter((a: any) => ['present', 'late'].includes(a.status)).length || 0;
+                const cycleId = e.cycle?.id;
+                const totalSess = cycleId ? (sessionsMap[cycleId] || 0) : 0;
+                const pay = e.payments?.[0];
+                historyMap[e.user_id].push({
+                    id: e.id,
+                    cycleName: e.cycle?.name || 'Desconocido',
+                    cycleType: e.cycle?.type || 'initial',
+                    status: e.status === 'active' ? 'ACTIVE' : (e.status === 'conflict' ? 'CONFLICT' : 'GRADUATED'),
+                    attendanceCount: attCount,
+                    totalSessions: totalSess,
+                    paymentInfo: pay ? {
+                        amount: pay.amount,
+                        method: pay.method === 'mercadopago' ? 'Mercado Pago' : (pay.method === 'transfer' ? 'Transferencia' : 'Efectivo'),
+                        status: pay.status === 'paid' ? 'Pagado' : 'Pendiente',
+                        paidAt: pay.paid_at ? new Date(pay.paid_at).toLocaleDateString() : '-'
+                    } : null,
+                    notes: e.notes || '',
+                    startDate: e.cycle?.start_date || '9999-12-31'
+                });
             });
-        });
 
-        // Sort programHistory by start_date descending
-        Object.keys(historyMap).forEach(uid => {
-            historyMap[uid].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-        });
+            // Sort programHistory by start_date descending
+            Object.keys(historyMap).forEach(uid => {
+                historyMap[uid].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+            });
 
-        // Fetch attendance for the current cycle view
-        const enrollmentIds = enrollments.map((e: any) => e.id);
-        const { data: attendance } = await supabase.from('attendance').select('*').in('enrollment_id', enrollmentIds);
-        const attMap: Record<string, Record<string, string>> = {};
-        (attendance || []).forEach((a: any) => {
-            if (!attMap[a.enrollment_id]) attMap[a.enrollment_id] = {};
-            attMap[a.enrollment_id][a.cycle_session_id] = a.status;
-        });
+            // Fetch attendance for the current cycle view
+            const enrollmentIds = enrollments.map((e: any) => e.id);
+            const { data: attendance } = await supabase.from('attendance').select('*').in('enrollment_id', enrollmentIds);
+            const attMap: Record<string, Record<string, string>> = {};
+            (attendance || []).forEach((a: any) => {
+                if (!attMap[a.enrollment_id]) attMap[a.enrollment_id] = {};
+                attMap[a.enrollment_id][a.cycle_session_id] = a.status;
+            });
 
-        const students: EnrolledStudent[] = enrollments.map((e: any) => {
-            const fData = subMap[e.user?.email] || {};
-            return {
-                enrollmentId: e.id,
-                userId: e.user?.id || '',
-                firstName: e.user?.first_name || '',
-                lastName: e.user?.last_name || '',
-                email: e.user?.email || '',
-                phone: e.user?.phone || fData.phone || '', // Fallback to formData
-                paymentStatus: e.payment_status || 'unpaid',
-                referredBy: fData.referredBy || '',
-                formData: fData,
-                medicalInfo: medMap[e.user?.id] || null,
-                attendanceMap: attMap[e.id] || {},
-                programHistory: historyMap[e.user?.id] || []
-            };
-        });
+            const students: EnrolledStudent[] = enrollments.map((e: any) => {
+                const fData = subMap[e.user?.email] || {};
+                return {
+                    enrollmentId: e.id,
+                    userId: e.user?.id || '',
+                    firstName: e.user?.first_name || '',
+                    lastName: e.user?.last_name || '',
+                    email: e.user?.email || '',
+                    phone: e.user?.phone || fData.phone || '', // Fallback to formData
+                    paymentStatus: e.payment_status || 'unpaid',
+                    referredBy: fData.referredBy || '',
+                    formData: fData,
+                    medicalInfo: medMap[e.user?.id] || null,
+                    attendanceMap: attMap[e.id] || {},
+                    programHistory: historyMap[e.user?.id] || []
+                };
+            });
 
-        setEnrolledStudents(students);
-        setIsLoadingDetail(false);
+            setEnrolledStudents(students);
+        } catch (err) {
+            console.error('Error in openCycleDetail:', err);
+        } finally {
+            setIsLoadingDetail(false);
+        }
     };
 
     // ─── Session Management ──────────────────────────────────────────────────

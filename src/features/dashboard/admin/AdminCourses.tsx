@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabaseClient';
 import {
@@ -460,14 +460,20 @@ export default function AdminCourses() {
   const [courseModal, setCourseModal] = useState<{ open: boolean; course: Course | null }>({ open: false, course: null });
   const [moduleModal, setModuleModal] = useState<{ open: boolean; mod: Module | null; courseId: string } | null>(null);
   const [lessonModal, setLessonModal] = useState<{ open: boolean; lesson: Lesson | null; moduleId: string } | null>(null);
+  const hasLoadedOnceRef = useRef(false);
 
   const fetchCourses = useCallback(async () => {
-    setLoadingCourses(true);
+    const isFirstLoad = !hasLoadedOnceRef.current;
+    if (isFirstLoad) setLoadingCourses(true);
+    
     const { data, error } = await supabase.from('courses').select('*').order('created_at', { ascending: false });
+    
     if (!error && data) {
       setCourses(data);
+      hasLoadedOnceRef.current = true;
     }
-    setLoadingCourses(false);
+    
+    if (isFirstLoad) setLoadingCourses(false);
   }, []);
 
   const fetchCourseDetail = useCallback(async (course: Course) => {
@@ -504,7 +510,22 @@ export default function AdminCourses() {
     }
   }, []);
 
-  useEffect(() => { fetchCourses(); }, [fetchCourses]);
+  useEffect(() => {
+    fetchCourses();
+
+    const channelName = 'courses_changes_stable';
+    const channel = supabase.channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, fetchCourses)
+      .subscribe();
+
+    const handleVisible = () => { if (!document.hidden) fetchCourses(); };
+    document.addEventListener('visibilitychange', handleVisible);
+
+    return () => {
+      supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
+  }, [fetchCourses]);
 
   const openCourse = (course: Course) => {
     setSelectedCourse(course);
