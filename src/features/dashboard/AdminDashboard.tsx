@@ -85,15 +85,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   // fetchDashboardData is stable (no deps on role/user objects).
   // It reads from refs instead, so it never goes stale when the auth
   // token is silently refreshed and user/role get new object references.
-  const fetchDashboardData = useCallback(async () => {
+  const fetchGlobalStats = useCallback(async () => {
+    try {
+      const { count } = await supabase
+        .from('form_submissions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .eq('is_deleted', false);
+      
+      if (count !== null) {
+        setStats(prev => ({ ...prev, pendingAdmissions: count }));
+      }
+    } catch (error) {
+      console.error('Error fetching global stats:', error);
+    }
+  }, []);
+
+  const fetchDashboardData = useCallback(async (manualIsFirstLoad = false) => {
     const currentRole = roleRef.current;
     const currentUser = userRef.current;
     if (!currentRole || !currentUser) return;
 
-    // Only show the loading spinner on the very first fetch.
-    // Background refreshes (Realtime push, visibility change) update data silently
-    // so the UI never flashes or gets stuck in a loading state.
-    const isFirstLoad = !hasLoadedOnceRef.current;
+    // Determine if we should show the loading spinner.
+    // If manualIsFirstLoad is true, or it's the actual first load of the component.
+    const isFirstLoad = manualIsFirstLoad || !hasLoadedOnceRef.current;
     if (isFirstLoad) setIsLoadingDashboard(true);
 
     // 15-second timeout: if any Supabase query hangs (network hiccup, token
@@ -188,7 +203,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
   // ─── Initial Global Load & Realtime ─────────────────────────
   useEffect(() => {
-    // Initial load for everything (stats, activity, etc)
+    // Immediate load for notifications/badges
+    fetchGlobalStats();
+    
+    // Initial load for everything else (stats, activity, etc)
     fetchDashboardData();
 
     // Realtime channel — one stable name per mount
@@ -200,13 +218,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     });
 
     const channel = supabase.channel(channelName)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, () => {
+        fetchGlobalStats();
+        fetchDashboardData();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchDashboardData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, fetchDashboardData)
       .subscribe();
 
     const handleVisible = () => {
-      if (!document.hidden) fetchDashboardData();
+      if (!document.hidden) {
+        fetchGlobalStats();
+        fetchDashboardData();
+      }
     };
     document.addEventListener('visibilitychange', handleVisible);
 
@@ -215,7 +239,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
       document.removeEventListener('visibilitychange', handleVisible);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, fetchGlobalStats]);
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -449,7 +473,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     { id: 'admissions', label: 'Admisiones', icon: DocumentIcon },
     { id: 'students', label: 'Alumnos', icon: UsersIcon },
     { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
-    { id: 'courses', label: 'Cursos LMS', icon: DocumentIcon },
+    { 
+      id: 'courses', 
+      label: 'CAMPUS', 
+      icon: (props: any) => <img src="/logo-circle.png" alt="Home" className={`object-cover rounded-full ${props.className}`} /> 
+    },
   ];
 
   const sysadminItems = [
