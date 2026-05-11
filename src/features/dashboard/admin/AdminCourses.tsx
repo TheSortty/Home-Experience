@@ -463,27 +463,45 @@ export default function AdminCourses() {
 
   const fetchCourses = useCallback(async () => {
     setLoadingCourses(true);
-    const { data } = await supabase.from('courses').select('*').order('created_at', { ascending: false });
-    setCourses(data || []);
+    const { data, error } = await supabase.from('courses').select('*').order('created_at', { ascending: false });
+    if (!error && data) {
+      setCourses(data);
+    }
     setLoadingCourses(false);
   }, []);
 
   const fetchCourseDetail = useCallback(async (course: Course) => {
     setLoadingDetail(true);
-    const [{ data: mods }, { data: cycleData }, { data: allCycleData }] = await Promise.all([
-      supabase.from('modules').select('*').eq('course_id', course.id).order('order_index'),
-      supabase.from('cycles').select('id, name, course_id').eq('course_id', course.id),
-      supabase.from('cycles').select('id, name, course_id').order('name'),
-    ]);
-    const modIds = (mods || []).map((m: Module) => m.id);
-    const { data: lessonData } = modIds.length > 0
-      ? await supabase.from('lessons').select('*').in('module_id', modIds).order('order_index')
-      : { data: [] };
-    setModules(mods || []);
-    setLessons(lessonData || []);
-    setLinkedCycles(cycleData || []);
-    setAllCycles(allCycleData || []);
-    setLoadingDetail(false);
+    try {
+      const results = await Promise.all([
+        supabase.from('modules').select('*').eq('course_id', course.id).order('order_index'),
+        supabase.from('cycles').select('id, name, course_id').eq('course_id', course.id),
+        supabase.from('cycles').select('id, name, course_id').order('name'),
+      ]);
+
+      const mods = results[0].data;
+      const cycleData = results[1].data;
+      const allCycleData = results[2].data;
+      const error = results.some(r => r.error);
+
+      if (!error && mods && cycleData && allCycleData) {
+        const modIds = mods.map((m: Module) => m.id);
+        const { data: lessonData, error: lessonError } = modIds.length > 0
+          ? await supabase.from('lessons').select('*').in('module_id', modIds).order('order_index')
+          : { data: [], error: null };
+        
+        if (!lessonError && lessonData) {
+          setModules(mods);
+          setLessons(lessonData);
+          setLinkedCycles(cycleData);
+          setAllCycles(allCycleData);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching course detail:', err);
+    } finally {
+      setLoadingDetail(false);
+    }
   }, []);
 
   useEffect(() => { fetchCourses(); }, [fetchCourses]);

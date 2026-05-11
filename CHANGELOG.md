@@ -23,7 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Admin Forms**: Added an options editor to `AdminForms.tsx` and implemented automatic string-to-array conversion to ensure correct JSON schema structure in Supabase.
 - **Production**: Implemented a Cloudflare-ready HTTPS detection patch in `middleware.ts` to prevent "split-brain" cookie issues.
 - **Dashboard**: Added an anti-data-erasure shield in `AdminDashboard.tsx` to prevent states from being overwritten with zeros/nulls during network timeouts or browser inactivity.
+- **Dashboard**: Refactored data loading to ensure global notifications (pending admissions) are fetched on initial mount, regardless of the active tab.
+- **Statistics**: Corrected the "Active Students" metric to strictly count users with the `student` role in the `profiles` table.
 - **Realtime**: Optimized Supabase Realtime channel management in the dashboard to avoid connection timeouts and duplicates in React Strict Mode.
+- **LMS Admin**: Extended the anti-data-erasure shield to `AdminCourses.tsx`, preventing the course list and details from going blank during inactivity or fetch errors.
 
 ### Removed
 - **Legacy Mocks**: Physically deleted `src/services/mockDatabase.ts` and removed all remaining references. Switched `TestimonialListModal` and `RegistrationForm` to use real Supabase data.

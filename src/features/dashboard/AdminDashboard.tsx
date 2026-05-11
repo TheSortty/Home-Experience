@@ -106,7 +106,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
       const results = await Promise.allSettled([
         supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('is_deleted', false).abortSignal(abort.signal),
         supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('is_deleted', false).abortSignal(abort.signal),
-        supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'active').abortSignal(abort.signal),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student').abortSignal(abort.signal),
         supabase.from('cycles').select('id, name, type, enrolled_count, start_date').eq('status', 'active').eq('is_deleted', false).order('start_date', { ascending: true }).abortSignal(abort.signal),
         supabase.from('cycle_sessions')
           .select('session_date, cycle_id, cycle:cycles(name, type, enrolled_count)')
@@ -186,15 +186,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Overview data: Realtime + polling + visibility ─────────────────────────
+  // ─── Initial Global Load & Realtime ─────────────────────────
   useEffect(() => {
-    if (activeTab !== 'overview') return;
-
-    // Initial load (or after switching back to this tab)
+    // Initial load for everything (stats, activity, etc)
     fetchDashboardData();
 
-    // Realtime channel — one stable name per mount, not recreated on auth refresh
-    const channelName = 'dashboard_overview_stable';
+    // Realtime channel — one stable name per mount
+    const channelName = 'dashboard_global_stable';
     
     // Cleanup existing channels with same name to prevent TIMED_OUT in Strict Mode
     supabase.getChannels().forEach(ch => {
@@ -207,10 +205,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, fetchDashboardData)
       .subscribe();
 
-    // Refetch when the browser tab regains focus (covers the "left and came back" case).
-    // We intentionally do NOT add a setInterval poll here: the Realtime subscription
-    // already pushes changes instantly, and polling every 60s was the root cause of
-    // the stuck-loading bug (race with Supabase token rotation).
     const handleVisible = () => {
       if (!document.hidden) fetchDashboardData();
     };
@@ -220,9 +214,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
       supabase.removeChannel(channel);
       document.removeEventListener('visibilitychange', handleVisible);
     };
-  // Only re-run when the user actually switches tabs inside the admin
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, fetchDashboardData]);
+  }, [fetchDashboardData]);
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
