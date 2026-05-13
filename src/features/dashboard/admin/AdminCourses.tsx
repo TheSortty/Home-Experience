@@ -462,19 +462,28 @@ export default function AdminCourses() {
   const [lessonModal, setLessonModal] = useState<{ open: boolean; lesson: Lesson | null; moduleId: string } | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
-  const fetchCourses = useCallback(async () => {
-    const isFirstLoad = !hasLoadedOnceRef.current;
-    if (isFirstLoad) setLoadingCourses(true);
+  const fetchData = useCallback(async (isBackgroundRefresh = false) => {
+    const isFirstLoad = !hasLoadedOnceRef.current || !isBackgroundRefresh;
+    if (isFirstLoad && courses.length === 0) setLoadingCourses(true);
     
-    const { data, error } = await supabase.from('courses').select('*').order('created_at', { ascending: false });
-    
-    if (!error && data) {
-      setCourses(data);
+    try {
+      const [coursesRes, modulesRes, lessonsRes] = await Promise.all([
+        supabase.from('courses').select('*').order('created_at', { ascending: false }),
+        supabase.from('modules').select('*').order('order_index', { ascending: true }),
+        supabase.from('lessons').select('*').order('order_index', { ascending: true })
+      ]);
+
+      if (coursesRes.data) setCourses(coursesRes.data);
+      if (modulesRes.data) setModules(modulesRes.data);
+      if (lessonsRes.data) setLessons(lessonsRes.data);
+      
       hasLoadedOnceRef.current = true;
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoadingCourses(false);
     }
-    
-    if (isFirstLoad) setLoadingCourses(false);
-  }, []); // Linter fix: Removed supabase
+  }, [courses.length]);
 
   const fetchCourseDetail = useCallback(async (course: Course) => {
     setLoadingDetail(true);
@@ -511,21 +520,25 @@ export default function AdminCourses() {
   }, []);
 
   useEffect(() => {
-    fetchCourses();
+    fetchData();
 
     const channelName = 'courses_changes_stable';
     const channel = supabase.channel(channelName)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, fetchCourses)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, () => fetchData(true))
       .subscribe();
 
-    const handleVisible = () => { if (!document.hidden) fetchCourses(); };
-    document.addEventListener('visibilitychange', handleVisible);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       supabase.removeChannel(channel);
-      document.removeEventListener('visibilitychange', handleVisible);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [fetchCourses]);
+  }, [fetchData]);
 
   const openCourse = (course: Course) => {
     setSelectedCourse(course);
@@ -624,8 +637,11 @@ export default function AdminCourses() {
           </button>
         </div>
 
-        {loadingCourses ? (
-          <div className="text-center py-16 text-slate-400">Cargando...</div>
+        {loadingCourses && courses.length === 0 ? (
+          <div className="flex items-center justify-center py-20 text-slate-400">
+            <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm font-medium">Cargando cursos...</p>
+          </div>
         ) : courses.length === 0 ? (
           <div className="text-center py-16 text-slate-400">
             <IoBookOutline size={48} className="mx-auto mb-3 text-slate-300" />
@@ -676,7 +692,7 @@ export default function AdminCourses() {
           <CourseModal
             course={courseModal.course}
             onClose={() => setCourseModal({ open: false, course: null })}
-            onSaved={() => { setCourseModal({ open: false, course: null }); fetchCourses(); }}
+            onSaved={() => { setCourseModal({ open: false, course: null }); fetchData(); }}
           />
         )}
       </>
@@ -694,7 +710,7 @@ export default function AdminCourses() {
         </button>
         <div className="flex-1 min-w-0">
           <h2 className="text-xl font-bold text-slate-900 truncate">{selectedCourse.title}</h2>
-          <p className="text-sm text-slate-500">{modules.length} módulos · {lessons.length} clases</p>
+          <p className="text-sm text-slate-500">{modules.filter(m => m.course_id === selectedCourse.id).length} módulos · {lessons.filter(l => modules.filter(m => m.course_id === selectedCourse.id).map(m => m.id).includes(l.module_id)).length} clases</p>
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${selectedCourse.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -727,7 +743,7 @@ export default function AdminCourses() {
               No hay módulos. Creá el primero para comenzar.
             </div>
           ) : (
-            modules.map(mod => {
+            modules.filter(m => m.course_id === selectedCourse.id).map(mod => {
               const modLessons = lessons.filter(l => l.module_id === mod.id).sort((a, b) => a.order_index - b.order_index);
               const isOpen = expandedModule === mod.id;
               return (
@@ -854,9 +870,9 @@ export default function AdminCourses() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
             <h3 className="font-bold text-slate-700 mb-3">Estadísticas</h3>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-slate-500">Módulos</span><span className="font-bold text-slate-800">{modules.length}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Clases totales</span><span className="font-bold text-slate-800">{lessons.length}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Clases publicadas</span><span className="font-bold text-emerald-700">{lessons.filter(l => l.is_published).length}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Módulos</span><span className="font-bold text-slate-800">{modules.filter(m => m.course_id === selectedCourse.id).length}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Clases totales</span><span className="font-bold text-slate-800">{lessons.filter(l => modules.filter(m => m.course_id === selectedCourse.id).map(m => m.id).includes(l.module_id)).length}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Clases publicadas</span><span className="font-bold text-emerald-700">{lessons.filter(l => modules.filter(m => m.course_id === selectedCourse.id).map(m => m.id).includes(l.module_id) && l.is_published).length}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Ciclos vinculados</span><span className="font-bold text-slate-800">{linkedCycles.length}</span></div>
             </div>
           </div>
@@ -870,7 +886,7 @@ export default function AdminCourses() {
           onClose={() => setCourseModal({ open: false, course: null })}
           onSaved={() => {
             setCourseModal({ open: false, course: null });
-            fetchCourses();
+            fetchData();
             if (selectedCourse && courseModal.course?.id === selectedCourse.id) {
               // Re-fetch updated course
               supabase.from('courses').select('*').eq('id', selectedCourse.id).single().then(({ data }) => {

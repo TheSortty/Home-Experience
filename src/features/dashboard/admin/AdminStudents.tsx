@@ -25,118 +25,122 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
         if (count !== null) setTrashCount(count);
     }, []);
 
-    const fetchStudents = useCallback(async () => {
-        const isFirstLoad = !hasLoadedOnceRef.current;
-        if (isFirstLoad) setIsLoading(true);
+    const fetchData = useCallback(async (isBackgroundRefresh = false) => {
+        const isFirstLoad = !hasLoadedOnceRef.current || !isBackgroundRefresh;
+        if (isFirstLoad && students.length === 0) setIsLoading(true);
 
-        const { data, error } = await supabase
-            .from('profiles')
-            .select(`
-                id, first_name, last_name, email, phone, is_deleted,
-                enrollments (
-                    id, status, payment_status,
-                    cycle:cycles ( id, name, type, start_date ),
-                    attendance ( id, status ),
-                    payments ( amount, method, status, paid_at )
-                )
-            `)
-            .eq('role', 'student')
-            .eq('is_deleted', viewMode === 'trash');
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select(`
+                    id, first_name, last_name, email, phone, is_deleted,
+                    enrollments (
+                        id, status, payment_status,
+                        cycle:cycles ( id, name, type, start_date ),
+                        attendance ( id, status ),
+                        payments ( amount, method, status, paid_at )
+                    )
+                `)
+                .eq('role', 'student')
+                .eq('is_deleted', viewMode === 'trash');
 
-        if (error) { 
-            console.error('Error fetching students:', error); 
-            if (isFirstLoad) setIsLoading(false);
-            return; 
-        }
+            if (error) throw error;
 
-        if (data) {
-            const emails = data.map((p: any) => p.email).filter(Boolean);
-            const { data: submissions } = await supabase.from('form_submissions').select('email, data').in('email', emails);
-            const submissionsMap = (submissions || []).reduce((acc: any, c: any) => { acc[c.email] = c.data; return acc; }, {});
+            if (data) {
+                const emails = data.map((p: any) => p.email).filter(Boolean);
+                const profileIds = data.map((p: any) => p.id);
+                const cycleIds = data.flatMap((p: any) => p.enrollments?.map((e: any) => e.cycle?.id)).filter(Boolean);
 
-            const profileIds = data.map((p: any) => p.id);
-            const { data: medicalData } = await supabase.from('medical_info').select('*').in('user_id', profileIds);
-            const medicalMap = (medicalData || []).reduce((acc: any, c: any) => { acc[c.user_id] = c; return acc; }, {});
+                const [submissionsRes, medicalRes, sessionsRes] = await Promise.all([
+                    supabase.from('form_submissions').select('email, data').in('email', emails),
+                    supabase.from('medical_info').select('*').in('user_id', profileIds),
+                    cycleIds.length > 0 ? supabase.from('cycle_sessions').select('cycle_id').in('cycle_id', cycleIds) : Promise.resolve({ data: [] })
+                ]);
 
-            const cycleIds = data.flatMap((p: any) => p.enrollments?.map((e: any) => e.cycle?.id)).filter(Boolean);
-            let sessionsMap: Record<string, number> = {};
-            if (cycleIds.length > 0) {
-                const { data: sessions } = await supabase.from('cycle_sessions').select('cycle_id').in('cycle_id', cycleIds);
-                sessionsMap = (sessions || []).reduce((acc: any, s: any) => { acc[s.cycle_id] = (acc[s.cycle_id] || 0) + 1; return acc; }, {});
-            }
+                const submissionsMap = (submissionsRes.data || []).reduce((acc: any, c: any) => { acc[c.email] = c.data; return acc; }, {});
+                const medicalMap = (medicalRes.data || []).reduce((acc: any, c: any) => { acc[c.user_id] = c; return acc; }, {});
+                const sessionsMap = (sessionsRes.data || []).reduce((acc: any, s: any) => { acc[s.cycle_id] = (acc[s.cycle_id] || 0) + 1; return acc; }, {});
 
-            const formatted: StudentForModal[] = data.map((p: any) => {
-                const history: any[] = (p.enrollments || []).map((e: any) => {
-                    const attCount = e.attendance?.filter((a: any) => ['present', 'late'].includes(a.status)).length || 0;
-                    const cId = e.cycle?.id;
-                    const totalSess = cId ? (sessionsMap[cId] || 0) : 0;
-                    const pay = e.payments?.[0];
-                    
-                    const startDate = e.cycle?.start_date || '9999-12-31';
-                    const isOverdue = e.status === 'active' && e.payment_status !== 'paid';
-                    let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' = 'ACTIVE';
+                const formatted: StudentForModal[] = data.map((p: any) => {
+                    const history: any[] = (p.enrollments || []).map((e: any) => {
+                        const attCount = e.attendance?.filter((a: any) => ['present', 'late'].includes(a.status)).length || 0;
+                        const cId = e.cycle?.id;
+                        const totalSess = cId ? (sessionsMap[cId] || 0) : 0;
+                        const pay = e.payments?.[0];
+                        
+                        const startDate = e.cycle?.start_date || '9999-12-31';
+                        const isOverdue = e.status === 'active' && e.payment_status !== 'paid';
+                        let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' = 'ACTIVE';
 
-                    if (e.status === 'conflict' || isOverdue) {
-                        derivedStatus = 'CONFLICT';
-                    } else if (e.status === 'graduated' || e.status === 'completed') {
-                        derivedStatus = 'GRADUATED';
-                    }
+                        if (e.status === 'conflict' || isOverdue) {
+                            derivedStatus = 'CONFLICT';
+                        } else if (e.status === 'graduated' || e.status === 'completed') {
+                            derivedStatus = 'GRADUATED';
+                        }
+
+                        return {
+                            id: e.id,
+                            cycleName: e.cycle?.name || 'Desconocido',
+                            cycleType: e.cycle?.type || 'initial',
+                            status: derivedStatus,
+                            attendanceCount: attCount,
+                            totalSessions: totalSess,
+                            paymentInfo: pay ? {
+                                amount: pay.amount,
+                                method: pay.method === 'mercadopago' ? 'Mercado Pago' : (pay.method === 'transfer' ? 'Transferencia' : 'Efectivo'),
+                                status: pay.status === 'paid' ? 'Pagado' : (e.payment_status === 'paid' ? 'Pagado' : 'Pendiente'),
+                                paidAt: pay.paid_at ? new Date(pay.paid_at).toLocaleDateString() : '-'
+                            } : null,
+                            notes: e.notes || '',
+                            startDate: startDate
+                        };
+                    }).sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 
                     return {
-                        id: e.id,
-                        cycleName: e.cycle?.name || 'Desconocido',
-                        cycleType: e.cycle?.type || 'initial',
-                        status: derivedStatus,
-                        attendanceCount: attCount,
-                        totalSessions: totalSess,
-                        paymentInfo: pay ? {
-                            amount: pay.amount,
-                            method: pay.method === 'mercadopago' ? 'Mercado Pago' : (pay.method === 'transfer' ? 'Transferencia' : 'Efectivo'),
-                            status: pay.status === 'paid' ? 'Pagado' : (e.payment_status === 'paid' ? 'Pagado' : 'Pendiente'),
-                            paidAt: pay.paid_at ? new Date(pay.paid_at).toLocaleDateString() : '-'
-                        } : null,
-                        notes: e.notes || '',
-                        startDate: startDate
+                        id: p.id,
+                        name: `${p.first_name} ${p.last_name}`,
+                        email: p.email,
+                        phone: p.phone || submissionsMap[p.email]?.phone || '-',
+                        programHistory: history,
+                        formData: submissionsMap[p.email] || {},
+                        medicalInfo: medicalMap[p.id] || null,
+                        is_deleted: p.is_deleted
                     };
-                }).sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-
-                return {
-                    id: p.id,
-                    name: `${p.first_name} ${p.last_name}`,
-                    email: p.email,
-                    phone: p.phone || submissionsMap[p.email]?.phone || '-',
-                    programHistory: history,
-                    formData: submissionsMap[p.email] || {},
-                    medicalInfo: medicalMap[p.id] || null,
-                    is_deleted: p.is_deleted
-                };
-            });
-            setStudents(formatted);
-            hasLoadedOnceRef.current = true;
+                });
+                
+                setStudents(formatted);
+                hasLoadedOnceRef.current = true;
+            }
+        } catch (err) {
+            console.error('Error fetching students:', err);
+        } finally {
+            setIsLoading(false);
+            fetchTrashCount();
         }
-        
-        if (isFirstLoad) setIsLoading(false);
-        fetchTrashCount();
-    }, [viewMode, fetchTrashCount]); // Linter fix: Removed supabase
+    }, [viewMode, fetchTrashCount, students.length]);
 
     useEffect(() => { 
-        fetchStudents(); 
+        fetchData(); 
         fetchTrashCount(); 
 
         const channelName = `students_changes_${viewMode}`;
         const channel = supabase.channel(channelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchStudents)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchStudents)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => fetchData(true))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchData(true))
             .subscribe();
 
-        const handleVisible = () => { if (!document.hidden) fetchStudents(); };
-        document.addEventListener('visibilitychange', handleVisible);
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                fetchData(true);
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
             supabase.removeChannel(channel);
-            document.removeEventListener('visibilitychange', handleVisible);
+            document.removeEventListener('visibilitychange', handleVisibility);
         };
-    }, [viewMode, fetchStudents, fetchTrashCount]);
+    }, [viewMode, fetchData, fetchTrashCount]);
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
@@ -253,7 +257,7 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
                 </div>
 
                 <div className="flex-1 overflow-auto">
-                    {isLoading ? (
+                    {isLoading && students.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                              <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mb-4" />
                              <p className="text-sm font-medium">Cargando alumnos...</p>

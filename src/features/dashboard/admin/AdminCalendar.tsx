@@ -76,40 +76,52 @@ const AdminCalendar: React.FC = () => {
         if (count !== null) setTrashCount(count);
     }, []);
 
-    const fetchCycles = useCallback(async () => {
-        const isFirstLoad = !hasLoadedOnceRef.current;
-        if (isFirstLoad) setLoading(true);
-        const { data, error } = await supabase.from('cycles').select('*').eq('is_deleted', viewMode === 'trash').order('start_date', { ascending: true });
-        
-        if (!error && data) {
-            setCycles(data);
-            hasLoadedOnceRef.current = true;
+    const fetchData = useCallback(async (isBackgroundRefresh = false) => {
+        const isFirstLoad = !hasLoadedOnceRef.current || !isBackgroundRefresh;
+        if (isFirstLoad && cycles.length === 0) setLoading(true);
+        try {
+            const [cyclesRes, trashCountRes] = await Promise.all([
+                supabase.from('cycles').select('*').eq('is_deleted', viewMode === 'trash').order('start_date', { ascending: true }),
+                supabase.from('cycles').select('*', { count: 'exact', head: true }).eq('is_deleted', true)
+            ]);
+            
+            if (cyclesRes.data) {
+                setCycles(cyclesRes.data);
+                hasLoadedOnceRef.current = true;
+            }
+            if (trashCountRes.count !== null) {
+                setTrashCount(trashCountRes.count);
+            }
+        } catch (error) {
+            console.error('Error fetching calendar data:', error);
+        } finally {
+            setLoading(false);
         }
-        
-        if (isFirstLoad) setLoading(false);
-        fetchTrashCount();
-    }, [viewMode, fetchTrashCount]); // Linter fix: Removed supabase
+    }, [viewMode, cycles.length]);
 
     useEffect(() => {
-        fetchCycles();
-        fetchTrashCount();
+        fetchData();
 
         // Stable channel name tied to viewMode
         const channelName = `calendar_changes_${viewMode}`;
         const channel = supabase.channel(channelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, fetchCycles)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchCycles)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => fetchData(true))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchData(true))
             .subscribe();
 
         // Refetch when tab regains visibility
-        const handleVisible = () => { if (!document.hidden) { fetchCycles(); fetchTrashCount(); } };
-        document.addEventListener('visibilitychange', handleVisible);
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                fetchData(true);
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
             supabase.removeChannel(channel);
-            document.removeEventListener('visibilitychange', handleVisible);
+            document.removeEventListener('visibilitychange', handleVisibility);
         };
-    }, [viewMode, fetchCycles, fetchTrashCount]);
+    }, [viewMode, fetchData]);
 
     const handleCreateCycle = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -121,7 +133,7 @@ const AdminCalendar: React.FC = () => {
                 type: fd.get('type'), capacity: parseInt(fd.get('capacity') as string) || 30, status: 'active', enrolled_count: 0
             }]);
             if (error) throw error;
-            fetchCycles(); setIsCreateModalOpen(false);
+            fetchData(); setIsCreateModalOpen(false);
             toast.success('Ciclo creado correctamente');
         } catch (error: any) {
             toast.error('Error al crear ciclo: ' + error.message);
@@ -145,7 +157,7 @@ const AdminCalendar: React.FC = () => {
         try {
             const { error } = await supabase.from('cycles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id);
             if (error) throw error;
-            fetchCycles();
+            fetchData();
             toast.success('Ciclo restaurado');
         } catch (error: any) {
             toast.error('Error al restaurar: ' + error.message);
@@ -438,7 +450,7 @@ const AdminCalendar: React.FC = () => {
                     </div>
 
                     <div className="overflow-y-auto p-6 space-y-4">
-                        {loading ? <p className="text-center text-slate-400">Cargando ciclos...</p> : filteredCycles.length === 0 ? <p className="text-center text-slate-400">No hay ciclos.</p> : (
+                        {loading && cycles.length === 0 ? <p className="text-center text-slate-400 py-10">Cargando ciclos...</p> : filteredCycles.length === 0 ? <p className="text-center text-slate-400 py-10">No hay ciclos.</p> : (
                             filteredCycles.map(cycle => (
                                 <div key={cycle.id} className="bg-white border border-slate-100 rounded-sm p-4 hover:border-blue-200 transition-all flex items-center justify-between cursor-pointer group" onClick={() => openCycleDetail(cycle)}>
                                     <div className="flex items-center gap-4">
