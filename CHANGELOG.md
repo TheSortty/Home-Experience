@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Admin Dashboard (Stability)**: Refactored CAMPUS (`AdminCourses`) integration in the main dashboard to use a persistent mount with `display: none` toggle, eliminating the "micro-loading" flicker when switching tabs.
+- **Admin Courses (CAMPUS)**: Stabilized data persistence by refactoring `fetchData` with an empty dependency array, preventing recursive re-subscriptions and infinite loading loops.
+- **Data Integrity**: Implemented `AbortController` with a 15-second timeout and switched to `Promise.allSettled` in `AdminCourses` to ensure partial data availability and prevent UI freezes during network hiccups.
+- **Real-time Sync**: Added proactive channel cleanup logic for Supabase subscriptions to prevent duplicate connections and `TIMED_OUT` errors in React StrictMode.
 - **Middleware & Routing**: Refactored `middleware.ts` to implement centralized server-side role-based redirection. This fixes infinite loops and blank screens when Admins accessed student routes.
 - **Preview Mode**: Implemented "Student Preview" mode for Admins. Admins can now bypass enrollment and lock checks by adding `?preview=true` to campus URLs. Added a "Vista Previa (Alumno)" button in the Admin Sidebar.
 - **Material Flow**: Enhanced icon rendering for resources in both Admin and Student views. Added automatic detection for Word (`.doc`, `.docx`), Excel (`.xls`, `.xlsx`, `.csv`), and PowerPoint (`.ppt`, `.pptx`) extensions with custom icons and colors.

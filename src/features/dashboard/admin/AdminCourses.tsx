@@ -463,27 +463,40 @@ export default function AdminCourses() {
   const hasLoadedOnceRef = useRef(false);
 
   const fetchData = useCallback(async (isBackgroundRefresh = false) => {
-    const isFirstLoad = !hasLoadedOnceRef.current || !isBackgroundRefresh;
-    if (isFirstLoad && courses.length === 0) setLoadingCourses(true);
+    const isFirstLoad = !hasLoadedOnceRef.current || (!isBackgroundRefresh && courses.length === 0);
+    if (isFirstLoad) setLoadingCourses(true);
+    
+    const abort = new AbortController();
+    const timeoutId = setTimeout(() => abort.abort(), 15_000);
     
     try {
-      const [coursesRes, modulesRes, lessonsRes] = await Promise.all([
-        supabase.from('courses').select('*').order('created_at', { ascending: false }),
-        supabase.from('modules').select('*').order('order_index', { ascending: true }),
-        supabase.from('lessons').select('*').order('order_index', { ascending: true })
+      const results = await Promise.allSettled([
+        supabase.from('courses').select('*').order('created_at', { ascending: false }).abortSignal(abort.signal),
+        supabase.from('modules').select('*').order('order_index', { ascending: true }).abortSignal(abort.signal),
+        supabase.from('lessons').select('*').order('order_index', { ascending: true }).abortSignal(abort.signal)
       ]);
 
-      if (coursesRes.data) setCourses(coursesRes.data);
-      if (modulesRes.data) setModules(modulesRes.data);
-      if (lessonsRes.data) setLessons(lessonsRes.data);
+      const getRes = (res: any) => res.status === 'fulfilled' ? res.value : null;
+
+      const coursesRes = getRes(results[0]);
+      const modulesRes = getRes(results[1]);
+      const lessonsRes = getRes(results[2]);
+
+      if (coursesRes?.data) setCourses(coursesRes.data);
+      if (modulesRes?.data) setModules(modulesRes.data);
+      if (lessonsRes?.data) setLessons(lessonsRes.data);
       
       hasLoadedOnceRef.current = true;
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') {
+        console.error('Error fetching dashboard data:', error);
+      }
     } finally {
-      setLoadingCourses(false);
+      clearTimeout(timeoutId);
+      if (isFirstLoad) setLoadingCourses(false);
     }
-  }, [courses.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchCourseDetail = useCallback(async (course: Course) => {
     setLoadingDetail(true);
@@ -523,8 +536,16 @@ export default function AdminCourses() {
     fetchData();
 
     const channelName = 'courses_changes_stable';
+    
+    // Limpiar canal previo si existe (evita TIMED_OUT en React StrictMode)
+    supabase.getChannels().forEach(ch => {
+      if (ch.topic.includes(channelName)) supabase.removeChannel(ch);
+    });
+
     const channel = supabase.channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, () => fetchData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'modules' }, () => fetchData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lessons' }, () => fetchData(true))
       .subscribe();
 
     const handleVisibility = () => {

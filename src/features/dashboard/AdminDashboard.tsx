@@ -698,7 +698,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                     <div style={{ display: activeTab === 'calendar' ? undefined : 'none' }}>
                       <AdminCalendar />
                     </div>
-                    {activeTab === 'courses' && <AdminCourses />}
+                    <div style={{ display: activeTab === 'courses' ? undefined : 'none' }}>
+                      <AdminCourses />
+                    </div>
                     {activeTab === 'communications' && renderCommunications()}
                     {activeTab === 'forms' && <AdminForms />}
                     {activeTab === 'settings' && <AdminSettings />}
