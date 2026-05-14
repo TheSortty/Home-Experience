@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
+import { safeMutate } from '../../../services/supabaseMutation';
+import { getStudentProgress, StudentProgramProgress } from '../../../services/progressService';
 import CheckIcon from '../../../ui/icons/CheckIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 
@@ -17,6 +19,7 @@ export interface ProgramHistoryItem {
 
 export interface StudentForModal {
     id: string;
+    user_id: string | null;
     name: string;
     email: string;
     phone: string;
@@ -74,6 +77,10 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     const [studentGoals, setStudentGoals] = useState<Goal[]>([]);
     const [isLoadingGoals, setIsLoadingGoals] = useState(false);
 
+    // LMS Progress State
+    const [lmsProgress, setLmsProgress] = useState<StudentProgramProgress[]>([]);
+    const [isLoadingLms, setIsLoadingLms] = useState(false);
+
     // Program Notes State
     const [programNotes, setProgramNotes] = useState<{ id: string, content: string, created_at: string }[]>([]);
     const [newNoteContent, setNewNoteContent] = useState('');
@@ -116,9 +123,17 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
     useEffect(() => {
         if (detailTab === 'METAS') fetchGoals(student.id);
+        if (detailTab === 'PROGRESO') fetchLmsProgress(student.id);
         if (detailTab === 'CARTA' && plEnrollment) fetchCarta(plEnrollment.id);
         if (detailTab === 'PLANILLA_PL' && plEnrollment) fetchCheckins(plEnrollment.id);
     }, [detailTab, student.id, plEnrollment?.id]);
+
+    const fetchLmsProgress = async (profileId: string) => {
+        setIsLoadingLms(true);
+        const progress = await getStudentProgress(supabase, profileId);
+        setLmsProgress(progress);
+        setIsLoadingLms(false);
+    };
 
     const fetchProgramNotes = async (enrollmentId: string) => {
         setIsLoadingNotes(true);
@@ -150,11 +165,19 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     const saveCarta = async () => {
         if (!plEnrollment) return;
         setIsSavingCarta(true);
-        await supabase.from('student_goals').upsert({
-            enrollment_id: plEnrollment.id,
-            ...cartaDraft,
-            updated_at: new Date().toISOString(),
-        }, { onConflict: 'enrollment_id' });
+        const { error } = await safeMutate(() => 
+            supabase.from('student_goals').upsert({
+                enrollment_id: plEnrollment.id,
+                ...cartaDraft,
+                updated_at: new Date().toISOString(),
+            }, { onConflict: 'enrollment_id' })
+        );
+        if (error) {
+            console.error('[Carta] Save error:', error);
+            toast.error('Error al guardar: ' + error.message);
+        } else {
+            toast.success('Carta guardada correctamente');
+        }
         await fetchCarta(plEnrollment.id);
         setIsSavingCarta(false);
     };
@@ -169,12 +192,20 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     const saveWeekCheckin = async (weekNum: number) => {
         if (!plEnrollment) return;
         setIsSavingCheckin(true);
-        await supabase.from('weekly_checkins').upsert({
-            enrollment_id: plEnrollment.id,
-            week_number: weekNum,
-            scores: weekDraft,
-            updated_at: new Date().toISOString(),
-        }, { onConflict: 'enrollment_id,week_number' });
+        const { error } = await safeMutate(() => 
+            supabase.from('weekly_checkins').upsert({
+                enrollment_id: plEnrollment.id,
+                week_number: weekNum,
+                scores: weekDraft,
+                updated_at: new Date().toISOString(),
+            }, { onConflict: 'enrollment_id,week_number' })
+        );
+        if (error) {
+            console.error('[Planilla] Save error:', error);
+            toast.error('Error al guardar: ' + error.message);
+        } else {
+            toast.success('Semana guardada correctamente');
+        }
         await fetchCheckins(plEnrollment.id);
         setEditingWeek(null);
         setIsSavingCheckin(false);
@@ -192,10 +223,12 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         if (!newNoteContent.trim()) return;
         setIsSavingNote(true);
         try {
-            const { data, error } = await supabase.from('enrollment_notes').insert([{
-                enrollment_id: enrollmentId,
-                content: newNoteContent.trim()
-            }]).select();
+            const { data, error } = await safeMutate(() => 
+                supabase.from('enrollment_notes').insert([{
+                    enrollment_id: enrollmentId,
+                    content: newNoteContent.trim()
+                }]).select()
+            );
 
             if (!error && data) {
                 setProgramNotes([data[0], ...programNotes]);
@@ -266,6 +299,10 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 },
                                 {
+                                    id: 'PROGRESO', label: 'Progreso LMS', sysadmin: false,
+                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                                },
+                                {
                                     id: 'METAS', label: 'Seguimiento', sysadmin: true,
                                     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                                 },
@@ -316,10 +353,11 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                     {detailTab === 'SALUD'       && 'Sección 03'}
                                     {detailTab === 'OTROS'       && 'Sección 04'}
                                     {detailTab === 'PROGRAMAS'   && 'Sección 05'}
-                                    {detailTab === 'METAS'       && 'Sección 06'}
-                                    {detailTab === 'CARTA'       && <span className="text-purple-600">SYSADMIN · Sección 07</span>}
-                                    {detailTab === 'PLANILLA_PL' && <span className="text-purple-600">SYSADMIN · Sección 08</span>}
-                                    {detailTab === 'CAMPUS'      && <span className="text-purple-600">SYSADMIN · Sección 09</span>}
+                                    {detailTab === 'PROGRESO'    && 'Sección 06'}
+                                    {detailTab === 'METAS'       && 'Sección 07'}
+                                    {detailTab === 'CARTA'       && <span className="text-purple-600">SYSADMIN · Sección 08</span>}
+                                    {detailTab === 'PLANILLA_PL' && <span className="text-purple-600">SYSADMIN · Sección 09</span>}
+                                    {detailTab === 'CAMPUS'      && <span className="text-purple-600">SYSADMIN · Sección 10</span>}
                                 </h4>
                                 <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
                                     {detailTab === 'PERSONAL'    && 'Información de Contacto y Perfil'}
@@ -327,6 +365,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                     {detailTab === 'SALUD'       && 'Historial Médico y Emergencias'}
                                     {detailTab === 'OTROS'       && 'Información Adicional Recopilada'}
                                     {detailTab === 'PROGRAMAS'   && 'Historial de Programas CRESER'}
+                                    {detailTab === 'PROGRESO'    && 'Progreso en el Campus (LMS)'}
                                     {detailTab === 'METAS'       && 'Seguimiento de Plan Líder'}
                                     {detailTab === 'CARTA'       && 'Carta de Enrolamiento — Plan Líder'}
                                     {detailTab === 'PLANILLA_PL' && 'Planilla Magna — Seguimiento 13 Semanas'}
@@ -455,6 +494,63 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                     ) : (
                                         <div className="p-10 bg-slate-50 border border-slate-100 rounded-md text-center">
                                             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No hay historial de programas.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* LMS Progress Tab */}
+                            {detailTab === 'PROGRESO' && (
+                                <div className="space-y-6">
+                                    {!student.user_id ? (
+                                        <div className="py-16 text-center bg-slate-50 border border-dashed border-slate-200 rounded-sm">
+                                            <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Sin acceso al campus</p>
+                                            <p className="text-xs text-slate-400 mt-1">El alumno todavía no tiene un usuario creado en el campus.</p>
+                                        </div>
+                                    ) : isLoadingLms ? (
+                                        <p className="text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 py-10">Cargando progreso...</p>
+                                    ) : lmsProgress.length === 0 ? (
+                                        <div className="py-16 text-center bg-slate-50 border border-dashed border-slate-200 rounded-sm">
+                                            <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Sin actividad</p>
+                                            <p className="text-xs text-slate-400 mt-1">El alumno no tiene cursos LMS asignados o inicializados.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            {lmsProgress.map(prog => (
+                                                <div key={prog.enrollmentId} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                                                    <div className="h-32 bg-slate-100 relative">
+                                                        {prog.courseCover ? (
+                                                            <img src={prog.courseCover} alt={prog.courseTitle} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <div className="w-full h-full bg-gradient-to-r from-blue-500 to-emerald-500"></div>
+                                                        )}
+                                                        <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-1 rounded text-[10px] font-bold text-slate-700 uppercase">
+                                                            {prog.enrollmentStatus === 'completed' ? 'Completado' : 'Cursando'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="p-5 flex-1 flex flex-col">
+                                                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">{prog.cycleName}</span>
+                                                        <h3 className="font-bold text-slate-900 text-lg mb-4">{prog.courseTitle}</h3>
+                                                        
+                                                        <div className="mt-auto">
+                                                            <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                                                <span>{prog.completedLessons} / {prog.totalLessons} clases</span>
+                                                                <span className="text-[#00A9CE]">{prog.progressPercent}%</span>
+                                                            </div>
+                                                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-4">
+                                                                <div className="h-full bg-[#00A9CE] rounded-full transition-all" style={{ width: `${prog.progressPercent}%` }} />
+                                                            </div>
+                                                            
+                                                            {prog.nextLessonId && (
+                                                                <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Próxima Lección</p>
+                                                                    <p className="text-xs font-bold text-slate-700 truncate">{prog.nextLessonTitle}</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
                                 </div>

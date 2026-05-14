@@ -81,6 +81,14 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const isAdminRoute = matchesPrefix('/admin')
   const isCampusRoute = ['/dashboard', '/cursos', '/comunidad', '/calendario', '/perfil'].some(matchesPrefix)
   const isLoginRoute = matchesPrefix('/auth/login')
+  const isAuthCallback = matchesPrefix('/auth/callback')
+  const isUpdatePasswordRoute = matchesPrefix('/auth/update-password')
+
+  // Bypass auth routes from redirection logic to ensure login links and password resets work
+  if (isAuthCallback || isUpdatePasswordRoute) {
+    return supabaseResponse
+  }
+
 
   // Step 3: Role-based Redirection Logic
   const role = user ? await resolveRole(supabase, user.id) : null

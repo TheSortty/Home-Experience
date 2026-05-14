@@ -39,7 +39,9 @@ export const UpdatePassword: React.FC<UpdatePasswordProps> = ({ onSuccess }) => 
         setError('Error al actualizar contraseña: ' + error.message);
       } else {
         toast.success('Contraseña actualizada correctamente. Iniciá sesión con tu nueva clave.');
+        // Sign out to clear the temporary session and force a clean login
         await supabase.auth.signOut();
+        // The parent component should handle redirecting to /auth/login
         onSuccess();
       }
     } catch (err: any) {

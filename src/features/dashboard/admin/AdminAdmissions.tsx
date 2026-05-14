@@ -51,6 +51,43 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
     const [registrationToDelete, setRegistrationToDelete] = useState<Registration | null>(null);
 
+    // --- Invite State ---
+    const [inviteModalData, setInviteModalData] = useState<{ email: string, name: string } | null>(null);
+    const [inviteMode, setInviteMode] = useState<'magic_link' | 'password'>('magic_link');
+    const [invitePassword, setInvitePassword] = useState('');
+    const [isInviting, setIsInviting] = useState(false);
+
+    const handleInviteSubmit = async () => {
+        if (!inviteModalData) return;
+        setIsInviting(true);
+        try {
+            const [firstName, ...lastNameParts] = inviteModalData.name.split(' ');
+            const lastName = lastNameParts.join(' ');
+            
+            const res = await fetch('/api/admin/create-student', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: inviteModalData.email,
+                    mode: inviteMode,
+                    password: inviteMode === 'password' ? invitePassword : null,
+                    firstName,
+                    lastName
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al crear credenciales');
+
+            toast.success(inviteMode === 'magic_link' ? 'Magic Link enviado por email' : 'Credenciales creadas correctamente');
+            setInviteModalData(null);
+        } catch (err: any) {
+            toast.error(err.message);
+        } finally {
+            setIsInviting(false);
+        }
+    };
+
     useEffect(() => {
     // Refetch on mount / viewMode change
     fetchRegistrations();
@@ -387,9 +424,17 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                     });
                 }
 
+                const savedName = selectedRegistration.name;
+                const savedEmail = selectedRegistration.email;
+
                 setIsAssignModalOpen(false);
                 setSelectedRegistration(null);
                 fetchRegistrations();
+                
+                // Abre el modal de invitación para el alumno recién confirmado
+                setInviteModalData({ email: savedEmail, name: savedName });
+                setInviteMode('magic_link');
+                setInvitePassword('');
             } else {
                 toast.error('Error en confirmación: ' + (data.error || 'Unknown'));
             }
@@ -1009,6 +1054,53 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                     className="flex-1 py-3 bg-red-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-lg shadow-red-200 hover:bg-red-700 transition-all"
                                 >
                                     Eliminar Ahora
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Invite Modal */}
+            {inviteModalData && createPortal(
+                <div className="full-screen-modal-overlay z-[70]" onClick={() => setInviteModalData(null)}>
+                    <div className="formal-modal max-w-md w-full p-8 animate-scale-in" onClick={e => e.stopPropagation()}>
+                        <div className="flex flex-col">
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Habilitar Acceso al Campus</h3>
+                            <p className="text-sm text-slate-500 mb-6">Vas a crear la cuenta de <strong>{inviteModalData.name}</strong> ({inviteModalData.email}).</p>
+                            
+                            <div className="space-y-4 mb-6">
+                                <label className={`flex items-start gap-3 p-4 border rounded-md cursor-pointer transition-colors ${inviteMode === 'magic_link' ? 'bg-blue-50 border-blue-200' : 'bg-white hover:bg-slate-50'}`}>
+                                    <input type="radio" name="inviteMode" checked={inviteMode === 'magic_link'} onChange={() => setInviteMode('magic_link')} className="mt-1" />
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800">Enviar enlace mágico</p>
+                                        <p className="text-xs text-slate-500 mt-1">El alumno recibirá un email con un botón para crear su propia contraseña.</p>
+                                    </div>
+                                </label>
+                                
+                                <label className={`flex items-start gap-3 p-4 border rounded-md cursor-pointer transition-colors ${inviteMode === 'password' ? 'bg-blue-50 border-blue-200' : 'bg-white hover:bg-slate-50'}`}>
+                                    <input type="radio" name="inviteMode" checked={inviteMode === 'password'} onChange={() => setInviteMode('password')} className="mt-1" />
+                                    <div className="w-full">
+                                        <p className="text-sm font-bold text-slate-800">Crear contraseña manualmente</p>
+                                        <p className="text-xs text-slate-500 mt-1 mb-3">Vos le pasas la contraseña por privado.</p>
+                                        {inviteMode === 'password' && (
+                                            <input 
+                                                type="text" 
+                                                placeholder="Mínimo 6 caracteres" 
+                                                value={invitePassword}
+                                                onChange={e => setInvitePassword(e.target.value)}
+                                                className="w-full p-2 text-sm border rounded-sm"
+                                            />
+                                        )}
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div className="flex gap-4 w-full">
+                                <button onClick={() => setInviteModalData(null)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all">Más tarde</button>
+                                <button onClick={handleInviteSubmit} disabled={isInviting || (inviteMode === 'password' && invitePassword.length < 6)} className="flex-1 py-3 bg-blue-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-lg shadow-blue-200 hover:bg-blue-700 disabled:opacity-50 transition-all">
+                                    {isInviting ? 'Procesando...' : 'Confirmar'}
                                 </button>
                             </div>
                         </div>

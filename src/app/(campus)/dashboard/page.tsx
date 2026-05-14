@@ -6,6 +6,7 @@ import {
 } from 'react-icons/io5';
 import { createClient } from '@/utils/supabase/server';
 import { resolveRole } from '@/src/services/roleService';
+import { getStudentProgress } from '@/src/services/progressService';
 import QuoteOfTheDay from '../_components/QuoteOfTheDay';
 
 const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -70,6 +71,8 @@ export default async function CampusDashboardPage({
       const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
       const canSeeEverything = isAdmin && isPreview;
 
+      let cycleIds: string[] = [];
+
       if (canSeeEverything) {
         // Fetch all published courses for preview
         const { data: allCourses } = await supabase
@@ -90,80 +93,64 @@ export default async function CampusDashboardPage({
           }));
         }
       } else {
-        const { data: userEnrollments } = await supabase
-          .from('enrollments')
-          .select('id, status, cycles(id, name, course_id, courses(id, title, cover_image_url))')
-          .eq('user_id', profile.id)
-          .eq('status', 'active');
+        // Use optimized RPC for student progress
+        const studentProgressList = await getStudentProgress(supabase, profile.id);
+        
+        cycleIds = studentProgressList.map(p => p.cycleId).filter(Boolean);
 
-        enrollments = userEnrollments || [];
-      }
-
-      const cycleIds = enrollments.map((e: any) => e.cycles?.id).filter(Boolean);
-      const courseIds = enrollments.map((e: any) => e.cycles?.course_id).filter(Boolean);
-
-      // Completed lessons count
-      if (courseIds.length > 0) {
-        const { count } = await supabase
-          .from('lesson_progress')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', profile.id)
-          .eq('completed', true);
-        completedCount = count ?? 0;
-
-        // Modules + lessons for progress and next lesson detection
-        const { data: modules } = await supabase
-          .from('modules')
-          .select('id, title, course_id, order_index, lessons(id, title, order_index, video_url)')
-          .in('course_id', courseIds)
-          .order('order_index', { ascending: true });
-
-        const { data: progress } = await supabase
-          .from('lesson_progress')
-          .select('lesson_id')
-          .eq('user_id', profile.id)
-          .eq('completed', true);
-
-        const completedIds = new Set((progress || []).map((p: any) => p.lesson_id));
-
-        let allLessons = 0;
-        for (const mod of (modules || [])) {
-          allLessons += (mod.lessons as any[])?.length ?? 0;
-        }
-        totalLessonsCount = allLessons;
-
-        // Find first incomplete lesson ordered by module/lesson index
-        const sortedMods = (modules || []).sort((a: any, b: any) => a.order_index - b.order_index);
-        outer: for (const mod of sortedMods) {
-          const lessons = ((mod.lessons as any[]) || []).sort((a: any, b: any) => a.order_index - b.order_index);
-          for (const lesson of lessons) {
-            if (!completedIds.has(lesson.id)) {
-              const enrollment = enrollments.find((e: any) => e.cycles?.course_id === mod.course_id);
-              nextLesson = {
-                lessonId: lesson.id,
-                lessonTitle: lesson.title,
-                courseId: mod.course_id,
-                moduleName: mod.title,
-                cycleName: enrollment?.cycles?.name ?? 'Programa',
-                videoUrl: lesson.video_url ?? null,
-              };
-              break outer;
-            }
+        studentProgressList.forEach(prog => {
+          completedCount += prog.completedLessons;
+          totalLessonsCount += prog.totalLessons;
+          
+          if (!nextLesson && prog.nextLessonId) {
+             nextLesson = {
+                lessonId: prog.nextLessonId,
+                lessonTitle: prog.nextLessonTitle || 'Continuar lección',
+                courseId: prog.courseId || '',
+                moduleName: prog.nextModuleTitle || 'Módulo',
+                cycleName: prog.cycleName || 'Programa',
+                videoUrl: null // We don't have videoUrl in the RPC, but we can fetch it or just omit the thumbnail logic for nextLesson if we want.
+             };
           }
+          
+          enrollments.push({
+             id: prog.enrollmentId,
+             status: 'active',
+             cycles: {
+                id: prog.cycleId,
+                name: prog.cycleName,
+                course_id: prog.courseId,
+                courses: {
+                   id: prog.courseId,
+                   title: prog.courseTitle,
+                   cover_image_url: prog.courseCover
+                }
+             },
+             progressPercent: prog.progressPercent
+          });
+        });
+
+        // If nextLesson needs videoUrl for the thumbnail, fetch it briefly
+        if (nextLesson?.lessonId) {
+           const { data: lessData } = await supabase.from('lessons').select('video_url').eq('id', nextLesson.lessonId).single();
+           if (lessData?.video_url) nextLesson.videoUrl = lessData.video_url;
         }
       }
 
       // Upcoming sessions (next 3)
-      if (cycleIds.length > 0) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const { data: sessions } = await supabase
-          .from('cycle_sessions')
-          .select('id, session_date, label, cycle_id, cycles(name)')
-          .in('cycle_id', cycleIds)
-          .gte('session_date', todayStr)
-          .order('session_date', { ascending: true })
-          .limit(3);
-        upcomingSessions = sessions || [];
+      if (cycleIds.length > 0 || canSeeEverything) {
+        // If preview mode, just don't load sessions or mock them. Using empty for now.
+        if (!canSeeEverything) {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const { data: sessions } = await supabase
+            .from('cycle_sessions')
+            .select('id, session_date, label, cycle_id, cycles(name)')
+            .in('cycle_id', cycleIds)
+            .gte('session_date', todayStr)
+            .order('session_date', { ascending: true })
+            .limit(3);
+          upcomingSessions = sessions || [];
+        }
       }
     }
   }
@@ -322,9 +309,12 @@ export default async function CampusDashboardPage({
                         <p className="text-xs text-slate-500 mb-1">{enr.cycles.name}</p>
                       )}
                       <div className="mt-auto pt-4 border-t border-slate-100">
-                        <div className="flex justify-between text-xs font-medium text-slate-500">
-                          <span>En este momento</span>
-                          <span className="text-[#00A9CE]">Lo estás transitando</span>
+                        <div className="flex justify-between text-xs font-medium text-slate-500 mb-1">
+                          <span>Tu recorrido</span>
+                          <span className="text-[#00A9CE]">{enr.progressPercent ?? 0}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-2">
+                          <div className="h-full bg-[#00A9CE] rounded-full transition-all" style={{ width: `${enr.progressPercent ?? 0}%` }} />
                         </div>
                       </div>
                     </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
+import { safeMutate } from '../../../services/supabaseMutation';
 import toast from 'react-hot-toast';
 import UsersIcon from '../../../ui/icons/UsersIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
@@ -128,10 +129,12 @@ const AdminCalendar: React.FC = () => {
         try {
             const form = e.target as HTMLFormElement;
             const fd = new FormData(form);
-            const { error } = await supabase.from('cycles').insert([{
-                name: fd.get('name'), start_date: fd.get('startDate'), end_date: fd.get('endDate'),
-                type: fd.get('type'), capacity: parseInt(fd.get('capacity') as string) || 30, status: 'active', enrolled_count: 0
-            }]);
+            const { error } = await safeMutate(() => 
+                supabase.from('cycles').insert([{
+                    name: fd.get('name'), start_date: fd.get('startDate'), end_date: fd.get('endDate'),
+                    type: fd.get('type'), capacity: parseInt(fd.get('capacity') as string) || 30, status: 'active', enrolled_count: 0
+                }])
+            );
             if (error) throw error;
             fetchData(); setIsCreateModalOpen(false);
             toast.success('Ciclo creado correctamente');
@@ -143,7 +146,9 @@ const AdminCalendar: React.FC = () => {
     const handleSoftDelete = async (id: string) => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            const { error } = await supabase.from('cycles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id);
+            const { error } = await safeMutate(() => 
+                supabase.from('cycles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id)
+            );
             if (error) throw error;
             setCycles(prev => prev.filter(c => c.id !== id));
             toast.success('Movido a papelera');
@@ -155,7 +160,9 @@ const AdminCalendar: React.FC = () => {
 
     const handleRestore = async (id: string) => {
         try {
-            const { error } = await supabase.from('cycles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id);
+            const { error } = await safeMutate(() => 
+                supabase.from('cycles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id)
+            );
             if (error) throw error;
             fetchData();
             toast.success('Ciclo restaurado');
@@ -167,7 +174,9 @@ const AdminCalendar: React.FC = () => {
     const handlePermanentDelete = async () => {
         if (!cycleToDelete) return;
         try {
-            const { error } = await supabase.from('cycles').delete().eq('id', cycleToDelete.id);
+            const { error } = await safeMutate(() => 
+                supabase.from('cycles').delete().eq('id', cycleToDelete.id)
+            );
             if (error) throw error;
             setCycles(prev => prev.filter(c => c.id !== cycleToDelete.id));
             setIsConfirmDeleteOpen(false); setCycleToDelete(null);
@@ -299,11 +308,13 @@ const AdminCalendar: React.FC = () => {
     const handleAddSession = async () => {
         if (!newSessionDate || !selectedCycle) return;
         try {
-            const { error } = await supabase.from('cycle_sessions').insert([{
-                cycle_id: selectedCycle.id,
-                session_date: newSessionDate,
-                is_mandatory: true
-            }]);
+            const { error } = await safeMutate(() => 
+                supabase.from('cycle_sessions').insert([{
+                    cycle_id: selectedCycle.id,
+                    session_date: newSessionDate,
+                    is_mandatory: true
+                }])
+            );
             if (error) throw error;
             setNewSessionDate(''); setIsAddingSession(false);
             openCycleDetail(selectedCycle);
@@ -316,9 +327,13 @@ const AdminCalendar: React.FC = () => {
     const handleDeleteSession = async (sessionId: string) => {
         if (!selectedCycle) return;
         try {
-            const { error: err1 } = await supabase.from('attendance').delete().eq('cycle_session_id', sessionId);
+            const { error: err1 } = await safeMutate(() => 
+                supabase.from('attendance').delete().eq('cycle_session_id', sessionId)
+            );
             if (err1) throw err1;
-            const { error: err2 } = await supabase.from('cycle_sessions').delete().eq('id', sessionId);
+            const { error: err2 } = await safeMutate(() => 
+                supabase.from('cycle_sessions').delete().eq('id', sessionId)
+            );
             if (err2) throw err2;
             openCycleDetail(selectedCycle);
             toast.success('Sesión eliminada');
@@ -339,12 +354,14 @@ const AdminCalendar: React.FC = () => {
             ));
 
             // Save attendance record
-            const { error } = await supabase.from('attendance').upsert({
-                enrollment_id: enrollmentId,
-                cycle_session_id: sessionId,
-                status: desiredStatus,
-                recorded_at: new Date().toISOString()
-            }, { onConflict: 'enrollment_id, cycle_session_id' });
+            const { error } = await safeMutate(() => 
+                supabase.from('attendance').upsert({
+                    enrollment_id: enrollmentId,
+                    cycle_session_id: sessionId,
+                    status: desiredStatus,
+                    recorded_at: new Date().toISOString()
+                }, { onConflict: 'enrollment_id, cycle_session_id' })
+            );
             if (error) throw error;
 
             // Linear attendance conflict logic:

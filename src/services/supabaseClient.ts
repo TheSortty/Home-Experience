@@ -1,22 +1,27 @@
 import { createBrowserClient } from '@supabase/ssr'
 
-type SupabaseClient = ReturnType<typeof createBrowserClient>
-
-let _client: SupabaseClient | null = null
-
-// Lazy singleton: el cliente se crea la primera vez que se usa, no al importar el módulo.
-// Esto evita que Next.js falle durante el build estático (prerenderizado de /_not-found, etc.)
-// cuando las variables de entorno aún no están disponibles en el entorno de build.
-const handler: ProxyHandler<object> = {
-  get(_, prop: string | symbol) {
-    if (!_client) {
-      _client = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      )
-    }
-    return Reflect.get(_client, prop)
-  },
-}
-
-export const supabase = new Proxy({}, handler) as SupabaseClient
+/**
+ * Cliente Supabase para el navegador.
+ *
+ * CONFIGURACIÓN CRÍTICA:
+ * 1. lock: no-op function -> Evita deadlocks de Navigator Locks cuando el refresh falla.
+ *    IMPORTANTE: lock espera una función (LockFunc), NO un string.
+ * 2. autoRefreshToken: false -> El middleware se encarga de refrescar el token
+ *    en cada navegación. Deshabilitarlo aquí evita conflictos de "dual refresh"
+ *    que causan la revocación de la sesión.
+ */
+export const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      flowType: 'pkce',
+      autoRefreshToken: false,
+      detectSessionInUrl: true,
+      persistSession: true,
+      // No-op lock: ejecuta fn() inmediatamente sin adquirir ningún lock.
+      // Esto evita el deadlock de Navigator Locks cuando la sesión se revoca.
+      lock: (_name: string, _acquireTimeout: number, fn: <T>() => Promise<T>) => fn(),
+    },
+  }
+)

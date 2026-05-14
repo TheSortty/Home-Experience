@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
+import { safeMutate } from '../../../services/supabaseMutation';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 import StudentDetailModal, { StudentForModal, AttendanceBadge } from './StudentDetailModal';
 import toast from 'react-hot-toast';
@@ -33,7 +34,7 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
             const { data, error } = await supabase
                 .from('profiles')
                 .select(`
-                    id, first_name, last_name, email, phone, is_deleted,
+                    id, user_id, first_name, last_name, email, phone, is_deleted,
                     enrollments (
                         id, status, payment_status,
                         cycle:cycles ( id, name, type, start_date ),
@@ -98,6 +99,7 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
 
                     return {
                         id: p.id,
+                        user_id: p.user_id,
                         name: `${p.first_name} ${p.last_name}`,
                         email: p.email,
                         phone: p.phone || submissionsMap[p.email]?.phone || '-',
@@ -153,12 +155,60 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
     }, []);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // --- Invite State ---
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    const [studentToInvite, setStudentToInvite] = useState<StudentForModal | null>(null);
+    const [inviteMode, setInviteMode] = useState<'magic_link' | 'password'>('magic_link');
+    const [invitePassword, setInvitePassword] = useState('');
+    const [isInviting, setIsInviting] = useState(false);
+
+    const handleOpenInvite = (student: StudentForModal) => {
+        setStudentToInvite(student);
+        setInviteMode('magic_link');
+        setInvitePassword('');
+        setIsInviteModalOpen(true);
+    };
+
+    const handleInviteSubmit = async () => {
+        if (!studentToInvite) return;
+        setIsInviting(true);
+        try {
+            const [firstName, ...lastNameParts] = studentToInvite.name.split(' ');
+            const lastName = lastNameParts.join(' ');
+            
+            const res = await fetch('/api/admin/create-student', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: studentToInvite.email,
+                    mode: inviteMode,
+                    password: inviteMode === 'password' ? invitePassword : null,
+                    firstName,
+                    lastName
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al crear credenciales');
+
+            toast.success(inviteMode === 'magic_link' ? 'Magic Link enviado por email' : 'Credenciales creadas correctamente');
+            setIsInviteModalOpen(false);
+            fetchData(true); // reload to get the new user_id
+        } catch (err: any) {
+            toast.error(err.message);
+        } finally {
+            setIsInviting(false);
+        }
+    };
 
     const handleSoftDelete = async (id: string) => {
         try {
             setIsSubmitting(true);
             const { data: { user } } = await supabase.auth.getUser();
-            const { error } = await supabase.from('profiles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id);
+            const { error } = await safeMutate(() => 
+                supabase.from('profiles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id)
+            );
             if (error) throw error;
 
             // Sacarlo del listado actual (la query carga solo is_deleted = viewMode === 'trash')
@@ -176,7 +226,9 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
     const handleRestore = async (id: string) => {
         try {
             setIsSubmitting(true);
-            const { error } = await supabase.from('profiles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id);
+            const { error } = await safeMutate(() => 
+                supabase.from('profiles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id)
+            );
             if (error) throw error;
 
             // Sacarlo del listado actual (la query de papelera carga solo is_deleted = true)
@@ -200,7 +252,9 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
             const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single();
             if (!['admin', 'sysadmin', 'super_admin'].includes(profile?.role)) { toast.error('Sin permisos.'); return; }
             
-            const { error } = await supabase.from('profiles').delete().eq('id', studentToDelete.id);
+            const { error } = await safeMutate(() => 
+                supabase.from('profiles').delete().eq('id', studentToDelete.id)
+            );
             if (error) throw error;
 
             setStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
@@ -269,6 +323,7 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
                                 <th>Alumno</th>
                                 <th>Etapa Actual</th>
                                 <th>Estado</th>
+                                <th className="text-center">Campus</th>
                                 <th className="text-center">Asistencia</th>
                                 <th className="text-center">Pago</th>
                             </tr>
@@ -300,6 +355,18 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider ${status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : status === 'CONFLICT' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-600'}`}>
                                             {status === 'ACTIVE' ? 'CURSANDO' : status === 'CONFLICT' ? 'CONFLICTO' : 'GRADUADO'}
                                         </span>
+                                    </td>
+                                    <td className="text-center">
+                                        {student.user_id ? (
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">✅ ACCESO ACTIVO</span>
+                                        ) : (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleOpenInvite(student); }}
+                                                className="inline-flex items-center px-2 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-600 hover:text-white transition-colors shadow-sm"
+                                            >
+                                                + Habilitar Acceso
+                                            </button>
+                                        )}
                                     </td>
                                     <td className="text-center"><AttendanceBadge count={latestProg?.attendanceCount || 0} total={latestProg?.totalSessions || 0} /></td>
                                     <td className="text-center">
@@ -344,6 +411,52 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
                             <div className="flex gap-4 w-full">
                                 <button onClick={() => setIsConfirmDeleteOpen(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all">Cancelar</button>
                                 <button onClick={handlePermanentDelete} className="flex-1 py-3 bg-red-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-lg shadow-red-200 hover:bg-red-700 transition-all">Eliminar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {isInviteModalOpen && studentToInvite && createPortal(
+                <div className="full-screen-modal-overlay z-[70]" onClick={() => setIsInviteModalOpen(false)}>
+                    <div className="formal-modal max-w-md w-full p-8 animate-scale-in" onClick={e => e.stopPropagation()}>
+                        <div className="flex flex-col">
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Habilitar Acceso al Campus</h3>
+                            <p className="text-sm text-slate-500 mb-6">Vas a crear la cuenta de <strong>{studentToInvite.name}</strong> ({studentToInvite.email}).</p>
+                            
+                            <div className="space-y-4 mb-6">
+                                <label className={`flex items-start gap-3 p-4 border rounded-md cursor-pointer transition-colors ${inviteMode === 'magic_link' ? 'bg-blue-50 border-blue-200' : 'bg-white hover:bg-slate-50'}`}>
+                                    <input type="radio" name="inviteMode" checked={inviteMode === 'magic_link'} onChange={() => setInviteMode('magic_link')} className="mt-1" />
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800">Enviar enlace mágico</p>
+                                        <p className="text-xs text-slate-500 mt-1">El alumno recibirá un email con un botón para crear su propia contraseña.</p>
+                                    </div>
+                                </label>
+                                
+                                <label className={`flex items-start gap-3 p-4 border rounded-md cursor-pointer transition-colors ${inviteMode === 'password' ? 'bg-blue-50 border-blue-200' : 'bg-white hover:bg-slate-50'}`}>
+                                    <input type="radio" name="inviteMode" checked={inviteMode === 'password'} onChange={() => setInviteMode('password')} className="mt-1" />
+                                    <div className="w-full">
+                                        <p className="text-sm font-bold text-slate-800">Crear contraseña manualmente</p>
+                                        <p className="text-xs text-slate-500 mt-1 mb-3">Vos le pasas la contraseña por privado.</p>
+                                        {inviteMode === 'password' && (
+                                            <input 
+                                                type="text" 
+                                                placeholder="Mínimo 6 caracteres" 
+                                                value={invitePassword}
+                                                onChange={e => setInvitePassword(e.target.value)}
+                                                className="w-full p-2 text-sm border rounded-sm"
+                                            />
+                                        )}
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div className="flex gap-4 w-full">
+                                <button onClick={() => setIsInviteModalOpen(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all">Cancelar</button>
+                                <button onClick={handleInviteSubmit} disabled={isInviting || (inviteMode === 'password' && invitePassword.length < 6)} className="flex-1 py-3 bg-blue-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-lg shadow-blue-200 hover:bg-blue-700 disabled:opacity-50 transition-all">
+                                    {isInviting ? 'Procesando...' : 'Confirmar'}
+                                </button>
                             </div>
                         </div>
                     </div>

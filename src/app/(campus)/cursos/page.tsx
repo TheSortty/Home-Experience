@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import { resolveRole } from '@/src/services/roleService';
+import { getStudentProgress } from '@/src/services/progressService';
 import Link from 'next/link';
 import { IoBookOutline, IoCheckmarkCircleOutline, IoPlayCircleOutline, IoCalendarOutline } from 'react-icons/io5';
 
@@ -74,146 +75,52 @@ export default async function CampusCursosPage({
       const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
       const canSeeEverything = isAdmin && isPreview;
 
-      let enrollments: any[] = [];
-
       if (canSeeEverything) {
         const { data: allCourses } = await supabase
           .from('courses')
           .select('id, title, description, cover_image_url')
           .eq('is_published', true);
 
-        enrollments = (allCourses || []).map(c => ({
-          id: `preview-${c.id}`,
-          status: 'active',
-          cycles: {
-            id: `preview-cycle-${c.id}`,
-            name: 'Ciclo Preview',
-            courses: c
-          }
+        courses = (allCourses || []).map(c => ({
+          enrollmentId: `preview-${c.id}`,
+          enrollmentStatus: 'active',
+          cycleId: `preview-cycle-${c.id}`,
+          cycleName: 'Ciclo Preview',
+          courseId: c.id,
+          courseTitle: c.title,
+          courseDescription: c.description,
+          coverImage: c.cover_image_url,
+          totalLessons: 0,
+          completedLessons: 0,
+          progressPercent: 0,
+          hasLms: true,
         }));
       } else {
-        const { data: userEnrollments } = await supabase
-          .from('enrollments')
-          .select(`
-            id, status,
-            cycles (
-              id, name,
-              courses (
-                id, title, description, cover_image_url
-              )
-            )
-          `)
-          .eq('user_id', profile.id)
-          .in('status', ['active', 'completed']);
+        const studentProgressList = await getStudentProgress(supabase, profile.id);
+
+        courses = studentProgressList.map(prog => ({
+          enrollmentId: prog.enrollmentId,
+          enrollmentStatus: prog.enrollmentStatus,
+          cycleId: prog.cycleId,
+          cycleName: prog.cycleName,
+          courseId: prog.courseId,
+          courseTitle: prog.courseTitle,
+          courseDescription: null, // Note: Not returned by RPC, but we can live without it or fetch it later
+          coverImage: prog.courseCover,
+          totalLessons: prog.totalLessons,
+          completedLessons: prog.completedLessons,
+          progressPercent: prog.progressPercent,
+          hasLms: !!prog.courseId,
+        }));
         
-        enrollments = userEnrollments || [];
-      }
-
-      if (enrollments?.length) {
-        // Collect course IDs that have LMS content linked
-        const courseIds = [
-          ...new Set(
-            (enrollments as any[])
-              .map((e) => e.cycles?.courses?.id)
-              .filter(Boolean)
-          ),
-        ] as string[];
-
-        // Build lesson counts and progress per course
-        const lessonsByCourse: Record<string, string[]> = {};
-
-        if (courseIds.length > 0) {
-          const { data: modules } = await supabase
-            .from('modules')
-            .select('id, course_id')
-            .in('course_id', courseIds)
-            .eq('is_published', true);
-
-          const moduleIds = (modules || []).map((m: any) => m.id);
-          const modToCourse: Record<string, string> = {};
-          (modules || []).forEach((m: any) => { modToCourse[m.id] = m.course_id; });
-
-          if (moduleIds.length > 0) {
-            const { data: lessons } = await supabase
-              .from('lessons')
-              .select('id, module_id')
-              .in('module_id', moduleIds)
-              .eq('is_published', true);
-
-            (lessons || []).forEach((l: any) => {
-              const cId = modToCourse[l.module_id];
-              if (cId) {
-                if (!lessonsByCourse[cId]) lessonsByCourse[cId] = [];
-                lessonsByCourse[cId].push(l.id);
-              }
-            });
-
-            const allLessonIds = Object.values(lessonsByCourse).flat();
-            const completedSet = new Set<string>();
-
-            if (allLessonIds.length > 0) {
-              const { data: progress } = await supabase
-                .from('lesson_progress')
-                .select('lesson_id')
-                .eq('user_id', profile.id)
-                .in('lesson_id', allLessonIds)
-                .eq('completed', true);
-              (progress || []).forEach((p: any) => completedSet.add(p.lesson_id));
+        // Fetch descriptions for the courses we got
+        const courseIdsToFetch = courses.map(c => c.courseId).filter(Boolean);
+        if (courseIdsToFetch.length > 0) {
+            const { data: courseData } = await supabase.from('courses').select('id, description').in('id', courseIdsToFetch);
+            if (courseData) {
+                const descMap = courseData.reduce((acc: any, c: any) => { acc[c.id] = c.description; return acc; }, {});
+                courses = courses.map(c => c.courseId ? { ...c, courseDescription: descMap[c.courseId] } : c);
             }
-
-            courses = (enrollments as any[]).map((e, idx) => {
-              const courseId: string | null = e.cycles?.courses?.id ?? null;
-              const lessons = courseId ? (lessonsByCourse[courseId] || []) : [];
-              const completed = lessons.filter((id) => completedSet.has(id)).length;
-              const total = lessons.length;
-              return {
-                enrollmentId: e.id,
-                enrollmentStatus: e.status,
-                cycleId: e.cycles?.id ?? '',
-                cycleName: e.cycles?.name ?? 'Programa sin nombre',
-                courseId,
-                courseTitle: e.cycles?.courses?.title ?? e.cycles?.name ?? 'Programa',
-                courseDescription: e.cycles?.courses?.description ?? null,
-                coverImage: e.cycles?.courses?.cover_image_url ?? null,
-                totalLessons: total,
-                completedLessons: completed,
-                progressPercent: total > 0 ? Math.round((completed / total) * 100) : 0,
-                hasLms: !!courseId,
-              };
-            });
-          } else {
-            // Modules not loaded yet, still show the enrollment cards
-            courses = (enrollments as any[]).map((e) => ({
-              enrollmentId: e.id,
-              enrollmentStatus: e.status,
-              cycleId: e.cycles?.id ?? '',
-              cycleName: e.cycles?.name ?? 'Programa',
-              courseId: e.cycles?.courses?.id ?? null,
-              courseTitle: e.cycles?.courses?.title ?? e.cycles?.name ?? 'Programa',
-              courseDescription: null,
-              coverImage: null,
-              totalLessons: 0,
-              completedLessons: 0,
-              progressPercent: 0,
-              hasLms: !!e.cycles?.courses?.id,
-            }));
-          }
-        } else {
-          // No courses linked to any cycle — show raw enrollments
-          courses = (enrollments as any[]).map((e) => ({
-            enrollmentId: e.id,
-            enrollmentStatus: e.status,
-            cycleId: e.cycles?.id ?? '',
-            cycleName: e.cycles?.name ?? 'Programa',
-            courseId: null,
-            courseTitle: e.cycles?.name ?? 'Programa',
-            courseDescription: null,
-            coverImage: null,
-            totalLessons: 0,
-            completedLessons: 0,
-            progressPercent: 0,
-            hasLms: false,
-          }));
         }
       }
     }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabaseClient';
+import { safeMutate } from '../../../services/supabaseMutation';
 import {
   IoAddOutline, IoTrashOutline, IoPencilOutline, IoChevronDownOutline,
   IoChevronForwardOutline, IoEyeOutline, IoEyeOffOutline, IoArrowBackOutline,
@@ -86,17 +87,34 @@ function CourseModal({
   const handleSave = async () => {
     if (!title.trim()) return;
     setSaving(true);
-    const payload = {
-      title: title.trim(), description: desc.trim() || null,
-      cover_image_url: coverUrl.trim() || null, is_published: published,
-    };
-    const { error } = course
-      ? await supabase.from('courses').update(payload).eq('id', course.id)
-      : await supabase.from('courses').insert(payload);
-    setSaving(false);
-    if (error) { toast.error(`Error al guardar: ${error.message}`); return; }
-    toast.success(course ? 'Curso actualizado.' : 'Curso creado.');
-    onSaved();
+    try {
+      const payload = {
+        title: title.trim(), description: desc.trim() || null,
+        cover_image_url: coverUrl.trim() || null, is_published: published,
+      };
+
+      console.log('[CourseModal] Saving course...', payload);
+
+      const { error } = await safeMutate(() => 
+        course
+          ? supabase.from('courses').update(payload).eq('id', course.id)
+          : supabase.from('courses').insert(payload)
+      );
+
+      if (error) {
+        console.error('[CourseModal] Save error:', error);
+        toast.error(`Error: ${error.message}`);
+        return;
+      }
+
+      toast.success(course ? 'Curso actualizado.' : 'Curso creado.');
+      onSaved();
+    } catch (err: any) {
+      console.error('[CourseModal] Unexpected error:', err);
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -162,13 +180,30 @@ function ModuleModal({
   const handleSave = async () => {
     if (!title.trim()) return;
     setSaving(true);
-    const { error } = mod
-      ? await supabase.from('modules').update({ title: title.trim(), order_index: order, is_published: published }).eq('id', mod.id)
-      : await supabase.from('modules').insert({ course_id: courseId, title: title.trim(), order_index: order, is_published: published });
-    setSaving(false);
-    if (error) { toast.error(`Error: ${error.message}`); return; }
-    toast.success(mod ? 'Módulo actualizado.' : 'Módulo creado.');
-    onSaved();
+    try {
+      const payload = { title: title.trim(), order_index: order, is_published: published };
+      console.log('[ModuleModal] Saving module...', payload);
+
+      const { error } = await safeMutate(() => 
+        mod
+          ? supabase.from('modules').update(payload).eq('id', mod.id)
+          : supabase.from('modules').insert({ course_id: courseId, ...payload })
+      );
+
+      if (error) {
+        console.error('[ModuleModal] Save error:', error);
+        toast.error(`Error: ${error.message}`);
+        return;
+      }
+
+      toast.success(mod ? 'Módulo actualizado.' : 'Módulo creado.');
+      onSaved();
+    } catch (err: any) {
+      console.error('[ModuleModal] Unexpected error:', err);
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -253,38 +288,46 @@ function LessonModal({
         is_published: published,
       };
 
+      console.log('[LessonModal] Saving lesson...', payload);
       let lessonId = lesson?.id;
 
       if (lessonId) {
-        const { error } = await supabase.from('lessons').update(payload).eq('id', lessonId);
+        const { error } = await safeMutate(() => 
+          supabase.from('lessons').update(payload).eq('id', lessonId)
+        );
         if (error) throw error;
       } else {
-        const { data: newLesson, error } = await supabase
-          .from('lessons')
-          .insert({ module_id: moduleId, ...payload })
-          .select()
-          .single();
+        const { data, error } = await safeMutate(() => 
+          supabase
+            .from('lessons')
+            .insert({ module_id: moduleId, ...payload })
+            .select()
+            .single()
+        );
         if (error) throw error;
-        lessonId = newLesson.id;
+        lessonId = data?.id;
       }
 
-      // Save pending resources if any
+      // Guardar materiales pendientes
       if (pendingResources.length > 0 && lessonId) {
-        const { error: resError } = await supabase.from('lesson_resources').insert(
-          pendingResources.map(r => ({
-            lesson_id: lessonId,
-            title: r.title,
-            file_url: r.url,
-            type: r.type,
-          }))
+        const { error: resError } = await safeMutate(() => 
+          supabase.from('lesson_resources').insert(
+            pendingResources.map(r => ({
+              lesson_id: lessonId!,
+              title: r.title,
+              file_url: r.url,
+              type: r.type,
+            }))
+          )
         );
-        if (resError) toast.error('Error al guardar algunos materiales.');
+        if (resError) toast.error('Error al guardar materiales: ' + resError.message);
       }
 
       toast.success(lesson ? 'Clase actualizada.' : 'Clase creada.');
       onSaved();
     } catch (err: any) {
-      toast.error(`Error: ${err.message}`);
+      console.error('[LessonModal] Save error:', err);
+      toast.error(`Error: ${err?.message || 'Error desconocido'}`);
     } finally {
       setSaving(false);
     }
@@ -451,9 +494,7 @@ export default function AdminCourses() {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [modules, setModules] = useState<Module[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [linkedCycles, setLinkedCycles] = useState<Cycle[]>([]);
   const [allCycles, setAllCycles] = useState<Cycle[]>([]);
-  const [loadingDetail, setLoadingDetail] = useState(false);
   const [expandedModule, setExpandedModule] = useState<string | null>(null);
 
   // Modals
@@ -463,7 +504,7 @@ export default function AdminCourses() {
   const hasLoadedOnceRef = useRef(false);
 
   const fetchData = useCallback(async (isBackgroundRefresh = false) => {
-    const isFirstLoad = !hasLoadedOnceRef.current || (!isBackgroundRefresh && courses.length === 0);
+    const isFirstLoad = !hasLoadedOnceRef.current;
     if (isFirstLoad) setLoadingCourses(true);
     
     const abort = new AbortController();
@@ -473,7 +514,8 @@ export default function AdminCourses() {
       const results = await Promise.allSettled([
         supabase.from('courses').select('*').order('created_at', { ascending: false }).abortSignal(abort.signal),
         supabase.from('modules').select('*').order('order_index', { ascending: true }).abortSignal(abort.signal),
-        supabase.from('lessons').select('*').order('order_index', { ascending: true }).abortSignal(abort.signal)
+        supabase.from('lessons').select('*').order('order_index', { ascending: true }).abortSignal(abort.signal),
+        supabase.from('cycles').select('id, name, course_id').order('name').abortSignal(abort.signal),
       ]);
 
       const getRes = (res: any) => res.status === 'fulfilled' ? res.value : null;
@@ -481,10 +523,12 @@ export default function AdminCourses() {
       const coursesRes = getRes(results[0]);
       const modulesRes = getRes(results[1]);
       const lessonsRes = getRes(results[2]);
+      const cyclesRes = getRes(results[3]);
 
       if (coursesRes?.data) setCourses(coursesRes.data);
       if (modulesRes?.data) setModules(modulesRes.data);
       if (lessonsRes?.data) setLessons(lessonsRes.data);
+      if (cyclesRes?.data) setAllCycles(cyclesRes.data);
       
       hasLoadedOnceRef.current = true;
     } catch (error: any) {
@@ -496,40 +540,6 @@ export default function AdminCourses() {
       if (isFirstLoad) setLoadingCourses(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const fetchCourseDetail = useCallback(async (course: Course) => {
-    setLoadingDetail(true);
-    try {
-      const results = await Promise.all([
-        supabase.from('modules').select('*').eq('course_id', course.id).order('order_index'),
-        supabase.from('cycles').select('id, name, course_id').eq('course_id', course.id),
-        supabase.from('cycles').select('id, name, course_id').order('name'),
-      ]);
-
-      const mods = results[0].data;
-      const cycleData = results[1].data;
-      const allCycleData = results[2].data;
-      const error = results.some(r => r.error);
-
-      if (!error && mods && cycleData && allCycleData) {
-        const modIds = mods.map((m: Module) => m.id);
-        const { data: lessonData, error: lessonError } = modIds.length > 0
-          ? await supabase.from('lessons').select('*').in('module_id', modIds).order('order_index')
-          : { data: [], error: null };
-        
-        if (!lessonError && lessonData) {
-          setModules(mods);
-          setLessons(lessonData);
-          setLinkedCycles(cycleData);
-          setAllCycles(allCycleData);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching course detail:', err);
-    } finally {
-      setLoadingDetail(false);
-    }
   }, []);
 
   useEffect(() => {
@@ -546,6 +556,7 @@ export default function AdminCourses() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, () => fetchData(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'modules' }, () => fetchData(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lessons' }, () => fetchData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => fetchData(true))
       .subscribe();
 
     const handleVisibility = () => {
@@ -564,20 +575,24 @@ export default function AdminCourses() {
   const openCourse = (course: Course) => {
     setSelectedCourse(course);
     setExpandedModule(null);
-    fetchCourseDetail(course);
   };
 
-  const backToList = () => { setSelectedCourse(null); setModules([]); setLessons([]); };
+  const backToList = () => { setSelectedCourse(null); };
 
   const deleteCourse = async (id: string) => {
     if (!confirm('¿Eliminar este curso y todo su contenido?')) return;
     try {
-      const { error } = await supabase.from('courses').delete().eq('id', id);
+      console.log('[CAMPUS] Deleting course:', id);
+      const { error } = await safeMutate(() => 
+        supabase.from('courses').delete().eq('id', id)
+      );
+      console.log('[CAMPUS] Delete course result:', { error });
       if (error) throw error;
       setCourses(prev => prev.filter(c => c.id !== id));
       if (selectedCourse?.id === id) backToList();
       toast.success('Curso eliminado');
     } catch (err: any) {
+      console.error('[CAMPUS] Delete course error:', err);
       toast.error('Error al eliminar curso: ' + err.message);
     }
   };
@@ -585,11 +600,16 @@ export default function AdminCourses() {
   const deleteModule = async (id: string) => {
     if (!confirm('¿Eliminar este módulo y todas sus clases?')) return;
     try {
-      const { error } = await supabase.from('modules').delete().eq('id', id);
+      console.log('[CAMPUS] Deleting module:', id);
+      const { error } = await safeMutate(() => 
+        supabase.from('modules').delete().eq('id', id)
+      );
+      console.log('[CAMPUS] Delete module result:', { error });
       if (error) throw error;
       setModules(prev => prev.filter(m => m.id !== id));
       toast.success('Módulo eliminado');
     } catch (err: any) {
+      console.error('[CAMPUS] Delete module error:', err);
       toast.error('Error al eliminar módulo: ' + err.message);
     }
   };
@@ -597,22 +617,32 @@ export default function AdminCourses() {
   const deleteLesson = async (id: string) => {
     if (!confirm('¿Eliminar esta clase?')) return;
     try {
-      const { error } = await supabase.from('lessons').delete().eq('id', id);
+      console.log('[CAMPUS] Deleting lesson:', id);
+      const { error } = await safeMutate(() => 
+        supabase.from('lessons').delete().eq('id', id)
+      );
+      console.log('[CAMPUS] Delete lesson result:', { error });
       if (error) throw error;
       setLessons(prev => prev.filter(l => l.id !== id));
       toast.success('Clase eliminada');
     } catch (err: any) {
+      console.error('[CAMPUS] Delete lesson error:', err);
       toast.error('Error al eliminar clase: ' + err.message);
     }
   };
 
   const toggleLessonPublished = async (lesson: Lesson) => {
     try {
-      const { error } = await supabase.from('lessons').update({ is_published: !lesson.is_published }).eq('id', lesson.id);
+      console.log('[CAMPUS] Toggling lesson published:', lesson.id, '->', !lesson.is_published);
+      const { error } = await safeMutate(() => 
+        supabase.from('lessons').update({ is_published: !lesson.is_published }).eq('id', lesson.id)
+      );
+      console.log('[CAMPUS] Toggle result:', { error });
       if (error) throw error;
       setLessons(prev => prev.map(l => l.id === lesson.id ? { ...l, is_published: !l.is_published } : l));
       toast.success('Estado actualizado');
     } catch (err: any) {
+      console.error('[CAMPUS] Toggle error:', err);
       toast.error('Error al actualizar estado: ' + err.message);
     }
   };
@@ -620,25 +650,38 @@ export default function AdminCourses() {
   const linkCycle = async (cycleId: string) => {
     if (!selectedCourse) return;
     try {
-      const { error } = await supabase.from('cycles').update({ course_id: selectedCourse.id }).eq('id', cycleId);
+      console.log('[CAMPUS] Linking cycle:', cycleId, 'to course:', selectedCourse.id);
+      const { error } = await safeMutate(() => 
+        supabase.from('cycles').update({ course_id: selectedCourse.id }).eq('id', cycleId)
+      );
+      console.log('[CAMPUS] Link result:', { error });
       if (error) throw error;
-      fetchCourseDetail(selectedCourse);
+      fetchData(true);
+      toast.success('Programa vinculado');
     } catch (err: any) {
+      console.error('[CAMPUS] Link cycle error:', err);
       toast.error('Error al vincular: ' + err.message);
     }
   };
 
   const unlinkCycle = async (cycleId: string) => {
     try {
-      const { error } = await supabase.from('cycles').update({ course_id: null }).eq('id', cycleId);
+      console.log('[CAMPUS] Unlinking cycle:', cycleId);
+      const { error } = await safeMutate(() => 
+        supabase.from('cycles').update({ course_id: null }).eq('id', cycleId)
+      );
+      console.log('[CAMPUS] Unlink result:', { error });
       if (error) throw error;
-      if (selectedCourse) fetchCourseDetail(selectedCourse);
+      fetchData(true);
+      toast.success('Programa desvinculado');
     } catch (err: any) {
+      console.error('[CAMPUS] Unlink cycle error:', err);
       toast.error('Error al desvincular: ' + err.message);
     }
   };
 
-  const unlinkedCycles = allCycles.filter(c => c.course_id !== selectedCourse?.id && !linkedCycles.find(lc => lc.id === c.id));
+  const linkedCycles = selectedCourse ? allCycles.filter(c => c.course_id === selectedCourse.id) : [];
+  const unlinkedCycles = selectedCourse ? allCycles.filter(c => !c.course_id || c.course_id !== selectedCourse.id) : [];
 
   // ── Courses List View ────────────────────────────────────────────────────────
 
@@ -757,9 +800,9 @@ export default function AdminCourses() {
             </button>
           </div>
 
-          {loadingDetail ? (
+          {loadingCourses && modules.filter(m => m.course_id === selectedCourse.id).length === 0 ? (
             <div className="text-center py-10 text-slate-400 text-sm">Cargando...</div>
-          ) : modules.length === 0 ? (
+          ) : modules.filter(m => m.course_id === selectedCourse.id).length === 0 ? (
             <div className="bg-white rounded-xl border-2 border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm">
               No hay módulos. Creá el primero para comenzar.
             </div>
@@ -923,7 +966,7 @@ export default function AdminCourses() {
           courseId={moduleModal.courseId}
           nextOrder={modules.length + 1}
           onClose={() => setModuleModal(null)}
-          onSaved={() => { setModuleModal(null); if (selectedCourse) fetchCourseDetail(selectedCourse); }}
+          onSaved={() => { setModuleModal(null); fetchData(true); }}
         />
       )}
       {lessonModal?.open && (
@@ -932,7 +975,7 @@ export default function AdminCourses() {
           moduleId={lessonModal.moduleId}
           nextOrder={lessons.filter(l => l.module_id === lessonModal.moduleId).length + 1}
           onClose={() => setLessonModal(null)}
-          onSaved={() => { setLessonModal(null); if (selectedCourse) fetchCourseDetail(selectedCourse); }}
+          onSaved={() => { setLessonModal(null); fetchData(true); }}
         />
       )}
     </>
