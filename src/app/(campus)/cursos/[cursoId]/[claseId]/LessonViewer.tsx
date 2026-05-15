@@ -51,7 +51,10 @@ export default function LessonViewer({
   submissionData,
 }: Props) {
   const [isCompleted, setIsCompleted] = useState(initialCompleted);
-  const [activeTab, setActiveTab] = useState<'resumen' | 'materiales' | 'foro' | 'entrega'>('resumen');
+  // Si la clase no tiene video pero sí materiales, abrimos directamente en "materiales"
+  const initialTab: 'resumen' | 'materiales' | 'foro' | 'entrega' =
+    !embedUrl && !description && resources.length > 0 ? 'materiales' : 'resumen';
+  const [activeTab, setActiveTab] = useState<'resumen' | 'materiales' | 'foro' | 'entrega'>(initialTab);
   const [isPending, startTransition] = useTransition();
   const videoTrackedRef = useRef(false);
   const enterTrackedRef = useRef(false);
@@ -120,25 +123,20 @@ export default function LessonViewer({
     ? `${embedUrl}${embedUrl.includes('?') ? '&' : '?'}enablejsapi=1`
     : null;
 
+  const hasVideo = !!trackableEmbedUrl;
+
   return (
     <>
-      {/* VIDEO PLAYER */}
-      {trackableEmbedUrl ? (
+      {/* VIDEO PLAYER — solo si la clase tiene video */}
+      {hasVideo && (
         <div className="rounded-2xl overflow-hidden shadow-lg border border-slate-200 aspect-video">
           <iframe
-            src={trackableEmbedUrl}
+            src={trackableEmbedUrl!}
             title={lessonTitle}
             className="w-full h-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           />
-        </div>
-      ) : (
-        <div className="bg-slate-900 rounded-2xl overflow-hidden shadow-lg border border-slate-800 aspect-video flex items-center justify-center">
-          <div className="text-center text-white/60">
-            <IoPlayCircleOutline size={64} className="mx-auto mb-3 opacity-40" />
-            <p className="text-sm font-medium">Video no disponible aún</p>
-          </div>
         </div>
       )}
 
@@ -150,7 +148,12 @@ export default function LessonViewer({
               <span className="px-3 py-1 bg-[#00A9CE]/10 text-[#00A9CE] text-xs font-bold uppercase tracking-wider rounded-md">
                 {moduleTitle}
               </span>
-              {durationLabel && (
+              {!hasVideo && (
+                <span className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-md flex items-center gap-1">
+                  <IoDocumentTextOutline size={12} /> Clase de lectura
+                </span>
+              )}
+              {durationLabel && hasVideo && (
                 <span className="text-sm font-medium text-slate-500 flex items-center gap-1">
                   <IoTimeOutline /> {durationLabel}
                 </span>

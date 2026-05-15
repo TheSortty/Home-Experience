@@ -7,6 +7,7 @@ import {
 import { createClient } from '@/utils/supabase/server';
 import { resolveRole } from '@/src/services/roleService';
 import { getStudentProgress } from '@/src/services/progressService';
+import { normalizeImageUrl } from '@/src/services/imageUrl';
 import QuoteOfTheDay from '../_components/QuoteOfTheDay';
 
 const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -63,96 +64,116 @@ export default async function CampusDashboardPage({
       .from('profiles')
       .select('first_name, id')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (profile?.first_name) firstName = profile.first_name;
 
-    if (profile?.id) {
-      const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
-      const canSeeEverything = isAdmin && isPreview;
+    const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
+    const canSeeEverything = isAdmin && isPreview;
 
-      let cycleIds: string[] = [];
+    // Cargamos SIEMPRE todos los cursos publicados (visibles para todos)
+    const { data: allCourses, error: coursesError } = await supabase
+      .from('courses')
+      .select('id, title, cover_image_url, is_published');
+    console.log('[Dashboard] allCourses query →', {
+      userId: user.id,
+      hasProfile: !!profile,
+      profileId: profile?.id,
+      totalCourses: allCourses?.length ?? 0,
+      publishedCount: allCourses?.filter(c => c.is_published).length ?? 0,
+      sample: allCourses?.slice(0, 3),
+      error: coursesError?.message,
+    });
+    const publishedCourses = (allCourses || []).filter(c => c.is_published);
 
-      if (canSeeEverything) {
-        // Fetch all published courses for preview
-        const { data: allCourses } = await supabase
-          .from('courses')
-          .select('id, title, cover_image_url')
-          .eq('is_published', true);
+    // Si hay perfil, calculamos progreso real del alumno
+    const studentProgressList = profile?.id && !canSeeEverything
+      ? await getStudentProgress(supabase, profile.id)
+      : [];
+    const progressByCourse = new Map(
+      studentProgressList.filter(p => p.courseId).map(p => [p.courseId as string, p])
+    );
 
-        if (allCourses) {
-          enrollments = allCourses.map(c => ({
-            id: `preview-${c.id}`,
-            status: 'active',
-            cycles: {
-              id: `preview-cycle-${c.id}`,
-              name: 'Ciclo Preview',
-              course_id: c.id,
-              courses: c
-            }
-          }));
-        }
-      } else {
-        // Use optimized RPC for student progress
-        const studentProgressList = await getStudentProgress(supabase, profile.id);
-        
-        cycleIds = studentProgressList.map(p => p.cycleId).filter(Boolean);
+    const cycleIds: string[] = studentProgressList.map(p => p.cycleId).filter(Boolean);
 
-        studentProgressList.forEach(prog => {
-          completedCount += prog.completedLessons;
-          totalLessonsCount += prog.totalLessons;
-          
-          if (!nextLesson && prog.nextLessonId) {
-             nextLesson = {
-                lessonId: prog.nextLessonId,
-                lessonTitle: prog.nextLessonTitle || 'Continuar lección',
-                courseId: prog.courseId || '',
-                moduleName: prog.nextModuleTitle || 'Módulo',
-                cycleName: prog.cycleName || 'Programa',
-                videoUrl: null // We don't have videoUrl in the RPC, but we can fetch it or just omit the thumbnail logic for nextLesson if we want.
-             };
-          }
-          
-          enrollments.push({
-             id: prog.enrollmentId,
-             status: 'active',
-             cycles: {
-                id: prog.cycleId,
-                name: prog.cycleName,
-                course_id: prog.courseId,
-                courses: {
-                   id: prog.courseId,
-                   title: prog.courseTitle,
-                   cover_image_url: prog.courseCover
-                }
-             },
-             progressPercent: prog.progressPercent
-          });
-        });
+    for (const prog of studentProgressList) {
+      completedCount += prog.completedLessons;
+      totalLessonsCount += prog.totalLessons;
 
-        // If nextLesson needs videoUrl for the thumbnail, fetch it briefly
-        if (nextLesson?.lessonId) {
-           const { data: lessData } = await supabase.from('lessons').select('video_url').eq('id', nextLesson.lessonId).single();
-           if (lessData?.video_url) nextLesson.videoUrl = lessData.video_url;
-        }
+      if (!nextLesson && prog.nextLessonId) {
+        nextLesson = {
+          lessonId: prog.nextLessonId,
+          lessonTitle: prog.nextLessonTitle || 'Continuar lección',
+          courseId: prog.courseId || '',
+          moduleName: prog.nextModuleTitle || 'Módulo',
+          cycleName: prog.cycleName || 'Programa',
+          videoUrl: null,
+        };
       }
+    }
 
-      // Upcoming sessions (next 3)
-      if (cycleIds.length > 0 || canSeeEverything) {
-        // If preview mode, just don't load sessions or mock them. Using empty for now.
-        if (!canSeeEverything) {
-          const todayStr = new Date().toISOString().split('T')[0];
-          const { data: sessions } = await supabase
+    // Construir enrollments con TODOS los cursos publicados (no solo los del alumno)
+    enrollments = publishedCourses.map(c => {
+      const prog = progressByCourse.get(c.id);
+      return {
+        id: prog?.enrollmentId ?? `available-${c.id}`,
+        status: prog?.enrollmentStatus ?? (canSeeEverything ? 'active' : 'available'),
+        cycles: {
+          id: prog?.cycleId ?? '',
+          name: prog?.cycleName ?? (canSeeEverything ? 'Ciclo Preview' : 'Programa Disponible'),
+          course_id: c.id,
+          courses: {
+            id: c.id,
+            title: c.title,
+            cover_image_url: c.cover_image_url,
+          },
+        },
+        progressPercent: prog?.progressPercent ?? 0,
+      };
+    });
+
+    if (nextLesson?.lessonId) {
+      const { data: lessData } = await supabase.from('lessons').select('video_url').eq('id', nextLesson.lessonId).single();
+      if (lessData?.video_url) nextLesson.videoUrl = lessData.video_url;
+    }
+
+    // Upcoming sessions (next 3) — mezclamos course_sessions (de cursos visibles)
+    // con cycle_sessions (de los ciclos donde está inscripto).
+    const todayStr = new Date().toISOString().split('T')[0];
+    const publishedCourseIds = (allCourses || []).map(c => c.id);
+
+    const [courseSessRes, cycleSessRes] = await Promise.all([
+      publishedCourseIds.length > 0
+        ? supabase
+            .from('course_sessions')
+            .select('id, session_date, session_time, label, course_id, courses(title)')
+            .in('course_id', publishedCourseIds)
+            .gte('session_date', todayStr)
+            .order('session_date', { ascending: true })
+            .limit(5)
+        : Promise.resolve({ data: [] }),
+      cycleIds.length > 0
+        ? supabase
             .from('cycle_sessions')
             .select('id, session_date, label, cycle_id, cycles(name)')
             .in('cycle_id', cycleIds)
             .gte('session_date', todayStr)
             .order('session_date', { ascending: true })
-            .limit(3);
-          upcomingSessions = sessions || [];
-        }
-      }
-    }
+            .limit(5)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const combinedSessions = [
+      ...(courseSessRes.data || []).map((s: any) => ({
+        id: `cs-${s.id}`,
+        session_date: s.session_date,
+        label: s.label,
+        cycles: { name: s.courses?.title ?? 'Programa' },
+      })),
+      ...(cycleSessRes.data || []),
+    ];
+    combinedSessions.sort((a, b) => a.session_date.localeCompare(b.session_date));
+    upcomingSessions = combinedSessions.slice(0, 3);
   }
 
   const activeCoursesCount = enrollments.length;
@@ -285,18 +306,20 @@ export default async function CampusDashboardPage({
               enrollments.map((enr: any, idx: number) => {
                 const courseId = enr.cycles?.course_id;
                 const href = courseId ? `/cursos/${courseId}` : '/cursos';
+                const coverSrc = normalizeImageUrl(enr.cycles?.courses?.cover_image_url, 'w800');
                 return (
                   <Link
                     key={enr.id}
                     href={href}
                     className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:border-[#00A9CE]/30 hover:shadow-md transition-all"
                   >
-                    <div className={`h-32 relative overflow-hidden ${enr.cycles?.courses?.cover_image_url ? '' : `bg-gradient-to-r ${idx % 2 === 0 ? 'from-[#00A9CE] to-blue-600' : 'from-emerald-400 to-teal-500'}`}`}>
-                      {enr.cycles?.courses?.cover_image_url && (
+                    <div className={`h-32 relative overflow-hidden ${coverSrc ? '' : `bg-gradient-to-r ${idx % 2 === 0 ? 'from-[#00A9CE] to-blue-600' : 'from-emerald-400 to-teal-500'}`}`}>
+                      {coverSrc && (
                         <img
-                          src={enr.cycles.courses.cover_image_url}
+                          src={coverSrc}
                           alt={enr.cycles?.courses?.title ?? ''}
                           className="absolute inset-0 w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
                         />
                       )}
                       <div className="absolute top-3 right-3 px-2 py-1 bg-white/20 backdrop-blur-md rounded-md text-white text-xs font-bold">

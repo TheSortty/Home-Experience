@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
-import { safeMutate } from '../../../services/supabaseMutation';
+import { restSelect, restUpdate, restDelete, getCurrentUserId } from '../../../services/supabaseRest';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 import StudentDetailModal, { StudentForModal, AttendanceBadge } from './StudentDetailModal';
 import toast from 'react-hot-toast';
@@ -22,8 +22,16 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
     const hasLoadedOnceRef = useRef(false);
 
     const fetchTrashCount = useCallback(async () => {
-        const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_deleted', true);
-        if (count !== null) setTrashCount(count);
+        try {
+            const { count } = await restSelect('profiles', {
+                filters: { role: 'eq.student', is_deleted: 'eq.true' },
+                count: 'exact',
+                head: true,
+            });
+            if (count !== null) setTrashCount(count);
+        } catch (err) {
+            console.error('Error fetching trash count:', err);
+        }
     }, []);
 
     const fetchData = useCallback(async (isBackgroundRefresh = false) => {
@@ -31,21 +39,13 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
         if (isFirstLoad && students.length === 0) setIsLoading(true);
 
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select(`
-                    id, user_id, first_name, last_name, email, phone, is_deleted,
-                    enrollments (
-                        id, status, payment_status,
-                        cycle:cycles ( id, name, type, start_date ),
-                        attendance ( id, status ),
-                        payments ( amount, method, status, paid_at )
-                    )
-                `)
-                .eq('role', 'student')
-                .eq('is_deleted', viewMode === 'trash');
-
-            if (error) throw error;
+            const { data } = await restSelect<any>('profiles', {
+                columns: 'id,user_id,first_name,last_name,email,phone,is_deleted,enrollments(id,status,payment_status,cycle:cycles(id,name,type,start_date),attendance(id,status),payments(amount,method,status,paid_at))',
+                filters: {
+                    role: 'eq.student',
+                    is_deleted: `eq.${viewMode === 'trash'}`,
+                },
+            });
 
             if (data) {
                 const emails = data.map((p: any) => p.email).filter(Boolean);
@@ -53,9 +53,15 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
                 const cycleIds = data.flatMap((p: any) => p.enrollments?.map((e: any) => e.cycle?.id)).filter(Boolean);
 
                 const [submissionsRes, medicalRes, sessionsRes] = await Promise.all([
-                    supabase.from('form_submissions').select('email, data').in('email', emails),
-                    supabase.from('medical_info').select('*').in('user_id', profileIds),
-                    cycleIds.length > 0 ? supabase.from('cycle_sessions').select('cycle_id').in('cycle_id', cycleIds) : Promise.resolve({ data: [] })
+                    emails.length > 0
+                        ? restSelect<any>('form_submissions', { columns: 'email,data', filters: { email: `in.(${emails.map(e => `"${e}"`).join(',')})` } })
+                        : Promise.resolve({ data: [], count: null }),
+                    profileIds.length > 0
+                        ? restSelect<any>('medical_info', { filters: { user_id: `in.(${profileIds.join(',')})` } })
+                        : Promise.resolve({ data: [], count: null }),
+                    cycleIds.length > 0
+                        ? restSelect<any>('cycle_sessions', { columns: 'cycle_id', filters: { cycle_id: `in.(${cycleIds.join(',')})` } })
+                        : Promise.resolve({ data: [], count: null }),
                 ]);
 
                 const submissionsMap = (submissionsRes.data || []).reduce((acc: any, c: any) => { acc[c.email] = c.data; return acc; }, {});
@@ -205,11 +211,12 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
     const handleSoftDelete = async (id: string) => {
         try {
             setIsSubmitting(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            const { error } = await safeMutate(() => 
-                supabase.from('profiles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id)
-            );
-            if (error) throw error;
+            const userId = getCurrentUserId();
+            await restUpdate('profiles', {
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                deleted_by: userId,
+            }, { id: `eq.${id}` });
 
             // Sacarlo del listado actual (la query carga solo is_deleted = viewMode === 'trash')
             setStudents(prev => prev.filter(s => s.id !== id));
@@ -226,10 +233,11 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
     const handleRestore = async (id: string) => {
         try {
             setIsSubmitting(true);
-            const { error } = await safeMutate(() => 
-                supabase.from('profiles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id)
-            );
-            if (error) throw error;
+            await restUpdate('profiles', {
+                is_deleted: false,
+                deleted_at: null,
+                deleted_by: null,
+            }, { id: `eq.${id}` });
 
             // Sacarlo del listado actual (la query de papelera carga solo is_deleted = true)
             setStudents(prev => prev.filter(s => s.id !== id));
@@ -247,20 +255,14 @@ const AdminStudents: React.FC<AdminStudentsProps> = ({ role = 'admin' }) => {
         if (!studentToDelete) return;
         try {
             setIsSubmitting(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
-            const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single();
-            if (!['admin', 'sysadmin', 'super_admin'].includes(profile?.role)) { toast.error('Sin permisos.'); return; }
-            
-            const { error } = await safeMutate(() => 
-                supabase.from('profiles').delete().eq('id', studentToDelete.id)
-            );
-            if (error) throw error;
+            // El middleware ya valida que el usuario sea admin antes de llegar acá.
+            // RLS en la DB también bloquea deletes de no-admin.
+            await restDelete('profiles', { id: `eq.${studentToDelete.id}` });
 
             setStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
-            setIsConfirmDeleteOpen(false); 
-            setStudentToDelete(null); 
-            setSelectedStudent(null); 
+            setIsConfirmDeleteOpen(false);
+            setStudentToDelete(null);
+            setSelectedStudent(null);
             toast.success('Eliminado definitivamente');
         } catch (error: any) {
             toast.error('Error al eliminar definitivamente: ' + error.message);

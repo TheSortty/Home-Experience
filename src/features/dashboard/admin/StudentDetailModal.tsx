@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../../../services/supabaseClient';
-import { safeMutate } from '../../../services/supabaseMutation';
-import { getStudentProgress, StudentProgramProgress } from '../../../services/progressService';
+import toast from 'react-hot-toast';
+import { restSelect, restInsert, restUpsert, restRpc } from '../../../services/supabaseRest';
+import { StudentProgramProgress } from '../../../services/progressService';
 import CheckIcon from '../../../ui/icons/CheckIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 
@@ -130,25 +130,63 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
     const fetchLmsProgress = async (profileId: string) => {
         setIsLoadingLms(true);
-        const progress = await getStudentProgress(supabase, profileId);
-        setLmsProgress(progress);
+        try {
+            const data = await restRpc<any[]>('get_student_progress', { p_profile_id: profileId });
+            const mapped: StudentProgramProgress[] = (data || []).map((item: any) => ({
+                enrollmentId: item.enrollment_id,
+                enrollmentStatus: item.enrollment_status,
+                cycleId: item.cycle_id,
+                cycleName: item.cycle_name,
+                courseId: item.course_id,
+                courseTitle: item.course_title,
+                courseCover: item.course_cover,
+                totalLessons: Number(item.total_lessons),
+                completedLessons: Number(item.completed_lessons),
+                progressPercent: item.progress_percent,
+                nextLessonId: item.next_lesson_id,
+                nextLessonTitle: item.next_lesson_title,
+                nextModuleTitle: item.next_module_title,
+            }));
+            setLmsProgress(mapped);
+        } catch (err) {
+            console.error('Failed to fetch LMS progress:', err);
+            setLmsProgress([]);
+        }
         setIsLoadingLms(false);
     };
 
     const fetchProgramNotes = async (enrollmentId: string) => {
         setIsLoadingNotes(true);
-        const { data } = await supabase.from('enrollment_notes').select('*').eq('enrollment_id', enrollmentId).order('created_at', { ascending: false });
-        setProgramNotes(data || []);
+        try {
+            const { data } = await restSelect<any>('enrollment_notes', {
+                filters: { enrollment_id: `eq.${enrollmentId}` },
+                order: 'created_at.desc',
+            });
+            setProgramNotes(data || []);
+        } catch (err) {
+            console.error('Error fetching notes:', err);
+        }
         setIsLoadingNotes(false);
     };
 
     const fetchGoals = async (studentId: string) => {
         setIsLoadingGoals(true);
-        const { data: enrollments } = await supabase.from('enrollments').select('id').eq('user_id', studentId).limit(1);
-        if (enrollments && enrollments.length > 0) {
-            const { data: goals } = await supabase.from('student_goals').select('*').eq('enrollment_id', enrollments[0].id);
-            setStudentGoals(goals || []);
-        } else {
+        try {
+            const { data: enrollments } = await restSelect<any>('enrollments', {
+                columns: 'id',
+                filters: { user_id: `eq.${studentId}` },
+                limit: 1,
+            });
+            if (enrollments && enrollments.length > 0) {
+                const { data: goals } = await restSelect<any>('student_goals', {
+                    filters: { enrollment_id: `eq.${enrollments[0].id}` },
+                });
+                setStudentGoals(goals || []);
+            } else {
+                setStudentGoals([]);
+            }
+        } catch (err) {
+            console.error('Error fetching goals:', err);
             setStudentGoals([]);
         }
         setIsLoadingGoals(false);
@@ -156,27 +194,33 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
     const fetchCarta = async (enrollmentId: string) => {
         setIsLoadingCarta(true);
-        const { data } = await supabase.from('student_goals').select('*').eq('enrollment_id', enrollmentId).single();
-        setCarta(data || null);
-        setCartaDraft(data || { contrato: '', estiramiento: '', nabo_descripcion: '', equipo_asistencia: '', goals_data: {} });
+        try {
+            const { data } = await restSelect<any>('student_goals', {
+                filters: { enrollment_id: `eq.${enrollmentId}` },
+                limit: 1,
+            });
+            const record = data && data.length > 0 ? data[0] : null;
+            setCarta(record);
+            setCartaDraft(record || { contrato: '', estiramiento: '', nabo_descripcion: '', equipo_asistencia: '', goals_data: {} });
+        } catch (err) {
+            console.error('Error fetching carta:', err);
+        }
         setIsLoadingCarta(false);
     };
 
     const saveCarta = async () => {
         if (!plEnrollment) return;
         setIsSavingCarta(true);
-        const { error } = await safeMutate(() => 
-            supabase.from('student_goals').upsert({
+        try {
+            await restUpsert('student_goals', {
                 enrollment_id: plEnrollment.id,
                 ...cartaDraft,
                 updated_at: new Date().toISOString(),
-            }, { onConflict: 'enrollment_id' })
-        );
-        if (error) {
-            console.error('[Carta] Save error:', error);
-            toast.error('Error al guardar: ' + error.message);
-        } else {
+            }, { onConflict: 'enrollment_id' });
             toast.success('Carta guardada correctamente');
+        } catch (err: any) {
+            console.error('[Carta] Save error:', err);
+            toast.error('Error al guardar: ' + err.message);
         }
         await fetchCarta(plEnrollment.id);
         setIsSavingCarta(false);
@@ -184,27 +228,32 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
     const fetchCheckins = async (enrollmentId: string) => {
         setIsLoadingCheckins(true);
-        const { data } = await supabase.from('weekly_checkins').select('*').eq('enrollment_id', enrollmentId).order('week_number', { ascending: true });
-        setCheckins(data || []);
+        try {
+            const { data } = await restSelect<any>('weekly_checkins', {
+                filters: { enrollment_id: `eq.${enrollmentId}` },
+                order: 'week_number.asc',
+            });
+            setCheckins(data || []);
+        } catch (err) {
+            console.error('Error fetching checkins:', err);
+        }
         setIsLoadingCheckins(false);
     };
 
     const saveWeekCheckin = async (weekNum: number) => {
         if (!plEnrollment) return;
         setIsSavingCheckin(true);
-        const { error } = await safeMutate(() => 
-            supabase.from('weekly_checkins').upsert({
+        try {
+            await restUpsert('weekly_checkins', {
                 enrollment_id: plEnrollment.id,
                 week_number: weekNum,
                 scores: weekDraft,
                 updated_at: new Date().toISOString(),
-            }, { onConflict: 'enrollment_id,week_number' })
-        );
-        if (error) {
-            console.error('[Planilla] Save error:', error);
-            toast.error('Error al guardar: ' + error.message);
-        } else {
+            }, { onConflict: 'enrollment_id,week_number' });
             toast.success('Semana guardada correctamente');
+        } catch (err: any) {
+            console.error('[Planilla] Save error:', err);
+            toast.error('Error al guardar: ' + err.message);
         }
         await fetchCheckins(plEnrollment.id);
         setEditingWeek(null);
@@ -223,18 +272,13 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         if (!newNoteContent.trim()) return;
         setIsSavingNote(true);
         try {
-            const { data, error } = await safeMutate(() => 
-                supabase.from('enrollment_notes').insert([{
-                    enrollment_id: enrollmentId,
-                    content: newNoteContent.trim()
-                }]).select()
-            );
-
-            if (!error && data) {
-                setProgramNotes([data[0], ...programNotes]);
+            const created = await restInsert<any>('enrollment_notes', {
+                enrollment_id: enrollmentId,
+                content: newNoteContent.trim(),
+            });
+            if (created) {
+                setProgramNotes([created, ...programNotes]);
                 setNewNoteContent('');
-            } else {
-                console.error('Error saving note', error);
             }
         } catch (err) {
             console.error('Error saving notes', err);

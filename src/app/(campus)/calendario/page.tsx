@@ -24,9 +24,42 @@ export default async function CampusCalendarioPage() {
       .from('profiles')
       .select('id')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (profile) {
+    // ── 1) Encuentros de cursos publicados (visibles para todos) ──────────
+    // Por el momento todos los alumnos ven los cursos publicados, así que
+    // también pueden ver los encuentros agendados de esos cursos.
+    const { data: visibleCourses } = await supabase
+      .from('courses')
+      .select('id, title')
+      .eq('is_published', true);
+
+    const courseTitleById: Record<string, string> = {};
+    (visibleCourses || []).forEach((c: any) => { courseTitleById[c.id] = c.title; });
+    const visibleCourseIds = (visibleCourses || []).map((c: any) => c.id);
+
+    if (visibleCourseIds.length > 0) {
+      const { data: courseSessions } = await supabase
+        .from('course_sessions')
+        .select('id, course_id, session_date, session_time, label, is_mandatory, location_url')
+        .in('course_id', visibleCourseIds)
+        .order('session_date', { ascending: true });
+
+      (courseSessions || []).forEach((s: any) => {
+        sessions.push({
+          id: `cs-${s.id}`,
+          session_date: s.session_date,
+          label: s.label ?? (s.session_time ? `${courseTitleById[s.course_id] ?? 'Encuentro'} · ${String(s.session_time).slice(0, 5)}` : courseTitleById[s.course_id] ?? 'Encuentro'),
+          is_mandatory: s.is_mandatory,
+          cycleName: courseTitleById[s.course_id] ?? 'Programa',
+          cycleType: 'initial',
+          attendanceStatus: null,
+        });
+      });
+    }
+
+    // ── 2) Encuentros operativos de los ciclos donde el alumno está inscripto ──
+    if (profile?.id) {
       const { data: enrollments } = await supabase
         .from('enrollments')
         .select('id, cycle_id, cycles(id, name, type, course_id, courses(title))')
@@ -68,17 +101,22 @@ export default async function CampusCalendarioPage() {
           };
         });
 
-        sessions = (rawSessions || []).map((s: any) => ({
-          id: s.id,
-          session_date: s.session_date,
-          label: s.label,
-          is_mandatory: s.is_mandatory,
-          cycleName: enrollmentByCycle[s.cycle_id]?.cycleName ?? 'Programa',
-          cycleType: enrollmentByCycle[s.cycle_id]?.cycleType ?? 'initial',
-          attendanceStatus: attendanceMap[s.id] ?? null,
-        }));
+        (rawSessions || []).forEach((s: any) => {
+          sessions.push({
+            id: s.id,
+            session_date: s.session_date,
+            label: s.label,
+            is_mandatory: s.is_mandatory,
+            cycleName: enrollmentByCycle[s.cycle_id]?.cycleName ?? 'Programa',
+            cycleType: enrollmentByCycle[s.cycle_id]?.cycleType ?? 'initial',
+            attendanceStatus: attendanceMap[s.id] ?? null,
+          });
+        });
       }
     }
+
+    // Ordenar todo por fecha
+    sessions.sort((a, b) => a.session_date.localeCompare(b.session_date));
   }
 
   const todayISO = todayInArgentinaISO();

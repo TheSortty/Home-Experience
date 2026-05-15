@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
-import { safeMutate } from '../../../services/supabaseMutation';
+import { restSelect, restInsert, restUpdate, restDelete, restUpsert, restRpc, getCurrentUserId } from '../../../services/supabaseRest';
 import toast from 'react-hot-toast';
 import UsersIcon from '../../../ui/icons/UsersIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
@@ -73,8 +73,16 @@ const AdminCalendar: React.FC = () => {
     // ─── Fetch Cycles ────────────────────────────────────────────────────────
 
     const fetchTrashCount = useCallback(async () => {
-        const { count } = await supabase.from('cycles').select('*', { count: 'exact', head: true }).eq('is_deleted', true);
-        if (count !== null) setTrashCount(count);
+        try {
+            const { count } = await restSelect('cycles', {
+                filters: { is_deleted: 'eq.true' },
+                count: 'exact',
+                head: true,
+            });
+            if (count !== null) setTrashCount(count);
+        } catch (err) {
+            console.error('Error fetching trash count:', err);
+        }
     }, []);
 
     const fetchData = useCallback(async (isBackgroundRefresh = false) => {
@@ -82,10 +90,17 @@ const AdminCalendar: React.FC = () => {
         if (isFirstLoad && cycles.length === 0) setLoading(true);
         try {
             const [cyclesRes, trashCountRes] = await Promise.all([
-                supabase.from('cycles').select('*').eq('is_deleted', viewMode === 'trash').order('start_date', { ascending: true }),
-                supabase.from('cycles').select('*', { count: 'exact', head: true }).eq('is_deleted', true)
+                restSelect<Cycle>('cycles', {
+                    filters: { is_deleted: `eq.${viewMode === 'trash'}` },
+                    order: 'start_date.asc',
+                }),
+                restSelect('cycles', {
+                    filters: { is_deleted: 'eq.true' },
+                    count: 'exact',
+                    head: true,
+                }),
             ]);
-            
+
             if (cyclesRes.data) {
                 setCycles(cyclesRes.data);
                 hasLoadedOnceRef.current = true;
@@ -129,14 +144,17 @@ const AdminCalendar: React.FC = () => {
         try {
             const form = e.target as HTMLFormElement;
             const fd = new FormData(form);
-            const { error } = await safeMutate(() => 
-                supabase.from('cycles').insert([{
-                    name: fd.get('name'), start_date: fd.get('startDate'), end_date: fd.get('endDate'),
-                    type: fd.get('type'), capacity: parseInt(fd.get('capacity') as string) || 30, status: 'active', enrolled_count: 0
-                }])
-            );
-            if (error) throw error;
-            fetchData(); setIsCreateModalOpen(false);
+            await restInsert('cycles', {
+                name: fd.get('name'),
+                start_date: fd.get('startDate'),
+                end_date: fd.get('endDate'),
+                type: fd.get('type'),
+                capacity: parseInt(fd.get('capacity') as string) || 30,
+                status: 'active',
+                enrolled_count: 0,
+            }, { returning: 'minimal' });
+            fetchData();
+            setIsCreateModalOpen(false);
             toast.success('Ciclo creado correctamente');
         } catch (error: any) {
             toast.error('Error al crear ciclo: ' + error.message);
@@ -145,11 +163,12 @@ const AdminCalendar: React.FC = () => {
 
     const handleSoftDelete = async (id: string) => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            const { error } = await safeMutate(() => 
-                supabase.from('cycles').update({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: user?.id || null }).eq('id', id)
-            );
-            if (error) throw error;
+            const userId = getCurrentUserId();
+            await restUpdate('cycles', {
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                deleted_by: userId,
+            }, { id: `eq.${id}` });
             setCycles(prev => prev.filter(c => c.id !== id));
             toast.success('Movido a papelera');
             fetchTrashCount();
@@ -160,10 +179,11 @@ const AdminCalendar: React.FC = () => {
 
     const handleRestore = async (id: string) => {
         try {
-            const { error } = await safeMutate(() => 
-                supabase.from('cycles').update({ is_deleted: false, deleted_at: null, deleted_by: null }).eq('id', id)
-            );
-            if (error) throw error;
+            await restUpdate('cycles', {
+                is_deleted: false,
+                deleted_at: null,
+                deleted_by: null,
+            }, { id: `eq.${id}` });
             fetchData();
             toast.success('Ciclo restaurado');
         } catch (error: any) {
@@ -174,12 +194,10 @@ const AdminCalendar: React.FC = () => {
     const handlePermanentDelete = async () => {
         if (!cycleToDelete) return;
         try {
-            const { error } = await safeMutate(() => 
-                supabase.from('cycles').delete().eq('id', cycleToDelete.id)
-            );
-            if (error) throw error;
+            await restDelete('cycles', { id: `eq.${cycleToDelete.id}` });
             setCycles(prev => prev.filter(c => c.id !== cycleToDelete.id));
-            setIsConfirmDeleteOpen(false); setCycleToDelete(null);
+            setIsConfirmDeleteOpen(false);
+            setCycleToDelete(null);
             toast.success('Eliminado definitivamente');
         } catch (error: any) {
             toast.error('Error al eliminar: ' + error.message);
@@ -194,15 +212,18 @@ const AdminCalendar: React.FC = () => {
         setActiveSessionId(null);
 
         // Fetch sessions
-        const { data: sessions } = await supabase.from('cycle_sessions').select('*').eq('cycle_id', cycle.id).order('session_date', { ascending: true });
-        const sess = sessions || [];
+        const { data: sessionsRes } = await restSelect<CycleSession>('cycle_sessions', {
+            filters: { cycle_id: `eq.${cycle.id}` },
+            order: 'session_date.asc',
+        });
+        const sess = sessionsRes || [];
         setCycleSessions(sess);
 
-        // Fetch enrollments with user data
-        const { data: enrollments } = await supabase.from('enrollments').select(`
-            id, payment_status,
-            user:profiles ( id, first_name, last_name, email, phone )
-        `).eq('cycle_id', cycle.id);
+        // Fetch enrollments with user data (PostgREST embedded resource)
+        const { data: enrollments } = await restSelect<any>('enrollments', {
+            columns: 'id,payment_status,user:profiles(id,first_name,last_name,email,phone)',
+            filters: { cycle_id: `eq.${cycle.id}` },
+        });
 
         if (!enrollments || enrollments.length === 0) {
             setEnrolledStudents([]);
@@ -213,28 +234,39 @@ const AdminCalendar: React.FC = () => {
         try {
             // Fetch form submissions for referredBy
             const emails = enrollments.map((e: any) => e.user?.email).filter(Boolean);
-            const { data: submissions } = await supabase.from('form_submissions').select('email, data').in('email', emails);
-            const subMap = (submissions || []).reduce((acc: any, c: any) => { acc[c.email] = c.data; return acc; }, {});
+            const submissionsRes = emails.length > 0
+                ? await restSelect<any>('form_submissions', {
+                    columns: 'email,data',
+                    filters: { email: `in.(${emails.map((e: string) => `"${e}"`).join(',')})` },
+                  })
+                : { data: [], count: null };
+            const subMap = (submissionsRes.data || []).reduce((acc: any, c: any) => { acc[c.email] = c.data; return acc; }, {});
 
             // Fetch medical info
             const userIds = enrollments.map((e: any) => e.user?.id).filter(Boolean);
-            const { data: medicalData } = await supabase.from('medical_info').select('*').in('user_id', userIds);
-            const medMap = (medicalData || []).reduce((acc: any, c: any) => { acc[c.user_id] = c; return acc; }, {});
+            const medicalRes = userIds.length > 0
+                ? await restSelect<any>('medical_info', { filters: { user_id: `in.(${userIds.join(',')})` } })
+                : { data: [], count: null };
+            const medMap = (medicalRes.data || []).reduce((acc: any, c: any) => { acc[c.user_id] = c; return acc; }, {});
 
             // Fetch ALL enrollments for these users to build program history
-            const { data: allUserEnrollments } = await supabase.from('enrollments').select(`
-                id, status, payment_status, user_id,
-                cycle:cycles ( id, name, type, start_date ),
-                attendance ( id, status ),
-                payments ( amount, method, status, paid_at )
-            `).in('user_id', userIds);
+            const allEnrollmentsRes = userIds.length > 0
+                ? await restSelect<any>('enrollments', {
+                    columns: 'id,status,payment_status,user_id,cycle:cycles(id,name,type,start_date),attendance(id,status),payments(amount,method,status,paid_at)',
+                    filters: { user_id: `in.(${userIds.join(',')})` },
+                  })
+                : { data: [], count: null };
+            const allUserEnrollments = allEnrollmentsRes.data;
 
             // Fetch session counts for these historical cycles
             const allCycleIds = (allUserEnrollments || []).map((e: any) => e.cycle?.id).filter(Boolean);
             let sessionsMap: Record<string, number> = {};
             if (allCycleIds.length > 0) {
-                const { data: sessions } = await supabase.from('cycle_sessions').select('cycle_id').in('cycle_id', allCycleIds);
-                sessionsMap = (sessions || []).reduce((acc: any, s: any) => { acc[s.cycle_id] = (acc[s.cycle_id] || 0) + 1; return acc; }, {});
+                const { data: hSessions } = await restSelect<any>('cycle_sessions', {
+                    columns: 'cycle_id',
+                    filters: { cycle_id: `in.(${allCycleIds.join(',')})` },
+                });
+                sessionsMap = (hSessions || []).reduce((acc: any, s: any) => { acc[s.cycle_id] = (acc[s.cycle_id] || 0) + 1; return acc; }, {});
             }
 
             // Group enrollments into programHistory per user
@@ -270,7 +302,10 @@ const AdminCalendar: React.FC = () => {
 
             // Fetch attendance for the current cycle view
             const enrollmentIds = enrollments.map((e: any) => e.id);
-            const { data: attendance } = await supabase.from('attendance').select('*').in('enrollment_id', enrollmentIds);
+            const attRes = enrollmentIds.length > 0
+                ? await restSelect<any>('attendance', { filters: { enrollment_id: `in.(${enrollmentIds.join(',')})` } })
+                : { data: [], count: null };
+            const attendance = attRes.data;
             const attMap: Record<string, Record<string, string>> = {};
             (attendance || []).forEach((a: any) => {
                 if (!attMap[a.enrollment_id]) attMap[a.enrollment_id] = {};
@@ -308,15 +343,13 @@ const AdminCalendar: React.FC = () => {
     const handleAddSession = async () => {
         if (!newSessionDate || !selectedCycle) return;
         try {
-            const { error } = await safeMutate(() => 
-                supabase.from('cycle_sessions').insert([{
-                    cycle_id: selectedCycle.id,
-                    session_date: newSessionDate,
-                    is_mandatory: true
-                }])
-            );
-            if (error) throw error;
-            setNewSessionDate(''); setIsAddingSession(false);
+            await restInsert('cycle_sessions', {
+                cycle_id: selectedCycle.id,
+                session_date: newSessionDate,
+                is_mandatory: true,
+            }, { returning: 'minimal' });
+            setNewSessionDate('');
+            setIsAddingSession(false);
             openCycleDetail(selectedCycle);
             toast.success('Sesión agregada');
         } catch (error: any) {
@@ -327,14 +360,8 @@ const AdminCalendar: React.FC = () => {
     const handleDeleteSession = async (sessionId: string) => {
         if (!selectedCycle) return;
         try {
-            const { error: err1 } = await safeMutate(() => 
-                supabase.from('attendance').delete().eq('cycle_session_id', sessionId)
-            );
-            if (err1) throw err1;
-            const { error: err2 } = await safeMutate(() => 
-                supabase.from('cycle_sessions').delete().eq('id', sessionId)
-            );
-            if (err2) throw err2;
+            await restDelete('attendance', { cycle_session_id: `eq.${sessionId}` });
+            await restDelete('cycle_sessions', { id: `eq.${sessionId}` });
             openCycleDetail(selectedCycle);
             toast.success('Sesión eliminada');
         } catch (error: any) {
@@ -354,24 +381,20 @@ const AdminCalendar: React.FC = () => {
             ));
 
             // Save attendance record
-            const { error } = await safeMutate(() => 
-                supabase.from('attendance').upsert({
-                    enrollment_id: enrollmentId,
-                    cycle_session_id: sessionId,
-                    status: desiredStatus,
-                    recorded_at: new Date().toISOString()
-                }, { onConflict: 'enrollment_id, cycle_session_id' })
-            );
-            if (error) throw error;
+            await restUpsert('attendance', {
+                enrollment_id: enrollmentId,
+                cycle_session_id: sessionId,
+                status: desiredStatus,
+                recorded_at: new Date().toISOString(),
+            }, { onConflict: 'enrollment_id,cycle_session_id' });
 
             // Linear attendance conflict logic:
             if (selectedCycle && (selectedCycle.type === 'initial' || selectedCycle.type === 'advanced')) {
-                const { data: rpcResult, error: rpcError } = await supabase.rpc('handle_linear_attendance', {
+                const rpcResult = await restRpc<any>('handle_linear_attendance', {
                     p_enrollment_id: enrollmentId,
                     p_session_id: sessionId,
                     p_status: desiredStatus,
                 });
-                if (rpcError) throw rpcError;
 
                 // If RPC changed conflict status, update local student state for immediate UI feedback
                 if (rpcResult?.action === 'marked_conflict') {
@@ -399,6 +422,7 @@ const AdminCalendar: React.FC = () => {
     const openStudentDetail = (student: EnrolledStudent) => {
         const s: StudentForModal = {
             id: student.userId,
+            user_id: student.userId,
             name: `${student.firstName} ${student.lastName}`,
             email: student.email,
             phone: student.phone || '-',

@@ -36,6 +36,7 @@ function formatUnlockDate(iso: string) {
   });
 }
 
+export default async function ClasePage({
   params,
   searchParams,
 }: {
@@ -54,31 +55,30 @@ function formatUnlockDate(iso: string) {
     .from('profiles')
     .select('id, role')
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
 
-  if (!profile) notFound();
-
-  const isAdmin = profile.role === 'admin' || profile.role === 'sysadmin';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'sysadmin';
   const canPreview = isAdmin && isPreview;
 
-  // Verify enrollment
+  // Por el momento permitimos acceder a cualquier clase publicada sin enrollment.
+  // El RLS de lessons/modules/courses ya garantiza que solo se vean las publicadas.
+  // Si hay enrollment se usa para tracking de progreso individual.
   const { data: courseCycles } = await supabase
     .from('cycles')
     .select('id')
     .eq('course_id', cursoId);
 
   const cycleIds = (courseCycles || []).map((c: any) => c.id);
-  if (cycleIds.length === 0) notFound();
 
-  const { data: enrollment } = await supabase
-    .from('enrollments')
-    .select('id')
-    .eq('user_id', profile.id)
-    .in('cycle_id', cycleIds)
-    .in('status', ['active', 'completed'])
-    .maybeSingle();
-
-  if (!enrollment && !canPreview) notFound();
+  const { data: enrollment } = profile?.id && cycleIds.length > 0
+    ? await supabase
+        .from('enrollments')
+        .select('id')
+        .eq('user_id', profile.id)
+        .in('cycle_id', cycleIds)
+        .in('status', ['active', 'completed'])
+        .maybeSingle()
+    : { data: null };
 
   // Fetch the lesson (include lifecycle columns)
   const { data: lesson } = await supabase
@@ -152,7 +152,7 @@ function formatUnlockDate(iso: string) {
 
   // Fetch progress
   const completedSet = new Set<string>();
-  if (allLessonIds.length > 0) {
+  if (allLessonIds.length > 0 && profile?.id) {
     const { data: progress } = await supabase
       .from('lesson_progress')
       .select('lesson_id')
@@ -207,7 +207,7 @@ function formatUnlockDate(iso: string) {
       created_at: p.created_at,
       author_name: fullName,
       author_initials: initials,
-      is_own: p.user_id === profile.id,
+      is_own: p.user_id === profile?.id,
       parent_id: p.parent_id,
       replies: [],
     };
@@ -223,11 +223,13 @@ function formatUnlockDate(iso: string) {
   lessonPosts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   // Get current user's name
-  const { data: currentProfile } = await supabase
-    .from('profiles')
-    .select('first_name, last_name')
-    .eq('id', profile.id)
-    .single();
+  const { data: currentProfile } = profile?.id
+    ? await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', profile.id)
+        .single()
+    : { data: null };
   const currentUserName = currentProfile
     ? `${currentProfile.first_name ?? ''} ${currentProfile.last_name ?? ''}`.trim() || 'Alumno'
     : 'Alumno';
@@ -243,7 +245,7 @@ function formatUnlockDate(iso: string) {
     latestReview: null,
   };
 
-  if (lesson.requires_submission) {
+  if (lesson.requires_submission && profile?.id) {
     const nowMs = Date.now();
 
     if (lesson.unlocked_at && lesson.due_days_after_unlock) {

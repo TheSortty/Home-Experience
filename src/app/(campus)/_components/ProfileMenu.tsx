@@ -2,9 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { IoLogOutOutline, IoPersonOutline, IoChevronDownOutline } from 'react-icons/io5';
-import { logoutAction } from '../perfil/actions';
+import { supabase } from '@/src/services/supabaseClient';
 
 interface Props {
   firstName: string;
@@ -17,8 +17,22 @@ interface Props {
 
 export default function ProfileMenu({ firstName, lastName, fullName, email, initials, avatarUrl }: Props) {
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    // Client-side signOut clears both the browser Supabase client's in-memory
+    // session AND the auth cookies. Server-action signOut leaves the browser
+    // client's in-memory session intact, causing /auth/login to redirect-loop
+    // back to /dashboard until F5.
+    await supabase.auth.signOut();
+    router.replace('/auth/login');
+    router.refresh();
+  };
 
   // Close on outside click
   useEffect(() => {
@@ -98,16 +112,18 @@ export default function ProfileMenu({ firstName, lastName, fullName, email, init
             Tu espacio
           </Link>
 
-          <form action={logoutAction} className="border-t border-slate-100">
+          <div className="border-t border-slate-100">
             <button
-              type="submit"
+              type="button"
               role="menuitem"
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              onClick={handleLogout}
+              disabled={signingOut}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <IoLogOutOutline size={18} className="text-slate-400 shrink-0" />
-              Salir
+              {signingOut ? 'Saliendo…' : 'Salir'}
             </button>
-          </form>
+          </div>
 
           <style>{`
             @keyframes profile-menu-in {

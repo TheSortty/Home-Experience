@@ -37,6 +37,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         mountedRef.current = true;
 
         /**
+         * Safety net: under no circumstances should the dashboard stay stuck on
+         * the auth spinner. If supabase.auth.getSession() itself hangs (which
+         * has been observed in long-lived admin sessions) we release the loading
+         * state after this deadline. Set above the combined role-resolution
+         * timeouts (~12s) so the timer only fires for genuinely stuck states.
+         */
+        const SAFETY_DEADLINE_MS = 14_000;
+        const safetyTimer = setTimeout(() => {
+            if (mountedRef.current) {
+                console.warn('[AuthContext] Safety deadline hit, forcing isLoading=false');
+                setIsLoading(false);
+            }
+        }, SAFETY_DEADLINE_MS);
+
+        /**
          * Initialise auth state from the current cookie/localStorage session.
          * We call getSession() (cheap, no network) then fetchUser() (validates token)
          * so we display a fast initial UI while the real user object loads.
@@ -52,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     // Resolve role first before updating any state, to prevent UI race conditions
                     const resolvedRole = await resolveRole(localSession.user.id);
                     if (!mountedRef.current) return;
-                    
+
                     setSession(localSession);
                     setUser(localSession.user);
                     setRole(resolvedRole);
@@ -68,6 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setRole(null);
             } finally {
                 if (mountedRef.current) {
+                    clearTimeout(safetyTimer);
                     setIsLoading(false);
                 }
             }
@@ -128,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         return () => {
             mountedRef.current = false;
+            clearTimeout(safetyTimer);
             subscription.unsubscribe();
         };
     }, []);

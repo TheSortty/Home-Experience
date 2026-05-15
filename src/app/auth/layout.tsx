@@ -1,12 +1,23 @@
 'use client'
 
 import React, { Suspense } from 'react'
-import InteractiveBg from '@/src/features/landing/InteractiveBg'
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative font-sans text-slate-900 antialiased bg-slate-50 selection:bg-blue-100 selection:text-blue-900 min-h-screen flex items-center justify-center p-4">
-      <InteractiveBg />
+    <div className="auth-shell relative font-sans antialiased min-h-screen flex items-center justify-center p-4 overflow-hidden">
+      {/* Base mesh background */}
+      <div aria-hidden="true" className="auth-shell__mesh" />
+      {/* Animated aurora blobs */}
+      <div aria-hidden="true" className="auth-shell__aurora auth-shell__aurora--a" />
+      <div aria-hidden="true" className="auth-shell__aurora auth-shell__aurora--b" />
+      <div aria-hidden="true" className="auth-shell__aurora auth-shell__aurora--c" />
+      {/* Grid pattern overlay */}
+      <div aria-hidden="true" className="auth-shell__grid" />
+      {/* Grain texture */}
+      <div aria-hidden="true" className="auth-shell__grain" />
+      {/* Top/Bottom edge vignette */}
+      <div aria-hidden="true" className="auth-shell__vignette" />
+
       <Suspense fallback={null}>
         <main className="w-full relative z-10">{children}</main>
       </Suspense>

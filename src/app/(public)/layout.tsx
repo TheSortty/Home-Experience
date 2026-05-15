@@ -12,7 +12,6 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
   const router = useRouter()
 
   const handleLoginClick = () => router.push('/auth/login')
-  const handleStartClick = () => router.push('/?select=true')
 
   return (
     <>
@@ -21,7 +20,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         <InteractiveBg />
 
         <div className="fixed top-0 left-0 right-0 z-[9999] flex flex-col">
-          <Header onLoginClick={handleLoginClick} onStartClick={handleStartClick} />
+          <Header onLoginClick={handleLoginClick} />
         </div>
 
         <Suspense fallback={<Loading />}>

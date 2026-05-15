@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabaseClient';
+import { restSelect, restInsert, restUpdate, restDelete, restRpc, getCurrentUserId } from '../../../services/supabaseRest';
 import ArrowRightIcon from '../../../ui/icons/ArrowRightIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 import DocumentIcon from '../../../ui/icons/DocumentIcon';
@@ -143,67 +144,55 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     };
 
     const fetchRegistrations = async () => {
-        const { data, error } = await supabase
-            .from('form_submissions')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            console.error('Error fetching registrations:', error);
-            return;
-        }
-
-        if (data) {
-            const realRegistrations = data.map((item: any) => ({
-                id: item.id,
-                name: (item.data.firstName || '') + ' ' + (item.data.lastName || ''),
-                email: item.data.email,
-                date: new Date(item.created_at).toISOString().split('T')[0],
-                status: item.status === 'pending' ? 'PENDING_REVIEW' :
-                    (item.status === 'approved' ? 'PENDING_PAYMENT' :
-                        (item.status === 'enrolled' ? 'APPROVED' :
-                            (item.status === 'rejected' ? 'REJECTED' : item.status))),
-                selectedPackage: (item.data.selectedService && item.data.selectedService.toUpperCase().includes('COMBO')) 
-                    ? (item.data.selectedService.toUpperCase().includes('COMBO 1') ? 'COMBO 1' : 'COMBO 2')
-                    : (item.data.intention?.toUpperCase().includes('COMBO') ? 'COMBO 1' : 'INICIAL'),
-                answers: Object.entries(item.data).map(([key, val]) => ({ question: key, answer: String(val) })),
-                is_deleted: item.is_deleted
-            }));
-            setRegistrations(realRegistrations);
-            setTrashCount(realRegistrations.filter((r: Registration) => r.is_deleted || r.status === 'REJECTED').length);
+        try {
+            const { data } = await restSelect<any>('form_submissions', { order: 'created_at.desc' });
+            if (data) {
+                const realRegistrations = data.map((item: any) => ({
+                    id: item.id,
+                    name: (item.data.firstName || '') + ' ' + (item.data.lastName || ''),
+                    email: item.data.email,
+                    date: new Date(item.created_at).toISOString().split('T')[0],
+                    status: item.status === 'pending' ? 'PENDING_REVIEW' :
+                        (item.status === 'approved' ? 'PENDING_PAYMENT' :
+                            (item.status === 'enrolled' ? 'APPROVED' :
+                                (item.status === 'rejected' ? 'REJECTED' : item.status))),
+                    selectedPackage: (item.data.selectedService && item.data.selectedService.toUpperCase().includes('COMBO'))
+                        ? (item.data.selectedService.toUpperCase().includes('COMBO 1') ? 'COMBO 1' : 'COMBO 2')
+                        : (item.data.intention?.toUpperCase().includes('COMBO') ? 'COMBO 1' : 'INICIAL'),
+                    answers: Object.entries(item.data).map(([key, val]) => ({ question: key, answer: String(val) })),
+                    is_deleted: item.is_deleted
+                }));
+                setRegistrations(realRegistrations);
+                setTrashCount(realRegistrations.filter((r: Registration) => r.is_deleted || r.status === 'REJECTED').length);
+            }
+        } catch (err) {
+            console.error('Error fetching registrations:', err);
         }
     };
 
     const fetchCycles = async () => {
-        const { data, error } = await supabase
-            .from('cycles')
-            .select('*')
-            .eq('status', 'active')
-            .order('start_date', { ascending: true });
-
-        if (!error && data) {
-            setCycles(data);
+        try {
+            const { data } = await restSelect<Cycle>('cycles', {
+                filters: { status: 'eq.active' },
+                order: 'start_date.asc',
+            });
+            if (data) setCycles(data);
+        } catch (err) {
+            console.error('Error fetching cycles:', err);
         }
     };
 
     const handleStatusUpdate = async (reg: Registration, newStatus: string) => {
         try {
             setIsSubmitting(true);
-            // Map UI status back to DB status
             let dbStatus = 'pending';
             if (newStatus === 'PENDING_REVIEW') dbStatus = 'pending';
             if (newStatus === 'PENDING_PAYMENT') dbStatus = 'approved';
             if (newStatus === 'APPROVED') dbStatus = 'enrolled';
             if (newStatus === 'REJECTED') dbStatus = 'rejected';
 
-            const { error } = await supabase
-                .from('form_submissions')
-                .update({ status: dbStatus })
-                .eq('id', reg.id);
+            await restUpdate('form_submissions', { status: dbStatus }, { id: `eq.${reg.id}` });
 
-            if (error) throw error;
-            
-            // Optimistic update
             setRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, status: newStatus as any } : r));
             setSelectedRegistration(null);
             toast.success('Estado actualizado');
@@ -218,29 +207,23 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     const handleSoftDelete = async (reg: Registration) => {
         try {
             setIsSubmitting(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            const { error } = await supabase
-                .from('form_submissions')
-                .update({
-                    is_deleted: true,
-                    deleted_at: new Date().toISOString(),
-                    deleted_by: user?.id || null
-                })
-                .eq('id', reg.id);
+            const userId = getCurrentUserId();
+            await restUpdate('form_submissions', {
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                deleted_by: userId,
+            }, { id: `eq.${reg.id}` });
 
-            if (error) throw error;
-
-            if (user) {
-                await supabase.from('activity_logs').insert({
-                    user_id: user.id,
+            if (userId) {
+                await restInsert('activity_logs', {
+                    user_id: userId,
                     action: 'ENVIADO_A_PAPELERA',
                     details: {
                         description: `Envió a la papelera la solicitud de ${reg.name}.`,
-                        adminEmail: user.email
-                    }
-                });
+                    },
+                }, { returning: 'minimal' });
             }
-            
+
             setRegistrations(prev => prev.map(r => r.id === reg.id ? { ...r, is_deleted: true } : r));
             setSelectedRegistration(null);
             toast.success('Enviado a papelera');
@@ -255,18 +238,13 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     const handleRestore = async (id: string) => {
         try {
             setIsSubmitting(true);
-            const { error } = await supabase
-                .from('form_submissions')
-                .update({
-                    is_deleted: false,
-                    deleted_at: null,
-                    deleted_by: null,
-                    status: 'pending'
-                })
-                .eq('id', id);
+            await restUpdate('form_submissions', {
+                is_deleted: false,
+                deleted_at: null,
+                deleted_by: null,
+                status: 'pending',
+            }, { id: `eq.${id}` });
 
-            if (error) throw error;
-            
             setRegistrations(prev => prev.map(r => r.id === id ? { ...r, is_deleted: false, status: 'PENDING_REVIEW' } : r));
             setSelectedRegistration(null);
             toast.success('Restaurado correctamente');
@@ -280,41 +258,22 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
 
     const handlePermanentDelete = async () => {
         if (!registrationToDelete) return;
-
         try {
             setIsSubmitting(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            const userId = getCurrentUserId();
+            // RLS on the DB validates admin role; middleware already gate-keeps this route
+            await restDelete('form_submissions', { id: `eq.${registrationToDelete.id}` });
 
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('user_id', user.id)
-                .single();
-
-            if (profile?.role !== 'admin' && profile?.role !== 'sysadmin') {
-                toast.error('No tienes permisos suficientes para eliminar permanentemente.');
-                return;
-            }
-
-            const { error } = await supabase
-                .from('form_submissions')
-                .delete()
-                .eq('id', registrationToDelete.id);
-
-            if (error) throw error;
-
-            if (user) {
-                await supabase.from('activity_logs').insert({
-                    user_id: user.id,
+            if (userId) {
+                await restInsert('activity_logs', {
+                    user_id: userId,
                     action: 'ELIMINACION_DEFINITIVA',
                     details: {
                         description: `Eliminó permanentemente la solicitud de ${registrationToDelete.name}.`,
-                        adminEmail: user.email
-                    }
-                });
+                    },
+                }, { returning: 'minimal' });
             }
-            
+
             setRegistrations(prev => prev.filter(r => r.id !== registrationToDelete.id));
             setIsConfirmDeleteOpen(false);
             setRegistrationToDelete(null);
@@ -334,56 +293,55 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
         setIsSubmitting(true);
         try {
             // Call RPC function V2
-            const { data, error } = await supabase.rpc('confirm_submission_enrollment', {
+            const data = await restRpc<any>('confirm_submission_enrollment', {
                 p_submission_id: selectedRegistration.id,
                 p_cycle_id: selectedCycleId,
                 p_payment_method: paymentMethod,
-                p_is_total_payment: true
+                p_is_total_payment: true,
             });
 
-            if (error) throw error;
-
             if (data.success) {
-                // Fix: normalizar el método de pago al formato consistente de la DB
                 const normalizedMethod = paymentMethod === 'MERCADO_PAGO' ? 'mercadopago'
                     : paymentMethod === 'TRANSFER' ? 'transfer'
                     : 'cash';
                 const amountValue = Number(unformatAmount(paymentAmount)) || 0;
 
                 // 1. Registrar el Pago del ciclo principal
-                const { error: paymentError } = await supabase.from('payments').insert({
-                    submission_id: selectedRegistration.id,
-                    enrollment_id: data.enrollment_id,
-                    amount: amountValue,
-                    method: normalizedMethod,
-                    status: 'paid',
-                    paid_at: new Date().toISOString()
-                });
-                if (paymentError) console.error('Error recording payment', paymentError);
+                try {
+                    await restInsert('payments', {
+                        submission_id: selectedRegistration.id,
+                        enrollment_id: data.enrollment_id,
+                        amount: amountValue,
+                        method: normalizedMethod,
+                        status: 'paid',
+                        paid_at: new Date().toISOString(),
+                    }, { returning: 'minimal' });
+                } catch (payErr) {
+                    console.error('Error recording payment', payErr);
+                }
 
                 // 2. Handle Combo (Second Cycle) if needed
                 if (isCombo(selectedRegistration.selectedPackage) && selectedCycleId2) {
-                    const { data: enrollment2, error: error2 } = await supabase.from('enrollments').insert({
-                        user_id: data.user_id,
-                        cycle_id: selectedCycleId2,
-                        status: 'active',
-                        payment_status: 'paid'
-                    }).select('id').single();
-
-                    if (error2) {
-                        console.error('Error second enrollment', error2);
-                    } else if (enrollment2) {
-                        const { error: rpcErr } = await supabase.rpc('increment_enrolled_count', { p_cycle_id: selectedCycleId2 });
-                        if (rpcErr) console.error('Error incrementando cupo del segundo ciclo:', rpcErr);
-
-                        // Registrar pago del segundo ciclo (mismo monto, mismo método)
-                        await supabase.from('payments').insert({
-                            enrollment_id: enrollment2.id,
-                            amount: amountValue,
-                            method: normalizedMethod,
-                            status: 'paid',
-                            paid_at: new Date().toISOString()
+                    try {
+                        const enrollment2 = await restInsert<{ id: string }>('enrollments', {
+                            user_id: data.user_id,
+                            cycle_id: selectedCycleId2,
+                            status: 'active',
+                            payment_status: 'paid',
                         });
+                        if (enrollment2) {
+                            restRpc('increment_enrolled_count', { p_cycle_id: selectedCycleId2 })
+                                .catch(e => console.error('Error incrementando cupo del segundo ciclo:', e));
+                            await restInsert('payments', {
+                                enrollment_id: enrollment2.id,
+                                amount: amountValue,
+                                method: normalizedMethod,
+                                status: 'paid',
+                                paid_at: new Date().toISOString(),
+                            }, { returning: 'minimal' });
+                        }
+                    } catch (e) {
+                        console.error('Error second enrollment', e);
                     }
                 }
 
@@ -392,22 +350,21 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                 const selectedCycle = cycles.find(c => c.id === selectedCycleId);
 
                 // 3. Registrar en Activity Logs
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    await supabase.from('activity_logs').insert({
-                        user_id: user.id,
+                const userId = getCurrentUserId();
+                if (userId) {
+                    restInsert('activity_logs', {
+                        user_id: userId,
                         action: 'ALUMNO_APROBADO',
                         details: {
                             description: `Aprobó el ingreso de ${selectedRegistration.name} al ciclo ${selectedCycle?.name || 'Desconocido'}.`,
-                            adminEmail: user.email,
                             studentEmail: selectedRegistration.email,
                             paymentMethod: normalizedMethod,
-                            package: selectedRegistration.selectedPackage
-                        }
-                    });
+                            package: selectedRegistration.selectedPackage,
+                        },
+                    }, { returning: 'minimal' }).catch(e => console.error('Error logging activity:', e));
                 }
 
-                // Enviar Email de Bienvenida
+                // Enviar Email de Bienvenida — usa supabase.functions que tiene su propio auth
                 if (selectedCycle) {
                     supabase.functions.invoke('send-email', {
                         body: {

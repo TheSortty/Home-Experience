@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
+import { normalizeImageUrl } from '@/src/services/imageUrl';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
@@ -38,7 +39,19 @@ export default async function CursoDetallePage({
 
   if (!profile) notFound();
 
-  // Verify enrollment: find a cycle with this course_id that the user is enrolled in
+  // NOTA: Por el momento permitimos que CUALQUIER alumno autenticado acceda
+  // a los cursos publicados, sin requerir enrollment. El RLS de courses ya
+  // garantiza que solo se vean los publicados.
+  const { data: course } = await supabase
+    .from('courses')
+    .select('id, title, description, cover_image_url, is_published')
+    .eq('id', cursoId)
+    .eq('is_published', true)
+    .maybeSingle();
+
+  if (!course) notFound();
+
+  // Buscamos enrollment opcional para mostrar progreso real si lo tiene.
   const { data: courseCycles } = await supabase
     .from('cycles')
     .select('id')
@@ -46,26 +59,15 @@ export default async function CursoDetallePage({
 
   const cycleIds = (courseCycles || []).map((c: any) => c.id);
 
-  if (cycleIds.length === 0) notFound();
-
-  const { data: enrollment } = await supabase
-    .from('enrollments')
-    .select('id, status')
-    .eq('user_id', profile.id)
-    .in('cycle_id', cycleIds)
-    .in('status', ['active', 'completed'])
-    .maybeSingle();
-
-  if (!enrollment) notFound();
-
-  // Fetch course
-  const { data: course } = await supabase
-    .from('courses')
-    .select('id, title, description, cover_image_url')
-    .eq('id', cursoId)
-    .single();
-
-  if (!course) notFound();
+  const { data: enrollment } = cycleIds.length > 0
+    ? await supabase
+        .from('enrollments')
+        .select('id, status')
+        .eq('user_id', profile.id)
+        .in('cycle_id', cycleIds)
+        .in('status', ['active', 'completed'])
+        .maybeSingle()
+    : { data: null };
 
   // Fetch modules (ordered) with their lessons
   const { data: rawModules } = await supabase
@@ -163,18 +165,22 @@ export default async function CursoDetallePage({
       {/* HERO */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row">
         <div className="w-full md:w-1/3 min-h-[140px] relative overflow-hidden flex items-center justify-center p-8 text-center">
-          {course.cover_image_url ? (
-            <>
-              <img
-                src={course.cover_image_url}
-                alt={course.title}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-br from-[#00A9CE]/80 to-blue-900/80" />
-            </>
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-[#00A9CE] to-blue-700" />
-          )}
+          {(() => {
+            const coverSrc = normalizeImageUrl(course.cover_image_url, 'w1200');
+            return coverSrc ? (
+              <>
+                <img
+                  src={coverSrc}
+                  alt={course.title}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-gradient-to-br from-[#00A9CE]/80 to-blue-900/80" />
+              </>
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-[#00A9CE] to-blue-700" />
+            );
+          })()}
           <h1 className="text-3xl font-black text-white relative z-10 leading-tight drop-shadow-md">
             {course.title}
           </h1>
@@ -182,16 +188,20 @@ export default async function CursoDetallePage({
         <div className="p-6 md:p-8 flex-1 flex flex-col justify-center">
           <div className="flex items-center gap-3 mb-3">
             <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-md ${
-              enrollment.status === 'completed' || progressPercent === 100
+              enrollment?.status === 'completed' || progressPercent === 100
                 ? 'bg-emerald-100 text-emerald-700'
                 : progressPercent > 0
                 ? 'bg-[#00A9CE]/10 text-[#00A9CE]'
+                : !enrollment
+                ? 'bg-amber-100 text-amber-700'
                 : 'bg-slate-100 text-slate-600'
             }`}>
-              {enrollment.status === 'completed' || progressPercent === 100
+              {enrollment?.status === 'completed' || progressPercent === 100
                 ? 'Completado'
                 : progressPercent > 0
                 ? 'En Curso'
+                : !enrollment
+                ? 'Disponible'
                 : 'Sin iniciar'}
             </span>
             <span className="text-sm font-medium text-slate-500">
@@ -317,9 +327,18 @@ export default async function CursoDetallePage({
                                   {lesson.order_index}. {lesson.title}
                                 </p>
                                 <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                                  <IoPlayCircleOutline className="inline" />
-                                  Video
-                                  {lesson.duration_seconds > 0 && ` · ${formatDuration(lesson.duration_seconds)}`}
+                                  {lesson.video_url ? (
+                                    <>
+                                      <IoPlayCircleOutline className="inline" />
+                                      Video
+                                      {lesson.duration_seconds > 0 && ` · ${formatDuration(lesson.duration_seconds)}`}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <IoDocumentTextOutline className="inline" />
+                                      Lectura
+                                    </>
+                                  )}
                                 </p>
                               </div>
                             </div>

@@ -41,8 +41,8 @@ const nextConfig = {
       // Conexiones: Supabase (REST + Realtime), Google Maps API, Cloudflare Insights reporting
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://cloudflareinsights.com https://*.cloudflareinsights.com",
 
-      // Imágenes: Supabase Storage, Google avatars, YouTube thumbs, Unsplash (cover de cursos), Picsum, Google Maps
-      "img-src 'self' data: blob: https://*.supabase.co https://lh3.googleusercontent.com https://img.youtube.com https://images.unsplash.com https://picsum.photos https://maps.gstatic.com https://s3-us-west-2.amazonaws.com",
+      // Imágenes: Supabase Storage, Google Drive thumbnails, Google avatars, YouTube thumbs, Unsplash, Picsum, Google Maps
+      "img-src 'self' data: blob: https://*.supabase.co https://drive.google.com https://*.googleusercontent.com https://lh3.googleusercontent.com https://img.youtube.com https://images.unsplash.com https://picsum.photos https://maps.gstatic.com https://s3-us-west-2.amazonaws.com",
 
       // Videos: YouTube embed + Cloudinary (videos de fondo en la landing)
       "media-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://res.cloudinary.com",

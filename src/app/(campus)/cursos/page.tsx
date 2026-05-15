@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { resolveRole } from '@/src/services/roleService';
 import { getStudentProgress } from '@/src/services/progressService';
+import { normalizeImageUrl } from '@/src/services/imageUrl';
 import Link from 'next/link';
 import { IoBookOutline, IoCheckmarkCircleOutline, IoPlayCircleOutline, IoCalendarOutline } from 'react-icons/io5';
 
@@ -23,6 +24,13 @@ function StatusBadge({ status, progress }: { status: string; progress: number })
     return (
       <span className="px-2.5 py-1 bg-[#00A9CE]/20 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1">
         <IoPlayCircleOutline size={12} /> En camino
+      </span>
+    );
+  }
+  if (status === 'available') {
+    return (
+      <span className="px-2.5 py-1 bg-amber-400/30 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider">
+        Disponible
       </span>
     );
   }
@@ -69,61 +77,60 @@ export default async function CampusCursosPage({
       .from('profiles')
       .select('id')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (profile) {
-      const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
-      const canSeeEverything = isAdmin && isPreview;
+    const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
+    const canSeeEverything = isAdmin && isPreview;
 
-      if (canSeeEverything) {
-        const { data: allCourses } = await supabase
-          .from('courses')
-          .select('id, title, description, cover_image_url')
-          .eq('is_published', true);
+    // Siempre cargamos TODOS los cursos publicados — visibles para todos.
+    // No depende de profile ni de enrollment.
+    const { data: allCourses } = await supabase
+      .from('courses')
+      .select('id, title, description, cover_image_url')
+      .eq('is_published', true)
+      .order('created_at', { ascending: false });
 
-        courses = (allCourses || []).map(c => ({
-          enrollmentId: `preview-${c.id}`,
-          enrollmentStatus: 'active',
-          cycleId: `preview-cycle-${c.id}`,
-          cycleName: 'Ciclo Preview',
+    // Si hay perfil, mezclamos el progreso real del alumno
+    const studentProgressList = profile && !canSeeEverything
+      ? await getStudentProgress(supabase, profile.id)
+      : [];
+    const progressByCourse = new Map(
+      studentProgressList.filter(p => p.courseId).map(p => [p.courseId as string, p])
+    );
+
+    courses = (allCourses || []).map(c => {
+      const progress = progressByCourse.get(c.id);
+      if (progress) {
+        return {
+          enrollmentId: progress.enrollmentId,
+          enrollmentStatus: progress.enrollmentStatus,
+          cycleId: progress.cycleId,
+          cycleName: progress.cycleName,
           courseId: c.id,
           courseTitle: c.title,
           courseDescription: c.description,
-          coverImage: c.cover_image_url,
-          totalLessons: 0,
-          completedLessons: 0,
-          progressPercent: 0,
+          coverImage: c.cover_image_url ?? progress.courseCover,
+          totalLessons: progress.totalLessons,
+          completedLessons: progress.completedLessons,
+          progressPercent: progress.progressPercent,
           hasLms: true,
-        }));
-      } else {
-        const studentProgressList = await getStudentProgress(supabase, profile.id);
-
-        courses = studentProgressList.map(prog => ({
-          enrollmentId: prog.enrollmentId,
-          enrollmentStatus: prog.enrollmentStatus,
-          cycleId: prog.cycleId,
-          cycleName: prog.cycleName,
-          courseId: prog.courseId,
-          courseTitle: prog.courseTitle,
-          courseDescription: null, // Note: Not returned by RPC, but we can live without it or fetch it later
-          coverImage: prog.courseCover,
-          totalLessons: prog.totalLessons,
-          completedLessons: prog.completedLessons,
-          progressPercent: prog.progressPercent,
-          hasLms: !!prog.courseId,
-        }));
-        
-        // Fetch descriptions for the courses we got
-        const courseIdsToFetch = courses.map(c => c.courseId).filter(Boolean);
-        if (courseIdsToFetch.length > 0) {
-            const { data: courseData } = await supabase.from('courses').select('id, description').in('id', courseIdsToFetch);
-            if (courseData) {
-                const descMap = courseData.reduce((acc: any, c: any) => { acc[c.id] = c.description; return acc; }, {});
-                courses = courses.map(c => c.courseId ? { ...c, courseDescription: descMap[c.courseId] } : c);
-            }
-        }
+        };
       }
-    }
+      return {
+        enrollmentId: `available-${c.id}`,
+        enrollmentStatus: canSeeEverything ? 'active' : 'available',
+        cycleId: '',
+        cycleName: canSeeEverything ? 'Ciclo Preview' : 'Programa Disponible',
+        courseId: c.id,
+        courseTitle: c.title,
+        courseDescription: c.description,
+        coverImage: c.cover_image_url,
+        totalLessons: 0,
+        completedLessons: 0,
+        progressPercent: 0,
+        hasLms: true,
+      };
+    });
   }
 
   const filtered =
@@ -179,15 +186,17 @@ export default async function CampusCursosPage({
           filtered.map((course, idx) => {
             const gradient = GRADIENTS[idx % GRADIENTS.length];
             const href = course.hasLms ? `/cursos/${course.courseId}` : `/calendario`;
+            const coverSrc = normalizeImageUrl(course.coverImage, 'w800');
             return (
               <Link key={course.enrollmentId} href={href} className="group">
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full group-hover:border-[#00A9CE]/40 group-hover:shadow-md transition-all">
-                  <div className={`h-40 relative overflow-hidden ${course.coverImage ? '' : `bg-gradient-to-r ${gradient}`}`}>
-                    {course.coverImage && (
+                  <div className={`h-40 relative overflow-hidden ${coverSrc ? '' : `bg-gradient-to-r ${gradient}`}`}>
+                    {coverSrc && (
                       <img
-                        src={course.coverImage}
+                        src={coverSrc}
                         alt={course.courseTitle}
                         className="absolute inset-0 w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
                       />
                     )}
                     <div className="absolute top-3 right-3">

@@ -10,6 +10,7 @@ import DocumentIcon from '../../ui/icons/DocumentIcon';
 import MailIcon from '../../ui/icons/MailIcon';
 import { IoMenuOutline, IoCloseOutline } from 'react-icons/io5';
 import { supabase } from '../../services/supabaseClient';
+import { restSelect } from '../../services/supabaseRest';
 import AdminCalendar from './admin/AdminCalendar';
 import AdminStudents from './admin/AdminStudents';
 import AdminAdmissions from './admin/AdminAdmissions';
@@ -87,12 +88,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   // token is silently refreshed and user/role get new object references.
   const fetchGlobalStats = useCallback(async () => {
     try {
-      const { count } = await supabase
-        .from('form_submissions')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending')
-        .eq('is_deleted', false);
-      
+      const { count } = await restSelect('form_submissions', {
+        filters: { status: 'eq.pending', is_deleted: 'eq.false' },
+        count: 'exact',
+        head: true,
+      });
       if (count !== null) {
         setStats(prev => ({ ...prev, pendingAdmissions: count }));
       }
@@ -101,40 +101,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     }
   }, []);
 
+  const today = new Date().toISOString().split('T')[0];
+  const in6Days = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
   const fetchDashboardData = useCallback(async (manualIsFirstLoad = false) => {
     const currentRole = roleRef.current;
     const currentUser = userRef.current;
     if (!currentRole || !currentUser) return;
 
-    // Determine if we should show the loading spinner.
-    // If manualIsFirstLoad is true, or it's the actual first load of the component.
     const isFirstLoad = manualIsFirstLoad || !hasLoadedOnceRef.current;
     if (isFirstLoad) setIsLoadingDashboard(true);
 
-    // 15-second timeout: if any Supabase query hangs (network hiccup, token
-    // rotation in progress), we bail out and keep the previous data visible
-    // instead of showing a stuck spinner.
-    const abort = new AbortController();
-    const timeoutId = setTimeout(() => abort.abort(), 15_000);
-
     try {
       const results = await Promise.allSettled([
-        supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('is_deleted', false).abortSignal(abort.signal),
-        supabase.from('form_submissions').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('is_deleted', false).abortSignal(abort.signal),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student').abortSignal(abort.signal),
-        supabase.from('cycles').select('id, name, type, enrolled_count, start_date').eq('status', 'active').eq('is_deleted', false).order('start_date', { ascending: true }).abortSignal(abort.signal),
-        supabase.from('cycle_sessions')
-          .select('session_date, cycle_id, cycle:cycles(name, type, enrolled_count)')
-          .gte('session_date', new Date().toISOString().split('T')[0])
-          .lte('session_date', new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-          .order('session_date', { ascending: true })
-          .limit(5)
-          .abortSignal(abort.signal),
-        supabase.from('form_submissions').select('id, data, created_at, status').order('created_at', { ascending: false }).limit(6).abortSignal(abort.signal),
-        supabase.from('enrollments').select('status, cycle:cycles(type)').abortSignal(abort.signal),
+        restSelect('form_submissions', { filters: { status: 'eq.pending', is_deleted: 'eq.false' }, count: 'exact', head: true }),
+        restSelect('form_submissions', { filters: { status: 'eq.approved', is_deleted: 'eq.false' }, count: 'exact', head: true }),
+        restSelect('profiles', { filters: { role: 'eq.student' }, count: 'exact', head: true }),
+        restSelect<any>('cycles', { columns: 'id,name,type,enrolled_count,start_date', filters: { status: 'eq.active', is_deleted: 'eq.false' }, order: 'start_date.asc' }),
+        restSelect<any>('cycle_sessions', {
+          columns: 'session_date,cycle_id,cycle:cycles(name,type,enrolled_count)',
+          filters: { session_date: [`gte.${today}`, `lte.${in6Days}`] },
+          order: 'session_date.asc',
+          limit: 5,
+        }),
+        restSelect<any>('form_submissions', { columns: 'id,data,created_at,status', order: 'created_at.desc', limit: 6 }),
+        restSelect<any>('enrollments', { columns: 'status,cycle:cycles(type)' }),
       ]);
 
-      const getRes = (res: any) => res.status === 'fulfilled' ? res.value : null;
+      const getRes = (res: PromiseSettledResult<any>) => res.status === 'fulfilled' ? res.value : null;
 
       const sessionsData = getRes(results[4])?.data;
       const recentRegs = getRes(results[5])?.data;
@@ -189,23 +183,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
       hasLoadedOnceRef.current = true;
 
     } catch (error: any) {
-      // AbortError means the timeout fired — keep previous data, don't crash.
-      if (error?.name !== 'AbortError') {
-        console.error('Error fetching dashboard data:', error);
-      }
+      console.error('Error fetching dashboard data:', error);
     } finally {
-      clearTimeout(timeoutId);
       if (isFirstLoad) setIsLoadingDashboard(false);
     }
     // No deps: stable function, reads from roleRef/userRef
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ─── Trigger initial fetch as soon as role/user resolve ────────────────────
+  // fetchDashboardData early-exits when roleRef/userRef are still null. The
+  // mount-time effect below may run before AuthContext finishes resolving
+  // (especially for accounts where the role RPC takes a moment), so we also
+  // re-trigger when role/user transition from null → set. Without this, slow
+  // admin sessions render an empty dashboard with no spinner and no data.
+  useEffect(() => {
+    if (role && user && !hasLoadedOnceRef.current) {
+      fetchGlobalStats();
+      fetchDashboardData(true);
+    }
+  }, [role, user, fetchDashboardData, fetchGlobalStats]);
+
   // ─── Initial Global Load & Realtime ─────────────────────────
   useEffect(() => {
     // Immediate load for notifications/badges
     fetchGlobalStats();
-    
+
     // Initial load for everything else (stats, activity, etc)
     fetchDashboardData();
 

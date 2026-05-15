@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
-import UserIcon from './icons/UserIcon';
+import { IoSchoolOutline, IoArrowForwardCircleOutline } from 'react-icons/io5';
 import { useAuth } from '../contexts/AuthContext';
 
 interface HeaderProps {
   onLoginClick: () => void;
-  onStartClick: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onLoginClick, onStartClick }) => {
+const Header: React.FC<HeaderProps> = ({ onLoginClick }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { role } = useAuth();
@@ -79,21 +78,27 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onStartClick }) => {
           ))}
         </div>
 
-        <div className="hidden lg:flex items-center space-x-4">
+        <div className="hidden lg:flex items-center">
           <button
             onClick={onLoginClick}
-            className="text-slate-600 hover:text-slate-900 flex items-center gap-2"
+            className="campus-cta group relative inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00A9CE]/60 focus-visible:ring-offset-2"
             data-interactive="true"
+            aria-label="Acceder al Campus"
           >
-            <span className="text-sm font-medium">Admin</span>
-            <UserIcon className="w-5 h-5" />
-          </button>
-          <button
-            onClick={onStartClick}
-            className="btn-join flex items-center justify-center text-sm px-6 py-2.5"
-            data-interactive="true"
-          >
-            Empezar
+            {/* Halo glow detrás del botón */}
+            <span aria-hidden="true" className="campus-cta__halo" />
+            {/* Borde gradiente animado */}
+            <span aria-hidden="true" className="campus-cta__ring" />
+            {/* Fondo interior */}
+            <span aria-hidden="true" className="campus-cta__bg" />
+            {/* Sweep shine on hover */}
+            <span aria-hidden="true" className="campus-cta__shine" />
+
+            <IoSchoolOutline className="campus-cta__icon relative z-10 w-[18px] h-[18px]" />
+            <span className="campus-cta__label relative z-10 text-[12px] font-bold uppercase tracking-[0.18em]">
+              Campus
+            </span>
+            <IoArrowForwardCircleOutline className="campus-cta__arrow relative z-10 w-[16px] h-[16px]" />
           </button>
         </div>
 
@@ -132,9 +137,15 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick, onStartClick }) => {
             ))}
             <button
               onClick={onLoginClick}
-              className="text-left text-slate-900 text-lg font-medium pt-4 border-t border-slate-100"
+              className="flex items-center gap-3 text-left pt-4 border-t border-slate-100 group"
             >
-              Admin Login
+              <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-[#00A9CE] to-blue-500 text-white shadow-md shadow-[#00A9CE]/30 group-hover:scale-105 transition-transform">
+                <IoSchoolOutline className="w-5 h-5" />
+              </span>
+              <span className="text-slate-900 text-lg font-bold tracking-wide">
+                Campus
+                <span className="block text-xs font-medium text-slate-500 uppercase tracking-[0.18em]">Acceder</span>
+              </span>
             </button>
           </div>
         </div>

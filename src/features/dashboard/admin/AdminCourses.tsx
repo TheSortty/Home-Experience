@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabaseClient';
-import { safeMutate } from '../../../services/supabaseMutation';
+import { restSelect, restInsert, restUpdate, restDelete } from '../../../services/supabaseRest';
+import { normalizeImageUrl } from '../../../services/imageUrl';
 import {
   IoAddOutline, IoTrashOutline, IoPencilOutline, IoChevronDownOutline,
   IoChevronForwardOutline, IoEyeOutline, IoEyeOffOutline, IoArrowBackOutline,
   IoBookOutline, IoCloseOutline, IoCheckmarkOutline, IoLinkOutline,
   IoVideocamOutline, IoDocumentTextOutline, IoReorderFourOutline,
+  IoCalendarOutline, IoTimeOutline,
 } from 'react-icons/io5';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -50,6 +52,17 @@ type LessonResource = {
 };
 
 type Cycle = { id: string; name: string; course_id: string | null };
+
+type CourseSession = {
+  id: string;
+  course_id: string;
+  session_date: string;
+  session_time: string | null;
+  label: string | null;
+  description: string | null;
+  location_url: string | null;
+  is_mandatory: boolean;
+};
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
@@ -93,18 +106,10 @@ function CourseModal({
         cover_image_url: coverUrl.trim() || null, is_published: published,
       };
 
-      console.log('[CourseModal] Saving course...', payload);
-
-      const { error } = await safeMutate(() => 
-        course
-          ? supabase.from('courses').update(payload).eq('id', course.id)
-          : supabase.from('courses').insert(payload)
-      );
-
-      if (error) {
-        console.error('[CourseModal] Save error:', error);
-        toast.error(`Error: ${error.message}`);
-        return;
+      if (course) {
+        await restUpdate('courses', payload, { id: `eq.${course.id}` });
+      } else {
+        await restInsert('courses', payload, { returning: 'minimal' });
       }
 
       toast.success(course ? 'Curso actualizado.' : 'Curso creado.');
@@ -182,18 +187,11 @@ function ModuleModal({
     setSaving(true);
     try {
       const payload = { title: title.trim(), order_index: order, is_published: published };
-      console.log('[ModuleModal] Saving module...', payload);
 
-      const { error } = await safeMutate(() => 
-        mod
-          ? supabase.from('modules').update(payload).eq('id', mod.id)
-          : supabase.from('modules').insert({ course_id: courseId, ...payload })
-      );
-
-      if (error) {
-        console.error('[ModuleModal] Save error:', error);
-        toast.error(`Error: ${error.message}`);
-        return;
+      if (mod) {
+        await restUpdate('modules', payload, { id: `eq.${mod.id}` });
+      } else {
+        await restInsert('modules', { course_id: courseId, ...payload }, { returning: 'minimal' });
       }
 
       toast.success(mod ? 'Módulo actualizado.' : 'Módulo creado.');
@@ -269,9 +267,9 @@ function LessonModal({
 
   useEffect(() => {
     if (lesson) {
-      supabase.from('lesson_resources').select('*').eq('lesson_id', lesson.id).then(({ data }) => {
-        setResources(data || []);
-      });
+      restSelect<LessonResource>('lesson_resources', { filters: { lesson_id: `eq.${lesson.id}` } })
+        .then(({ data }) => setResources(data))
+        .catch(err => console.error('[LessonModal] Failed to load resources:', err));
     }
   }, [lesson?.id]);
 
@@ -288,39 +286,31 @@ function LessonModal({
         is_published: published,
       };
 
-      console.log('[LessonModal] Saving lesson...', payload);
       let lessonId = lesson?.id;
 
       if (lessonId) {
-        const { error } = await safeMutate(() => 
-          supabase.from('lessons').update(payload).eq('id', lessonId)
-        );
-        if (error) throw error;
+        await restUpdate('lessons', payload, { id: `eq.${lessonId}` });
       } else {
-        const { data, error } = await safeMutate(() => 
-          supabase
-            .from('lessons')
-            .insert({ module_id: moduleId, ...payload })
-            .select()
-            .single()
-        );
-        if (error) throw error;
-        lessonId = data?.id;
+        const created = await restInsert<Lesson>('lessons', { module_id: moduleId, ...payload });
+        lessonId = created?.id;
       }
 
       // Guardar materiales pendientes
       if (pendingResources.length > 0 && lessonId) {
-        const { error: resError } = await safeMutate(() => 
-          supabase.from('lesson_resources').insert(
+        try {
+          await restInsert(
+            'lesson_resources',
             pendingResources.map(r => ({
               lesson_id: lessonId!,
               title: r.title,
               file_url: r.url,
               type: r.type,
-            }))
-          )
-        );
-        if (resError) toast.error('Error al guardar materiales: ' + resError.message);
+            })),
+            { returning: 'minimal' }
+          );
+        } catch (resErr: any) {
+          toast.error('Error al guardar materiales: ' + resErr.message);
+        }
       }
 
       toast.success(lesson ? 'Clase actualizada.' : 'Clase creada.');
@@ -345,10 +335,9 @@ function LessonModal({
     }
 
     try {
-      const { data, error } = await supabase.from('lesson_resources').insert({
+      const data = await restInsert<LessonResource>('lesson_resources', {
         lesson_id: lesson.id, title: newResTitle.trim(), file_url: newResUrl.trim(), type: newResType,
-      }).select().single();
-      if (error) throw error;
+      });
       if (data) { setResources(prev => [...prev, data]); setNewResTitle(''); setNewResUrl(''); }
       toast.success('Material agregado');
     } catch (err: any) {
@@ -358,8 +347,7 @@ function LessonModal({
 
   const deleteResource = async (id: string) => {
     try {
-      const { error } = await supabase.from('lesson_resources').delete().eq('id', id);
-      if (error) throw error;
+      await restDelete('lesson_resources', { id: `eq.${id}` });
       setResources(prev => prev.filter(r => r.id !== id));
       toast.success('Material eliminado');
     } catch (err: any) {
@@ -381,11 +369,11 @@ function LessonModal({
               <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Introducción al Coaching Ontológico" />
             </div>
             <div className="col-span-2">
-              <label className={labelCls}>Descripción</label>
-              <textarea rows={2} className={inputCls} value={desc} onChange={e => setDesc(e.target.value)} />
+              <label className={labelCls}>Descripción / Contenido de la clase</label>
+              <textarea rows={4} className={inputCls} value={desc} onChange={e => setDesc(e.target.value)} placeholder="Si la clase es solo de lectura, usá este campo para el contenido completo." />
             </div>
             <div className="col-span-2">
-              <label className={labelCls}>URL del video (YouTube / Vimeo)</label>
+              <label className={labelCls}>URL del video (opcional — dejá vacío para clase de solo lectura)</label>
               <input className={inputCls} value={videoUrl} onChange={e => setVideoUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." />
             </div>
             <div>
@@ -501,45 +489,48 @@ export default function AdminCourses() {
   const [courseModal, setCourseModal] = useState<{ open: boolean; course: Course | null }>({ open: false, course: null });
   const [moduleModal, setModuleModal] = useState<{ open: boolean; mod: Module | null; courseId: string } | null>(null);
   const [lessonModal, setLessonModal] = useState<{ open: boolean; lesson: Lesson | null; moduleId: string } | null>(null);
+  const [courseSessions, setCourseSessions] = useState<CourseSession[]>([]);
+  const [newSessionDate, setNewSessionDate] = useState('');
+  const [newSessionTime, setNewSessionTime] = useState('');
+  const [newSessionLabel, setNewSessionLabel] = useState('');
+  const [newSessionLocation, setNewSessionLocation] = useState('');
+  const [newSessionMandatory, setNewSessionMandatory] = useState(true);
+  const [savingSession, setSavingSession] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
-  const fetchData = useCallback(async (isBackgroundRefresh = false) => {
+  const fetchData = useCallback(async (_isBackgroundRefresh = false) => {
     const isFirstLoad = !hasLoadedOnceRef.current;
     if (isFirstLoad) setLoadingCourses(true);
-    
-    const abort = new AbortController();
-    const timeoutId = setTimeout(() => abort.abort(), 15_000);
-    
+
     try {
       const results = await Promise.allSettled([
-        supabase.from('courses').select('*').order('created_at', { ascending: false }).abortSignal(abort.signal),
-        supabase.from('modules').select('*').order('order_index', { ascending: true }).abortSignal(abort.signal),
-        supabase.from('lessons').select('*').order('order_index', { ascending: true }).abortSignal(abort.signal),
-        supabase.from('cycles').select('id, name, course_id').order('name').abortSignal(abort.signal),
+        restSelect<Course>('courses', { order: 'created_at.desc' }),
+        restSelect<Module>('modules', { order: 'order_index.asc' }),
+        restSelect<Lesson>('lessons', { order: 'order_index.asc' }),
+        restSelect<Cycle>('cycles', { columns: 'id,name,course_id', order: 'name.asc' }),
+        restSelect<CourseSession>('course_sessions', { order: 'session_date.asc' }),
       ]);
 
-      const getRes = (res: any) => res.status === 'fulfilled' ? res.value : null;
+      const get = (res: PromiseSettledResult<{ data: any[] }>) => res.status === 'fulfilled' ? res.value.data : null;
 
-      const coursesRes = getRes(results[0]);
-      const modulesRes = getRes(results[1]);
-      const lessonsRes = getRes(results[2]);
-      const cyclesRes = getRes(results[3]);
+      const coursesData = get(results[0]);
+      const modulesData = get(results[1]);
+      const lessonsData = get(results[2]);
+      const cyclesData = get(results[3]);
+      const sessionsData = get(results[4]);
 
-      if (coursesRes?.data) setCourses(coursesRes.data);
-      if (modulesRes?.data) setModules(modulesRes.data);
-      if (lessonsRes?.data) setLessons(lessonsRes.data);
-      if (cyclesRes?.data) setAllCycles(cyclesRes.data);
-      
+      if (coursesData) setCourses(coursesData as Course[]);
+      if (modulesData) setModules(modulesData as Module[]);
+      if (lessonsData) setLessons(lessonsData as Lesson[]);
+      if (cyclesData) setAllCycles(cyclesData as Cycle[]);
+      if (sessionsData) setCourseSessions(sessionsData as CourseSession[]);
+
       hasLoadedOnceRef.current = true;
     } catch (error: any) {
-      if (error?.name !== 'AbortError') {
-        console.error('Error fetching dashboard data:', error);
-      }
+      console.error('Error fetching dashboard data:', error);
     } finally {
-      clearTimeout(timeoutId);
       if (isFirstLoad) setLoadingCourses(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -557,6 +548,7 @@ export default function AdminCourses() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'modules' }, () => fetchData(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lessons' }, () => fetchData(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => fetchData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'course_sessions' }, () => fetchData(true))
       .subscribe();
 
     const handleVisibility = () => {
@@ -582,17 +574,11 @@ export default function AdminCourses() {
   const deleteCourse = async (id: string) => {
     if (!confirm('¿Eliminar este curso y todo su contenido?')) return;
     try {
-      console.log('[CAMPUS] Deleting course:', id);
-      const { error } = await safeMutate(() => 
-        supabase.from('courses').delete().eq('id', id)
-      );
-      console.log('[CAMPUS] Delete course result:', { error });
-      if (error) throw error;
+      await restDelete('courses', { id: `eq.${id}` });
       setCourses(prev => prev.filter(c => c.id !== id));
       if (selectedCourse?.id === id) backToList();
       toast.success('Curso eliminado');
     } catch (err: any) {
-      console.error('[CAMPUS] Delete course error:', err);
       toast.error('Error al eliminar curso: ' + err.message);
     }
   };
@@ -600,16 +586,10 @@ export default function AdminCourses() {
   const deleteModule = async (id: string) => {
     if (!confirm('¿Eliminar este módulo y todas sus clases?')) return;
     try {
-      console.log('[CAMPUS] Deleting module:', id);
-      const { error } = await safeMutate(() => 
-        supabase.from('modules').delete().eq('id', id)
-      );
-      console.log('[CAMPUS] Delete module result:', { error });
-      if (error) throw error;
+      await restDelete('modules', { id: `eq.${id}` });
       setModules(prev => prev.filter(m => m.id !== id));
       toast.success('Módulo eliminado');
     } catch (err: any) {
-      console.error('[CAMPUS] Delete module error:', err);
       toast.error('Error al eliminar módulo: ' + err.message);
     }
   };
@@ -617,32 +597,20 @@ export default function AdminCourses() {
   const deleteLesson = async (id: string) => {
     if (!confirm('¿Eliminar esta clase?')) return;
     try {
-      console.log('[CAMPUS] Deleting lesson:', id);
-      const { error } = await safeMutate(() => 
-        supabase.from('lessons').delete().eq('id', id)
-      );
-      console.log('[CAMPUS] Delete lesson result:', { error });
-      if (error) throw error;
+      await restDelete('lessons', { id: `eq.${id}` });
       setLessons(prev => prev.filter(l => l.id !== id));
       toast.success('Clase eliminada');
     } catch (err: any) {
-      console.error('[CAMPUS] Delete lesson error:', err);
       toast.error('Error al eliminar clase: ' + err.message);
     }
   };
 
   const toggleLessonPublished = async (lesson: Lesson) => {
     try {
-      console.log('[CAMPUS] Toggling lesson published:', lesson.id, '->', !lesson.is_published);
-      const { error } = await safeMutate(() => 
-        supabase.from('lessons').update({ is_published: !lesson.is_published }).eq('id', lesson.id)
-      );
-      console.log('[CAMPUS] Toggle result:', { error });
-      if (error) throw error;
+      await restUpdate('lessons', { is_published: !lesson.is_published }, { id: `eq.${lesson.id}` });
       setLessons(prev => prev.map(l => l.id === lesson.id ? { ...l, is_published: !l.is_published } : l));
       toast.success('Estado actualizado');
     } catch (err: any) {
-      console.error('[CAMPUS] Toggle error:', err);
       toast.error('Error al actualizar estado: ' + err.message);
     }
   };
@@ -650,38 +618,71 @@ export default function AdminCourses() {
   const linkCycle = async (cycleId: string) => {
     if (!selectedCourse) return;
     try {
-      console.log('[CAMPUS] Linking cycle:', cycleId, 'to course:', selectedCourse.id);
-      const { error } = await safeMutate(() => 
-        supabase.from('cycles').update({ course_id: selectedCourse.id }).eq('id', cycleId)
-      );
-      console.log('[CAMPUS] Link result:', { error });
-      if (error) throw error;
+      await restUpdate('cycles', { course_id: selectedCourse.id }, { id: `eq.${cycleId}` });
       fetchData(true);
       toast.success('Programa vinculado');
     } catch (err: any) {
-      console.error('[CAMPUS] Link cycle error:', err);
       toast.error('Error al vincular: ' + err.message);
     }
   };
 
   const unlinkCycle = async (cycleId: string) => {
     try {
-      console.log('[CAMPUS] Unlinking cycle:', cycleId);
-      const { error } = await safeMutate(() => 
-        supabase.from('cycles').update({ course_id: null }).eq('id', cycleId)
-      );
-      console.log('[CAMPUS] Unlink result:', { error });
-      if (error) throw error;
+      await restUpdate('cycles', { course_id: null }, { id: `eq.${cycleId}` });
       fetchData(true);
       toast.success('Programa desvinculado');
     } catch (err: any) {
-      console.error('[CAMPUS] Unlink cycle error:', err);
       toast.error('Error al desvincular: ' + err.message);
+    }
+  };
+
+  const addCourseSession = async () => {
+    if (!selectedCourse || !newSessionDate) {
+      toast.error('Faltá una fecha');
+      return;
+    }
+    setSavingSession(true);
+    try {
+      await restInsert('course_sessions', {
+        course_id: selectedCourse.id,
+        session_date: newSessionDate,
+        session_time: newSessionTime || null,
+        label: newSessionLabel.trim() || null,
+        location_url: newSessionLocation.trim() || null,
+        is_mandatory: newSessionMandatory,
+      }, { returning: 'minimal' });
+      setNewSessionDate('');
+      setNewSessionTime('');
+      setNewSessionLabel('');
+      setNewSessionLocation('');
+      setNewSessionMandatory(true);
+      fetchData(true);
+      toast.success('Encuentro agregado');
+    } catch (err: any) {
+      toast.error('Error al agregar encuentro: ' + err.message);
+    } finally {
+      setSavingSession(false);
+    }
+  };
+
+  const deleteCourseSession = async (sessionId: string) => {
+    if (!confirm('¿Eliminar este encuentro?')) return;
+    try {
+      await restDelete('course_sessions', { id: `eq.${sessionId}` });
+      setCourseSessions(prev => prev.filter(s => s.id !== sessionId));
+      toast.success('Encuentro eliminado');
+    } catch (err: any) {
+      toast.error('Error al eliminar encuentro: ' + err.message);
     }
   };
 
   const linkedCycles = selectedCourse ? allCycles.filter(c => c.course_id === selectedCourse.id) : [];
   const unlinkedCycles = selectedCourse ? allCycles.filter(c => !c.course_id || c.course_id !== selectedCourse.id) : [];
+  const courseSessionsForSelected = selectedCourse
+    ? courseSessions
+        .filter(s => s.course_id === selectedCourse.id)
+        .sort((a, b) => a.session_date.localeCompare(b.session_date))
+    : [];
 
   // ── Courses List View ────────────────────────────────────────────────────────
 
@@ -721,7 +722,10 @@ export default function AdminCourses() {
               >
                 <div
                   className="h-28 bg-gradient-to-br from-[#00A9CE] to-blue-600 cursor-pointer relative"
-                  style={course.cover_image_url ? { backgroundImage: `url(${course.cover_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
+                  style={(() => {
+                    const src = normalizeImageUrl(course.cover_image_url, 'w400');
+                    return src ? { backgroundImage: `url(${src})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {};
+                  })()}
                   onClick={() => openCourse(course)}
                 >
                   <div className={`absolute top-2 right-2 px-2 py-0.5 text-xs font-bold rounded-full ${course.is_published ? 'bg-emerald-500 text-white' : 'bg-slate-700/80 text-white'}`}>
@@ -930,6 +934,106 @@ export default function AdminCourses() {
             )}
           </div>
 
+          {/* Encuentros / Fechas */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2">
+              <IoCalendarOutline size={16} className="text-[#00A9CE]" /> Encuentros del Programa
+            </h3>
+            <p className="text-xs text-slate-500 mb-3">Fechas que aparecen en el calendario de los alumnos con acceso a este curso.</p>
+
+            {/* Lista de encuentros existentes */}
+            {courseSessionsForSelected.length === 0 ? (
+              <p className="text-xs text-slate-400 italic mb-3">Sin encuentros agendados todavía.</p>
+            ) : (
+              <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
+                {courseSessionsForSelected.map(s => {
+                  const dateObj = new Date(s.session_date + 'T00:00:00');
+                  const dateStr = dateObj.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+                  const isPast = dateObj.getTime() < Date.now() - 86400000;
+                  return (
+                    <div key={s.id} className={`flex items-start gap-2 rounded-lg px-2.5 py-1.5 ${isPast ? 'bg-slate-50' : 'bg-blue-50/50'}`}>
+                      <IoTimeOutline size={14} className={`mt-0.5 shrink-0 ${isPast ? 'text-slate-400' : 'text-[#00A9CE]'}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-xs font-bold ${isPast ? 'text-slate-500' : 'text-slate-800'}`}>
+                            {dateStr}{s.session_time ? ` · ${s.session_time.slice(0, 5)}` : ''}
+                          </span>
+                          {!s.is_mandatory && (
+                            <span className="text-[9px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded font-bold">OPCIONAL</span>
+                          )}
+                        </div>
+                        {s.label && <p className="text-xs text-slate-600 truncate">{s.label}</p>}
+                        {s.location_url && (
+                          <a
+                            href={s.location_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-[#00A9CE] hover:underline truncate block"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            🔗 {s.location_url}
+                          </a>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => deleteCourseSession(s.id)}
+                        className="text-slate-300 hover:text-red-500 shrink-0 p-1"
+                        title="Eliminar encuentro"
+                      >
+                        <IoTrashOutline size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Formulario para agregar nuevo encuentro */}
+            <div className="border-t border-slate-100 pt-3 space-y-2">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Nuevo encuentro</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={newSessionDate}
+                  onChange={e => setNewSessionDate(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]"
+                />
+                <input
+                  type="time"
+                  value={newSessionTime}
+                  onChange={e => setNewSessionTime(e.target.value)}
+                  placeholder="Hora"
+                  className="px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]"
+                />
+              </div>
+              <input
+                type="text"
+                value={newSessionLabel}
+                onChange={e => setNewSessionLabel(e.target.value)}
+                placeholder="Título (ej: Sesión 1 — Apertura)"
+                className="w-full px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]"
+              />
+              <input
+                type="url"
+                value={newSessionLocation}
+                onChange={e => setNewSessionLocation(e.target.value)}
+                placeholder="Link (Zoom/Meet/dirección, opcional)"
+                className="w-full px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]"
+              />
+              <label className="flex items-center justify-between text-xs text-slate-700">
+                <span>Obligatorio</span>
+                <Toggle checked={newSessionMandatory} onChange={setNewSessionMandatory} />
+              </label>
+              <button
+                onClick={addCourseSession}
+                disabled={savingSession || !newSessionDate}
+                className="w-full flex items-center justify-center gap-1.5 bg-[#00A9CE] text-white text-xs font-bold py-2 rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <IoAddOutline size={14} /> {savingSession ? 'Agregando...' : 'Agregar encuentro'}
+              </button>
+            </div>
+          </div>
+
           {/* Course info summary */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
             <h3 className="font-bold text-slate-700 mb-3">Estadísticas</h3>
@@ -938,6 +1042,7 @@ export default function AdminCourses() {
               <div className="flex justify-between"><span className="text-slate-500">Clases totales</span><span className="font-bold text-slate-800">{lessons.filter(l => modules.filter(m => m.course_id === selectedCourse.id).map(m => m.id).includes(l.module_id)).length}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Clases publicadas</span><span className="font-bold text-emerald-700">{lessons.filter(l => modules.filter(m => m.course_id === selectedCourse.id).map(m => m.id).includes(l.module_id) && l.is_published).length}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Ciclos vinculados</span><span className="font-bold text-slate-800">{linkedCycles.length}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Encuentros agendados</span><span className="font-bold text-slate-800">{courseSessionsForSelected.length}</span></div>
             </div>
           </div>
         </div>
@@ -953,9 +1058,9 @@ export default function AdminCourses() {
             fetchData();
             if (selectedCourse && courseModal.course?.id === selectedCourse.id) {
               // Re-fetch updated course
-              supabase.from('courses').select('*').eq('id', selectedCourse.id).single().then(({ data }) => {
-                if (data) setSelectedCourse(data);
-              });
+              restSelect<Course>('courses', { filters: { id: `eq.${selectedCourse.id}` }, limit: 1 })
+                .then(({ data }) => { if (data[0]) setSelectedCourse(data[0]); })
+                .catch(err => console.error('Failed to re-fetch course:', err));
             }
           }}
         />

@@ -3,12 +3,17 @@ import { createBrowserClient } from '@supabase/ssr'
 /**
  * Cliente Supabase para el navegador.
  *
- * CONFIGURACIÓN CRÍTICA:
- * 1. lock: no-op function -> Evita deadlocks de Navigator Locks cuando el refresh falla.
- *    IMPORTANTE: lock espera una función (LockFunc), NO un string.
- * 2. autoRefreshToken: false -> El middleware se encarga de refrescar el token
- *    en cada navegación. Deshabilitarlo aquí evita conflictos de "dual refresh"
- *    que causan la revocación de la sesión.
+ * - autoRefreshToken: false -> El middleware rota el token en cada navegación.
+ *   Deshabilitarlo aquí evita conflictos de "dual refresh".
+ *
+ * NOTA: El cliente JS de Supabase tiene un bug en runtime en el panel admin
+ * (auth.getSession() se cuelga después de unos segundos de actividad concurrente).
+ * Para mutaciones y selects críticos, usar src/services/supabaseRest.ts que
+ * bypasea el cliente JS con fetch directo a PostgREST.
+ *
+ * Este cliente sigue siendo necesario para:
+ *   - Auth (login/logout, onAuthStateChange)
+ *   - Realtime channels (supabase.channel)
  */
 export const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,9 +24,6 @@ export const supabase = createBrowserClient(
       autoRefreshToken: false,
       detectSessionInUrl: true,
       persistSession: true,
-      // No-op lock: ejecuta fn() inmediatamente sin adquirir ningún lock.
-      // Esto evita el deadlock de Navigator Locks cuando la sesión se revoca.
-      lock: (_name: string, _acquireTimeout: number, fn: <T>() => Promise<T>) => fn(),
     },
   }
 )

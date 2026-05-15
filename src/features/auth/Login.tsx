@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
 import './Login.css';
-import { IoClose, IoEyeOutline, IoEyeOffOutline, IoMailOutline, IoLockClosedOutline } from 'react-icons/io5';
+import { IoEyeOutline, IoEyeOffOutline, IoMailOutline, IoLockClosedOutline } from 'react-icons/io5';
 import { FcGoogle } from 'react-icons/fc';
 import { supabase } from '../../services/supabaseClient';
 import toast from 'react-hot-toast';
 
 interface LoginProps {
   onLoginSuccess: () => void;
-  onBack: () => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -94,34 +93,57 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, onBack }) => {
   };
 
   return (
-    <div className="relative w-full z-10 flex flex-col items-center">
-      <div className="absolute -top-16 text-3xl font-black tracking-tighter text-[#00A9CE] mb-4">HOME<span className="text-slate-900">.</span></div>
-
-      <button
-        onClick={onBack}
-        className="absolute -top-16 -left-4 md:-left-12 text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2 group"
-      >
-        <span className="w-6 h-6 transition-transform group-hover:-translate-x-1 flex items-center justify-center">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
+    <div className="relative w-full z-10 flex flex-col items-center max-w-md mx-auto">
+      {/* Brand mark at top */}
+      <div className="absolute -top-20 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+        <div className="text-3xl font-black tracking-tighter text-white drop-shadow-[0_4px_20px_rgba(0,169,206,0.4)]">
+          HOME<span className="text-[#00A9CE]">.</span>
+        </div>
+        <span className="text-[10px] font-bold tracking-[0.3em] text-[#8BD8DF]/70 uppercase">
+          Management System
         </span>
-        <span className="font-bold uppercase tracking-widest text-xs">Volver</span>
-      </button>
+      </div>
 
       <div className="w-full">
         <div className="w-full">
           <div className="w-full flex justify-center">
             <div className="col-12 text-center align-self-center py-5">
               <div className="section pb-5 pt-5 pt-sm-2 text-center">
-                <div className="card-3d-wrap mx-auto" style={{ height: '550px' }}>
+                <div className="card-3d-wrap mx-auto" style={{ height: '600px' }}>
                   <div className="card-3d-wrapper">
                     {/* Log In Card */}
                     <div className="card-front">
+                      {/* Decorative top accent */}
+                      <div className="card-front__accent" aria-hidden="true" />
+                      <div className="card-front__glow" aria-hidden="true" />
+
                       <div className="center-wrap">
                         <div className="section text-center">
-                          <h4 className="mb-4 pb-3">{isForgotView ? 'Recuperar Contraseña' : 'Admin Login'}</h4>
-                          
+                          {!isForgotView ? (
+                            <div className="mb-6 flex flex-col items-center gap-2">
+                              <span className="inline-flex items-center gap-2 text-[10px] font-bold tracking-[0.4em] uppercase text-[#8BD8DF]/80">
+                                <span className="w-6 h-px bg-[#8BD8DF]/40" />
+                                Acceso
+                                <span className="w-6 h-px bg-[#8BD8DF]/40" />
+                              </span>
+                              <h1 className="font-serif text-5xl font-bold tracking-tight text-white leading-none">
+                                CAMPUS
+                              </h1>
+                              <p className="text-xs text-white/50 font-medium tracking-wide">
+                                Ingresá con tu cuenta de Home
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="mb-6 flex flex-col items-center gap-2">
+                              <span className="text-[10px] font-bold tracking-[0.4em] uppercase text-[#8BD8DF]/80">
+                                Recuperación
+                              </span>
+                              <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight text-white leading-tight">
+                                Recuperar Contraseña
+                              </h1>
+                            </div>
+                          )}
+
                           <form onSubmit={isForgotView ? handleResetPassword : handleLoginSubmit}>
                             {isForgotView && (
                                 <p className="text-sm text-white/70 mb-4 px-4 text-center">
