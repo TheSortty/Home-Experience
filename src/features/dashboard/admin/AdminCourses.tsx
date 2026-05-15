@@ -295,12 +295,23 @@ function LessonModal({
         lessonId = created?.id;
       }
 
+      // If the admin typed a material but didn't click "Agregar material" before
+      // hitting Guardar, fold it into the pending list so it doesn't get lost.
+      const resourcesToSave = [...pendingResources];
+      if (newResTitle.trim() && newResUrl.trim()) {
+        resourcesToSave.push({
+          title: newResTitle.trim(),
+          url: newResUrl.trim(),
+          type: newResType,
+        });
+      }
+
       // Guardar materiales pendientes
-      if (pendingResources.length > 0 && lessonId) {
+      if (resourcesToSave.length > 0 && lessonId) {
         try {
           await restInsert(
             'lesson_resources',
-            pendingResources.map(r => ({
+            resourcesToSave.map(r => ({
               lesson_id: lessonId!,
               title: r.title,
               file_url: r.url,
