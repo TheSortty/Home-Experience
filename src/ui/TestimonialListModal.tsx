@@ -24,11 +24,12 @@ const TestimonialListModal: React.FC<TestimonialListModalProps> = ({ isVisible, 
             
             if (!error && data) {
                 // Map DB structure to expected type if necessary
-                const mapped = data.map((t: any) => ({
+                const mapped: Testimonial[] = data.map((t: any) => ({
                     id: t.id,
                     author: t.author_name,
                     quote: t.quote,
                     roles: t.roles || [],
+                    rating: typeof t.rating === 'number' ? t.rating : 5,
                     status: t.status,
                     createdAt: t.created_at
                 }));

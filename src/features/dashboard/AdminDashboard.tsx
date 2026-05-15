@@ -225,8 +225,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         fetchGlobalStats();
         fetchDashboardData();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, fetchDashboardData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => { fetchDashboardData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => { fetchDashboardData(); })
       .subscribe();
 
     const handleVisible = () => {

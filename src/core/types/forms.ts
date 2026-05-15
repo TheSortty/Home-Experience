@@ -3,7 +3,9 @@ export interface FormField {
     type: 'text' | 'textarea' | 'select' | 'radio' | 'date' | 'email' | 'tel' | 'checkbox';
     label: string;
     placeholder?: string;
-    options?: string[]; // For select/radio
+    // For select/radio. Stored as string[] in DB, but the admin editor keeps a
+    // transient CSV string during typing — both forms must be accepted.
+    options?: string | string[];
     required: boolean;
     section: 'personal' | 'medical' | 'payment' | 'intro' | 'dreams' | 'extra';
 }
