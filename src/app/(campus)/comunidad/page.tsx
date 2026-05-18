@@ -12,7 +12,7 @@ export default async function CampusComunidadPage() {
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, role, first_name, last_name')
       .eq('user_id', user.id)
       .single();
 
@@ -49,7 +49,7 @@ export default async function CampusComunidadPage() {
           .from('forum_posts')
           .select(`
             id, course_id, user_id, title, body, parent_id, created_at, lesson_id,
-            profiles(first_name, last_name),
+            profiles(first_name, last_name, role),
             lessons(id, title, order_index, modules(id, title, order_index))
           `)
           .in('course_id', courseIds)
@@ -66,6 +66,7 @@ export default async function CampusComunidadPage() {
             author_name: p.profiles
               ? `${p.profiles.first_name ?? ''} ${p.profiles.last_name ?? ''}`.trim() || 'Estudiante'
               : 'Estudiante',
+            author_role: p.profiles?.role ?? null,
             title: p.title,
             body: p.body,
             parent_id: p.parent_id,
@@ -100,7 +101,25 @@ export default async function CampusComunidadPage() {
     }
   }
 
+  let actorRole: string | undefined;
+  let actorName: string | null = null;
+  if (user) {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('role, first_name, last_name')
+      .eq('user_id', user.id)
+      .single();
+    actorRole = prof?.role ?? undefined;
+    actorName = `${prof?.first_name ?? ''} ${prof?.last_name ?? ''}`.trim() || null;
+  }
+
   return (
-    <ForumClient profileId={profileId} courses={courses} initialPosts={initialPosts} />
+    <ForumClient
+      profileId={profileId}
+      actorRole={actorRole}
+      actorName={actorName}
+      courses={courses}
+      initialPosts={initialPosts}
+    />
   );
 }

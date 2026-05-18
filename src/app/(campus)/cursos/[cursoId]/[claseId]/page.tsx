@@ -44,8 +44,7 @@ export default async function ClasePage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { cursoId, claseId } = await params;
-  const { preview } = await searchParams;
-  const isPreview = preview === 'true';
+  await searchParams; // reserved for future use (?as=student)
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -58,7 +57,10 @@ export default async function ClasePage({
     .maybeSingle();
 
   const isAdmin = profile?.role === 'admin' || profile?.role === 'sysadmin';
-  const canPreview = isAdmin && isPreview;
+  // Staff bypasses the lesson lock regardless of view mode — both 'organizer'
+  // and 'preview as student' need to be able to navigate into scheduled
+  // lessons for review.
+  const canPreview = isAdmin;
 
   // Por el momento permitimos acceder a cualquier clase publicada sin enrollment.
   // El RLS de lessons/modules/courses ya garantiza que solo se vean las publicadas.
@@ -188,7 +190,7 @@ export default async function ClasePage({
   // Fetch forum posts
   const { data: rawPosts } = await supabase
     .from('forum_posts')
-    .select('id, user_id, title, body, parent_id, created_at, profiles(first_name, last_name)')
+    .select('id, user_id, title, body, parent_id, created_at, profiles(first_name, last_name, role)')
     .eq('course_id', cursoId)
     .eq('lesson_id', claseId)
     .order('created_at', { ascending: true });
@@ -207,6 +209,7 @@ export default async function ClasePage({
       created_at: p.created_at,
       author_name: fullName,
       author_initials: initials,
+      author_role: p.profiles?.role ?? null,
       is_own: p.user_id === profile?.id,
       parent_id: p.parent_id,
       replies: [],
@@ -366,6 +369,7 @@ export default async function ClasePage({
               resources={resources}
               initialPosts={lessonPosts}
               currentUserName={currentUserName}
+              currentUserRole={profile?.role ?? null}
               embedUrl={embedUrl}
               submissionData={submissionData}
             />

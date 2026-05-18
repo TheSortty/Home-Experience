@@ -510,3 +510,185 @@ body {
     animation: none;
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────── */
+/* COMING-SOON — placeholder card for sections without content yet         */
+/* Reads as "we're cooking" rather than a broken/clickable button.         */
+/* ────────────────────────────────────────────────────────────────────── */
+
+.coming-soon {
+  position: relative;
+  background: radial-gradient(140% 100% at 50% 0%, #F6EFE3 0%, #FAF6F1 55%, #F8F0E2 100%);
+  border: 1px dashed rgba(165, 94, 66, 0.28);
+  overflow: hidden;
+  isolation: isolate;
+  animation: coming-soon-breathe 8s ease-in-out infinite;
+}
+
+.coming-soon::before {
+  /* faint warm aurora that drifts inside the card */
+  content: '';
+  position: absolute;
+  inset: -30%;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(201, 123, 92, 0.10) 0%, transparent 45%),
+    radial-gradient(circle at 75% 80%, rgba(232, 183, 156, 0.14) 0%, transparent 50%);
+  filter: blur(20px);
+  pointer-events: none;
+  z-index: 0;
+  animation: coming-soon-drift 18s ease-in-out infinite;
+}
+
+.coming-soon::after {
+  /* grain texture for warmth */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.coming-soon__inner {
+  position: relative;
+  z-index: 2;
+}
+
+/* Sonar — orb with concentric expanding rings */
+.coming-soon__sonar {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  margin: 0 auto;
+}
+
+.coming-soon__sonar-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(201, 123, 92, 0.55);
+  opacity: 0;
+  animation: coming-soon-pulse 3.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.coming-soon__sonar-ring--b { animation-delay: 1.2s; }
+.coming-soon__sonar-ring--c { animation-delay: 2.4s; }
+
+.coming-soon__sonar-core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 30% 30%, #E8B79C 0%, #C97B5C 60%, #A55E42 100%);
+  box-shadow:
+    0 0 16px rgba(201, 123, 92, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+  animation: coming-soon-core 3.6s ease-in-out infinite;
+}
+
+/* "Próximamente" pill */
+.coming-soon__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(201, 123, 92, 0.25);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #A55E42;
+}
+
+.coming-soon__pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #C97B5C;
+  box-shadow: 0 0 6px rgba(201, 123, 92, 0.7);
+  animation: coming-soon-blink 2.2s ease-in-out infinite;
+}
+
+/* Stepped marker — "the third one is on its way" */
+.coming-soon__steps {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.coming-soon__step {
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(165, 94, 66, 0.35);
+}
+
+.coming-soon__step--active {
+  background: rgba(165, 94, 66, 0.85);
+}
+
+.coming-soon__step--next {
+  background: rgba(201, 123, 92, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.coming-soon__step--next::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(201, 123, 92, 0.9), transparent);
+  animation: coming-soon-shimmer 2.4s ease-in-out infinite;
+}
+
+@keyframes coming-soon-pulse {
+  0%   { opacity: 0;   transform: scale(0.35); }
+  18%  { opacity: 0.7; }
+  100% { opacity: 0;   transform: scale(1.05); }
+}
+
+@keyframes coming-soon-core {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50%      { transform: translate(-50%, -50%) scale(1.18); }
+}
+
+@keyframes coming-soon-blink {
+  0%, 100% { opacity: 0.55; transform: scale(0.9); }
+  50%      { opacity: 1;    transform: scale(1.15); }
+}
+
+@keyframes coming-soon-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 123, 92, 0.0); }
+  50%      { box-shadow: 0 8px 32px -16px rgba(201, 123, 92, 0.25); }
+}
+
+@keyframes coming-soon-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50%      { transform: translate(4%, -3%); }
+}
+
+@keyframes coming-soon-shimmer {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(120%); }
+  100% { transform: translateX(120%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coming-soon,
+  .coming-soon::before,
+  .coming-soon__sonar-ring,
+  .coming-soon__sonar-core,
+  .coming-soon__pill-dot,
+  .coming-soon__step--next::after {
+    animation: none !important;
+  }
+}

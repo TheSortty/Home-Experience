@@ -10,6 +10,7 @@ import {
   IoCloseOutline,
 } from 'react-icons/io5';
 import { postLessonComment } from '../../actions';
+import RoleBadge from '@/src/app/(campus)/_components/RoleBadge';
 
 export interface LessonPost {
   id: string;
@@ -19,6 +20,7 @@ export interface LessonPost {
   created_at: string;
   author_name: string;
   author_initials: string;
+  author_role?: string | null;
   is_own: boolean;
   replies: LessonPost[];
 }
@@ -28,6 +30,7 @@ interface Props {
   lessonId: string;
   initialPosts: LessonPost[];
   currentUserName: string;
+  currentUserRole?: string | null;
 }
 
 function timeAgo(dateStr: string) {
@@ -67,6 +70,7 @@ export default function LessonForum({
   lessonId,
   initialPosts,
   currentUserName,
+  currentUserRole,
 }: Props) {
   const [posts, setPosts] = useState<LessonPost[]>(initialPosts);
   const [showNewPost, setShowNewPost] = useState(false);
@@ -91,6 +95,7 @@ export default function LessonForum({
       created_at: new Date().toISOString(),
       author_name: currentUserName,
       author_initials: userInitials(currentUserName),
+      author_role: currentUserRole,
       is_own: true,
       replies: [],
     };
@@ -126,6 +131,7 @@ export default function LessonForum({
       created_at: new Date().toISOString(),
       author_name: currentUserName,
       author_initials: userInitials(currentUserName),
+      author_role: currentUserRole,
       is_own: true,
       replies: [],
     };
@@ -230,10 +236,11 @@ export default function LessonForum({
                       {post.author_initials}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                      <div className="flex items-center flex-wrap gap-1.5 text-xs text-slate-500 mb-1">
                         <span className="font-bold text-slate-700">
                           {post.is_own ? 'Vos' : post.author_name}
                         </span>
+                        <RoleBadge role={post.author_role} size="xs" />
                         <span>·</span>
                         <span>{timeAgo(post.created_at)}</span>
                       </div>
@@ -283,10 +290,11 @@ export default function LessonForum({
                           {reply.author_initials}
                         </div>
                         <div className="flex-1 bg-white rounded-lg border border-slate-200 px-3 py-2">
-                          <div className="flex items-center gap-2 mb-0.5 text-xs">
+                          <div className="flex items-center flex-wrap gap-1.5 mb-0.5 text-xs">
                             <span className="font-bold text-slate-700">
                               {reply.is_own ? 'Vos' : reply.author_name}
                             </span>
+                            <RoleBadge role={reply.author_role} size="xs" />
                             <span className="text-slate-400">·</span>
                             <span className="text-slate-400">{timeAgo(reply.created_at)}</span>
                           </div>

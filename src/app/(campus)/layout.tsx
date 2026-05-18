@@ -2,9 +2,10 @@ import React from 'react';
 import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
-import { resolveRole, isAdminRole } from '@/src/services/roleService';
+import { resolveRole } from '@/src/services/roleService';
 import CampusNav from './_components/CampusNav';
 import ProfileMenu from './_components/ProfileMenu';
+import StaffModeBar from './_components/StaffModeBar';
 
 export const metadata = {
   title: 'Mi Campus | HOME Experience',
@@ -35,6 +36,9 @@ export default async function CampusLayout({ children }: { children: React.React
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
+
+      {/* ── Staff context bar (only for admin/sysadmin visiting campus) ──── */}
+      <StaffModeBar role={role} actorName={fullName} />
 
       {/* ── Top navbar ─────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200">

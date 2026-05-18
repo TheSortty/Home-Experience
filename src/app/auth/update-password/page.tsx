@@ -18,19 +18,42 @@ export default function UpdatePasswordPage() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasSession, setHasSession]           = useState(false);
 
-  // Verificar si hay sesión activa (OTP de invitación ya canjeado en /auth/callback)
+  // Try to establish a session from URL params (token_hash or code) if this
+  // page was reached directly (e.g. invite email bypassing the callback).
+  // Falls back to an existing cookie session set by /auth/callback.
   useEffect(() => {
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
+    (async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tokenHash = params.get('token_hash');
+        const type      = params.get('type') as any;
+        const code      = params.get('code');
+
+        if (tokenHash && type) {
+          const { error: otpErr } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+          if (otpErr) {
+            setError('El enlace ha expirado o no es válido. Solicitá uno nuevo.');
+            setCheckingSession(false);
+            return;
+          }
+        } else if (code) {
+          const { error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (codeErr) {
+            setError('El enlace ha expirado o no es válido. Solicitá uno nuevo.');
+            setCheckingSession(false);
+            return;
+          }
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
         setHasSession(!!session);
         if (!session) setError('El enlace ha expirado o no es válido. Solicitá uno nuevo.');
-      })
-      .catch(() => {
+      } catch {
         setError('No se pudo verificar la sesión. Volvé a intentarlo.');
-      })
-      .finally(() => {
+      } finally {
         setCheckingSession(false);
-      });
+      }
+    })();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

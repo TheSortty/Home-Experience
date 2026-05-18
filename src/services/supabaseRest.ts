@@ -104,6 +104,63 @@ async function rawFetch(url: string, init: RequestInit & { timeoutMs?: number } 
   }
 }
 
+/**
+ * Token rescue: when PostgREST replies 401/PGRST303 ("JWT expired") the cookie
+ * still holds an outdated access_token. We ping the Next.js app — the
+ * middleware will rotate the cookie before responding — and then the caller
+ * can retry with fresh credentials.
+ *
+ * In-flight deduplication: if 12 queries 401 at the same time (likely on a
+ * dashboard page load with a stale token), we only fire one rescue.
+ */
+let inflightRescue: Promise<void> | null = null
+async function rescueAuthCookie(): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (inflightRescue) return inflightRescue
+  inflightRescue = (async () => {
+    try {
+      await fetch(window.location.href, {
+        method: 'HEAD',
+        credentials: 'include',
+        cache: 'no-store',
+      })
+    } catch {
+      // best-effort; nothing else we can do here
+    } finally {
+      inflightRescue = null
+    }
+  })()
+  return inflightRescue
+}
+
+function isExpiredJwt(status: number, body: string): boolean {
+  if (status !== 401) return false
+  // PostgREST emits PGRST303 / message "JWT expired" when the token is past TTL.
+  return /jwt expired|pgrst303/i.test(body)
+}
+
+async function fetchWithAuthRetry(
+  url: string,
+  init: RequestInit & { timeoutMs?: number; rebuildHeaders?: () => Record<string, string> }
+): Promise<Response> {
+  const { rebuildHeaders, ...rest } = init
+  let response = await rawFetch(url, rest)
+  if (response.status !== 401) return response
+
+  // Peek at the body without consuming it (clone) so the caller can read it
+  // if we end up giving up.
+  const peekedBody = await response.clone().text().catch(() => '')
+  if (!isExpiredJwt(response.status, peekedBody)) return response
+
+  await rescueAuthCookie()
+  // Rebuild headers if the caller wants the freshest cookie token.
+  const retryInit = rebuildHeaders
+    ? { ...rest, headers: { ...(rest.headers as any), ...rebuildHeaders() } }
+    : rest
+  response = await rawFetch(url, retryInit)
+  return response
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.text().catch(() => '')
@@ -156,14 +213,15 @@ function buildSelectUrl(table: string, opts: SelectOptions = {}): string {
 
 export async function restSelect<T = any>(table: string, opts: SelectOptions = {}): Promise<{ data: T[]; count: number | null }> {
   const url = buildSelectUrl(table, opts)
-  const headers = buildHeaders(
+  const buildSelectHeaders = () => buildHeaders(
     opts.count
       ? { Prefer: `count=${opts.count}`, Range: opts.head ? '0-0' : '' }
       : undefined
   )
-  const response = await rawFetch(url, {
+  const response = await fetchWithAuthRetry(url, {
     method: opts.head ? 'HEAD' : 'GET',
-    headers,
+    headers: buildSelectHeaders(),
+    rebuildHeaders: buildSelectHeaders,
   })
   if (!response.ok) {
     const body = await response.text().catch(() => '')
@@ -182,10 +240,12 @@ export async function restSelect<T = any>(table: string, opts: SelectOptions = {
 export async function restInsert<T = any>(table: string, payload: any, opts: { returning?: 'minimal' | 'representation' } = {}): Promise<T | null> {
   const url = `${SUPABASE_URL}/rest/v1/${table}`
   const returning = opts.returning ?? 'representation'
-  const response = await rawFetch(url, {
+  const headerBuilder = () => buildHeaders({ Prefer: `return=${returning}` })
+  const response = await fetchWithAuthRetry(url, {
     method: 'POST',
-    headers: buildHeaders({ Prefer: `return=${returning}` }),
+    headers: headerBuilder(),
     body: JSON.stringify(payload),
+    rebuildHeaders: headerBuilder,
   })
   const data = await parseResponse<T[]>(response)
   if (Array.isArray(data) && data.length > 0) return data[0]
@@ -202,10 +262,12 @@ export async function restUpdate<T = any>(
   for (const [k, v] of Object.entries(filters)) params.append(k, v)
   const url = `${SUPABASE_URL}/rest/v1/${table}?${params.toString()}`
   const returning = opts.returning ?? 'minimal'
-  const response = await rawFetch(url, {
+  const headerBuilder = () => buildHeaders({ Prefer: `return=${returning}` })
+  const response = await fetchWithAuthRetry(url, {
     method: 'PATCH',
-    headers: buildHeaders({ Prefer: `return=${returning}` }),
+    headers: headerBuilder(),
     body: JSON.stringify(payload),
+    rebuildHeaders: headerBuilder,
   })
   const data = await parseResponse<T[]>(response)
   if (Array.isArray(data) && data.length > 0) return data[0]
@@ -221,12 +283,12 @@ export async function restUpsert<T = any>(
   if (opts.onConflict) params.set('on_conflict', opts.onConflict)
   const url = `${SUPABASE_URL}/rest/v1/${table}${params.toString() ? `?${params.toString()}` : ''}`
   const returning = opts.returning ?? 'representation'
-  const response = await rawFetch(url, {
+  const headerBuilder = () => buildHeaders({ Prefer: `return=${returning},resolution=merge-duplicates` })
+  const response = await fetchWithAuthRetry(url, {
     method: 'POST',
-    headers: buildHeaders({
-      Prefer: `return=${returning},resolution=merge-duplicates`,
-    }),
+    headers: headerBuilder(),
     body: JSON.stringify(payload),
+    rebuildHeaders: headerBuilder,
   })
   const data = await parseResponse<T[]>(response)
   if (Array.isArray(data) && data.length > 0) return data[0]
@@ -235,10 +297,12 @@ export async function restUpsert<T = any>(
 
 export async function restRpc<T = any>(fnName: string, params?: Record<string, any>): Promise<T> {
   const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`
-  const response = await rawFetch(url, {
+  const headerBuilder = () => buildHeaders()
+  const response = await fetchWithAuthRetry(url, {
     method: 'POST',
-    headers: buildHeaders(),
+    headers: headerBuilder(),
     body: JSON.stringify(params ?? {}),
+    rebuildHeaders: headerBuilder,
   })
   return await parseResponse<T>(response)
 }
@@ -247,9 +311,11 @@ export async function restDelete(table: string, filters: Record<string, string>)
   const params = new URLSearchParams()
   for (const [k, v] of Object.entries(filters)) params.append(k, v)
   const url = `${SUPABASE_URL}/rest/v1/${table}?${params.toString()}`
-  const response = await rawFetch(url, {
+  const headerBuilder = () => buildHeaders({ Prefer: 'return=minimal' })
+  const response = await fetchWithAuthRetry(url, {
     method: 'DELETE',
-    headers: buildHeaders({ Prefer: 'return=minimal' }),
+    headers: headerBuilder(),
+    rebuildHeaders: headerBuilder,
   })
   if (!response.ok) {
     const body = await response.text().catch(() => '')

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restInsert, restUpdate, restDelete, restUpsert, restRpc, getCurrentUserId } from '../../../services/supabaseRest';
+import { logEvent, getMyActorInfo } from '../../../services/activityEvents';
 import toast from 'react-hot-toast';
 import UsersIcon from '../../../ui/icons/UsersIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
@@ -343,11 +344,31 @@ const AdminCalendar: React.FC = () => {
     const handleAddSession = async () => {
         if (!newSessionDate || !selectedCycle) return;
         try {
-            await restInsert('cycle_sessions', {
+            const created = await restInsert<{ id: string }>('cycle_sessions', {
                 cycle_id: selectedCycle.id,
                 session_date: newSessionDate,
                 is_mandatory: true,
-            }, { returning: 'minimal' });
+            });
+
+            // Bandeja event — encuentro programado en un ciclo.
+            const actor = await getMyActorInfo();
+            if (actor) {
+                await logEvent({
+                    type: 'content.session_scheduled',
+                    actorProfileId: actor.profileId,
+                    actorRole: actor.role,
+                    targetKind: 'cycle_session',
+                    targetId: created?.id ?? null,
+                    details: {
+                        actorName: actor.name,
+                        cycleId: selectedCycle.id,
+                        cycleName: selectedCycle.name,
+                        sessionDate: newSessionDate,
+                        isMandatory: true,
+                    },
+                });
+            }
+
             setNewSessionDate('');
             setIsAddingSession(false);
             openCycleDetail(selectedCycle);

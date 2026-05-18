@@ -50,8 +50,9 @@ export async function POST(request: Request) {
     if (mode === 'magic_link') {
       // Invite user by email (sends magic link)
       // Redirect to /auth/update-password so they can set it immediately
-      const redirectTo = `${process.env.NEXT_PUBLIC_BASE_URL || request.headers.get('origin')}/auth/update-password`;
-      
+      const base = process.env.NEXT_PUBLIC_BASE_URL || request.headers.get('origin');
+      const redirectTo = `${base}/auth/callback?next=/auth/update-password`;
+
       const { data, error } = await adminAuthClient.auth.admin.inviteUserByEmail(email, {
         data: { first_name: firstName, last_name: lastName },
         redirectTo

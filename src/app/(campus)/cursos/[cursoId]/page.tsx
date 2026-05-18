@@ -9,6 +9,7 @@ import {
   IoDocumentTextOutline,
   IoLockClosedOutline,
   IoEllipseOutline,
+  IoEyeOutline,
 } from 'react-icons/io5';
 
 function formatDuration(seconds: number) {
@@ -33,11 +34,13 @@ export default async function CursoDetallePage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id')
+    .select('id, role')
     .eq('user_id', user.id)
     .single();
 
   if (!profile) notFound();
+
+  const isOrganizer = ['admin', 'sysadmin', 'super_admin'].includes(profile.role ?? '');
 
   // NOTA: Por el momento permitimos que CUALQUIER alumno autenticado acceda
   // a los cursos publicados, sin requerir enrollment. El RLS de courses ya
@@ -106,11 +109,11 @@ export default async function CursoDetallePage({
       .sort((a: Lesson, b: Lesson) => a.order_index - b.order_index),
   }));
 
-  // Fetch lesson_progress
+  // Fetch lesson_progress (skip for organizer — they have none and it would show 0%)
   const allLessonIds = modules.flatMap((m) => m.lessons.map((l) => l.id));
   const completedSet = new Set<string>();
 
-  if (allLessonIds.length > 0) {
+  if (!isOrganizer && allLessonIds.length > 0) {
     const { data: progress } = await supabase
       .from('lesson_progress')
       .select('lesson_id')
@@ -124,16 +127,20 @@ export default async function CursoDetallePage({
   const completedCount = completedSet.size;
   const progressPercent = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
 
-  // Find the first incomplete lesson for the "Continuar" link
+  // Find the first incomplete lesson for the "Continuar" link (skip for organizer)
   let nextLessonId: string | null = null;
-  outer: for (const mod of modules) {
-    for (const lesson of mod.lessons) {
-      if (!completedSet.has(lesson.id)) {
-        nextLessonId = lesson.id;
-        break outer;
+  if (!isOrganizer) {
+    outer: for (const mod of modules) {
+      for (const lesson of mod.lessons) {
+        if (!completedSet.has(lesson.id)) {
+          nextLessonId = lesson.id;
+          break outer;
+        }
       }
     }
   }
+  // Organizer: link to first lesson for easy navigation
+  const firstLessonId = modules[0]?.lessons[0]?.id ?? null;
 
   // Fetch lesson_resources for all lessons (sidebar material)
   const { data: resources } = await supabase
@@ -187,23 +194,29 @@ export default async function CursoDetallePage({
         </div>
         <div className="p-6 md:p-8 flex-1 flex flex-col justify-center">
           <div className="flex items-center gap-3 mb-3">
-            <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-md ${
-              enrollment?.status === 'completed' || progressPercent === 100
-                ? 'bg-emerald-100 text-emerald-700'
-                : progressPercent > 0
-                ? 'bg-[#00A9CE]/10 text-[#00A9CE]'
-                : !enrollment
-                ? 'bg-amber-100 text-amber-700'
-                : 'bg-slate-100 text-slate-600'
-            }`}>
-              {enrollment?.status === 'completed' || progressPercent === 100
-                ? 'Completado'
-                : progressPercent > 0
-                ? 'En Curso'
-                : !enrollment
-                ? 'Disponible'
-                : 'Sin iniciar'}
-            </span>
+            {isOrganizer ? (
+              <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-md bg-amber-100 text-amber-700 flex items-center gap-1">
+                <IoEyeOutline size={12} /> Organizando
+              </span>
+            ) : (
+              <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-md ${
+                enrollment?.status === 'completed' || progressPercent === 100
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : progressPercent > 0
+                  ? 'bg-[#00A9CE]/10 text-[#00A9CE]'
+                  : !enrollment
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-slate-100 text-slate-600'
+              }`}>
+                {enrollment?.status === 'completed' || progressPercent === 100
+                  ? 'Completado'
+                  : progressPercent > 0
+                  ? 'En Curso'
+                  : !enrollment
+                  ? 'Disponible'
+                  : 'Sin iniciar'}
+              </span>
+            )}
             <span className="text-sm font-medium text-slate-500">
               {totalLessons} {totalLessons === 1 ? 'clase' : 'clases'} · {modules.length} {modules.length === 1 ? 'módulo' : 'módulos'}
             </span>
@@ -213,26 +226,43 @@ export default async function CursoDetallePage({
             <p className="text-slate-600 text-base mb-6 leading-relaxed">{course.description}</p>
           )}
 
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm font-bold text-slate-700">
-              <span>Progreso General</span>
-              <span className="text-[#00A9CE]">{completedCount}/{totalLessons} clases ({progressPercent}%)</span>
+          {isOrganizer ? (
+            <p className="text-sm text-amber-600 font-bold flex items-center gap-1.5 mb-4">
+              <IoEyeOutline size={14} /> Vista organizador — el progreso de los alumnos no se modifica
+            </p>
+          ) : (
+            <div className="space-y-2 mb-2">
+              <div className="flex justify-between text-sm font-bold text-slate-700">
+                <span>Progreso General</span>
+                <span className="text-[#00A9CE]">{completedCount}/{totalLessons} clases ({progressPercent}%)</span>
+              </div>
+              <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#00A9CE] rounded-full transition-all duration-500"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
             </div>
-            <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#00A9CE] rounded-full transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-          </div>
+          )}
 
-          {nextLessonId && (
-            <Link
-              href={`/cursos/${cursoId}/${nextLessonId}`}
-              className="mt-5 self-start px-5 py-2.5 bg-[#00A9CE] text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-colors shadow-sm"
-            >
-              {progressPercent === 0 ? 'Comenzar programa →' : 'Continuar donde lo dejé →'}
-            </Link>
+          {isOrganizer ? (
+            firstLessonId && (
+              <Link
+                href={`/cursos/${cursoId}/${firstLessonId}`}
+                className="mt-3 self-start px-5 py-2.5 bg-slate-800 text-white text-sm font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-sm"
+              >
+                Explorar el programa →
+              </Link>
+            )
+          ) : (
+            nextLessonId && (
+              <Link
+                href={`/cursos/${cursoId}/${nextLessonId}`}
+                className="mt-3 self-start px-5 py-2.5 bg-[#00A9CE] text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-colors shadow-sm"
+              >
+                {progressPercent === 0 ? 'Comenzar programa →' : 'Continuar donde lo dejé →'}
+              </Link>
+            )
           )}
         </div>
       </div>
@@ -255,7 +285,7 @@ export default async function CursoDetallePage({
               {modules.map((mod, modIdx) => {
                 const modCompleted = mod.lessons.filter((l) => completedSet.has(l.id)).length;
                 const modTotal = mod.lessons.length;
-                const isCurrentModule =
+                const isCurrentModule = !isOrganizer &&
                   modCompleted < modTotal &&
                   (modIdx === 0 || modules[modIdx - 1].lessons.every((l) => completedSet.has(l.id)));
 
@@ -280,7 +310,9 @@ export default async function CursoDetallePage({
                         </p>
                         <h3 className="text-lg font-bold text-slate-900">{mod.title}</h3>
                       </div>
-                      {modCompleted === modTotal && modTotal > 0 ? (
+                      {isOrganizer ? (
+                        <div className="text-xs font-bold text-amber-600">{modTotal} clases</div>
+                      ) : modCompleted === modTotal && modTotal > 0 ? (
                         <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
                           <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
                         </div>
@@ -293,8 +325,8 @@ export default async function CursoDetallePage({
 
                     <div className="divide-y divide-slate-100">
                       {mod.lessons.map((lesson) => {
-                        const isDone = completedSet.has(lesson.id);
-                        const isNext = lesson.id === nextLessonId;
+                        const isDone = !isOrganizer && completedSet.has(lesson.id);
+                        const isNext = !isOrganizer && lesson.id === nextLessonId;
 
                         return (
                           <Link
@@ -314,7 +346,7 @@ export default async function CursoDetallePage({
                                   <div className="w-2 h-2 bg-[#00A9CE] rounded-full" />
                                 </div>
                               ) : (
-                                <IoEllipseOutline size={24} className="text-slate-300 shrink-0" />
+                                <IoEllipseOutline size={24} className={isOrganizer ? 'text-slate-400 shrink-0' : 'text-slate-300 shrink-0'} />
                               )}
                               <div>
                                 <p className={`text-sm font-bold transition-colors ${
@@ -395,22 +427,39 @@ export default async function CursoDetallePage({
             )}
 
             {/* Progress card */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-              <h3 className="font-bold text-slate-900 mb-4">Tu Progreso</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm font-medium text-slate-600">
-                  <span>Clases completadas</span>
-                  <span className="font-bold">{completedCount}/{totalLessons}</span>
-                </div>
-                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-                <p className="text-right text-xs text-slate-400 font-medium">{progressPercent}% completado</p>
+            {isOrganizer ? (
+              <div className="bg-amber-50 rounded-2xl border border-amber-200 p-6">
+                <h3 className="font-bold text-amber-800 mb-2 flex items-center gap-2">
+                  <IoEyeOutline size={16} /> Vista organizador
+                </h3>
+                <p className="text-sm text-amber-700 leading-relaxed">
+                  Estás explorando este programa como organizador. El progreso de los alumnos no se modifica.
+                </p>
+                <a
+                  href={`/admin/lms/actividad?course=${cursoId}`}
+                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:underline"
+                >
+                  Ver actividad de alumnos →
+                </a>
               </div>
-            </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <h3 className="font-bold text-slate-900 mb-4">Tu Progreso</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm font-medium text-slate-600">
+                    <span>Clases completadas</span>
+                    <span className="font-bold">{completedCount}/{totalLessons}</span>
+                  </div>
+                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                  <p className="text-right text-xs text-slate-400 font-medium">{progressPercent}% completado</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

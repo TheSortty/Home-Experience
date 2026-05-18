@@ -31,6 +31,7 @@ interface Props {
   resources: LessonResource[];
   initialPosts: LessonPost[];
   currentUserName: string;
+  currentUserRole?: string | null;
   embedUrl: string | null;
   submissionData: SubmissionData;
 }
@@ -47,6 +48,7 @@ export default function LessonViewer({
   resources,
   initialPosts,
   currentUserName,
+  currentUserRole,
   embedUrl,
   submissionData,
 }: Props) {
@@ -59,28 +61,27 @@ export default function LessonViewer({
   const videoTrackedRef = useRef(false);
   const enterTrackedRef = useRef(false);
 
-  // Track first entry
+  // Track first entry (skip for staff)
   useEffect(() => {
+    if (currentUserRole && ['admin', 'sysadmin', 'super_admin', 'coach'].includes(currentUserRole)) return;
     if (enterTrackedRef.current) return;
     enterTrackedRef.current = true;
     trackLessonEnter(lessonId);
-  }, [lessonId]);
+  }, [lessonId, currentUserRole]);
 
-  // Track first video play via YouTube postMessage API
+  // Track first video play via YouTube postMessage API (skip for staff)
   useEffect(() => {
     if (!embedUrl) return;
+    if (currentUserRole && ['admin', 'sysadmin', 'super_admin', 'coach'].includes(currentUserRole)) return;
 
     const handler = (event: MessageEvent) => {
       if (videoTrackedRef.current) return;
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        // YouTube IFrame API fires info={"playerState":1} when playing
-        const playerState = data?.info?.playerState ?? data?.info?.currentTime;
         if (data?.event === 'infoDelivery' && data?.info?.playerState === 1) {
           videoTrackedRef.current = true;
           trackVideoPlay(lessonId);
         }
-        // Also catch initial "onStateChange" with state=1
         if (data?.event === 'onStateChange' && data?.info === 1) {
           videoTrackedRef.current = true;
           trackVideoPlay(lessonId);
@@ -90,7 +91,7 @@ export default function LessonViewer({
 
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [embedUrl, lessonId]);
+  }, [embedUrl, lessonId, currentUserRole]);
 
   const handleMarkComplete = () => {
     if (isCompleted || isPending) return;
@@ -169,20 +170,27 @@ export default function LessonViewer({
             </h1>
           </div>
 
-          <button
-            onClick={handleMarkComplete}
-            disabled={isPending}
-            className={`shrink-0 px-6 py-3 rounded-xl font-bold text-sm shadow-sm transition-all flex items-center gap-2 ${
-              isCompleted
-                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default'
-                : isPending
-                ? 'bg-slate-100 text-slate-400 cursor-wait'
-                : 'bg-[#00A9CE] text-white hover:bg-blue-600 hover:shadow-md cursor-pointer'
-            }`}
-          >
-            <IoCheckmarkCircle size={20} />
-            {isCompleted ? 'Clase Completada' : isPending ? 'Guardando...' : 'Marcar como Terminada'}
-          </button>
+          {currentUserRole && ['admin', 'sysadmin', 'super_admin', 'coach'].includes(currentUserRole) ? (
+            <span className="shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1.5">
+              <IoCheckmarkCircle size={16} className="opacity-40" />
+              Vista organizador — sin seguimiento
+            </span>
+          ) : (
+            <button
+              onClick={handleMarkComplete}
+              disabled={isPending}
+              className={`shrink-0 px-6 py-3 rounded-xl font-bold text-sm shadow-sm transition-all flex items-center gap-2 ${
+                isCompleted
+                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default'
+                  : isPending
+                  ? 'bg-slate-100 text-slate-400 cursor-wait'
+                  : 'bg-[#00A9CE] text-white hover:bg-blue-600 hover:shadow-md cursor-pointer'
+              }`}
+            >
+              <IoCheckmarkCircle size={20} />
+              {isCompleted ? 'Clase Completada' : isPending ? 'Guardando...' : 'Marcar como Terminada'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -280,6 +288,7 @@ export default function LessonViewer({
               lessonId={lessonId}
               initialPosts={initialPosts}
               currentUserName={currentUserName}
+              currentUserRole={currentUserRole}
             />
           )}
 

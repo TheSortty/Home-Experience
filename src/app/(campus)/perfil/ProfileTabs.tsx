@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { IoPersonOutline, IoMedicalOutline, IoShieldCheckmarkOutline, IoCheckmarkCircle, IoAlertCircleOutline } from 'react-icons/io5';
+import { IoPersonOutline, IoMedicalOutline, IoShieldCheckmarkOutline, IoCheckmarkCircle, IoAlertCircleOutline, IoEyeOutline, IoEyeOffOutline } from 'react-icons/io5';
 import { updateProfile, updateMedicalInfo, changePassword } from './actions';
 
 type Tab = 'personal' | 'emergencia' | 'seguridad';
@@ -64,6 +64,7 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
   // Security form state
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPwd, setShowNewPwd] = useState(false);
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
@@ -94,6 +95,10 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
   };
 
   const handleChangePassword = () => {
+    if (newPassword.length < 6) {
+      setResult({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setResult({ error: 'Las contraseñas no coinciden.' });
       return;
@@ -101,8 +106,8 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
     setResult(null);
     startTransition(async () => {
       const res = await changePassword(newPassword);
-      if (res.success) { setNewPassword(''); setConfirmPassword(''); }
-      setResult(res);
+      if (res.success) { setNewPassword(''); setConfirmPassword(''); setShowNewPwd(false); }
+      setResult(res.success ? { success: true } : res);
     });
   };
 
@@ -278,36 +283,64 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
           {activeTab === 'seguridad' && (
             <>
               <h3 className="font-serif text-2xl font-medium tracking-tight text-slate-900">Cambiar tu contraseña</h3>
-              <p className="text-sm text-slate-500 -mt-2">Mínimo 6 caracteres. Elegí una que recuerdes.</p>
+              <p className="text-sm text-slate-500 -mt-2">Mínimo 6 caracteres. Una vez guardada, usarás la nueva para entrar.</p>
 
               <div>
                 <label className={labelCls}>Nueva contraseña</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className={inputCls}
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPwd ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={e => { setNewPassword(e.target.value); setResult(null); }}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    className={`${inputCls} pr-12`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPwd(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1"
+                    aria-label={showNewPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showNewPwd ? <IoEyeOffOutline size={20} /> : <IoEyeOutline size={20} />}
+                  </button>
+                </div>
+                {newPassword.length > 0 && newPassword.length < 6 && (
+                  <p className="text-xs text-amber-600 mt-1 font-medium">Necesitás al menos 6 caracteres.</p>
+                )}
               </div>
 
               <div>
                 <label className={labelCls}>Confirmar contraseña</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className={inputCls}
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPwd ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={e => { setConfirmPassword(e.target.value); setResult(null); }}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    className={`${inputCls} pr-12`}
+                  />
+                </div>
+                {confirmPassword.length > 0 && newPassword !== confirmPassword && (
+                  <p className="text-xs text-red-500 mt-1 font-medium">Las contraseñas no coinciden.</p>
+                )}
               </div>
 
-              <Feedback result={result} />
+              {result?.success ? (
+                <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5 text-sm font-medium">
+                  <IoCheckmarkCircle size={18} /> Contraseña actualizada correctamente. La próxima vez que entres, usá la nueva.
+                </div>
+              ) : result?.error ? (
+                <div className="flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm font-medium">
+                  <IoAlertCircleOutline size={18} /> {result.error}
+                </div>
+              ) : null}
 
               <div className="flex justify-end">
                 <button
                   onClick={handleChangePassword}
-                  disabled={isPending || !newPassword}
+                  disabled={isPending || !newPassword || !confirmPassword}
                   className="bg-slate-900 hover:bg-slate-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm"
                 >
                   {isPending ? 'Actualizando...' : 'Actualizar Contraseña'}

@@ -12,13 +12,16 @@ import {
   IoLayersOutline,
 } from 'react-icons/io5';
 import { supabase } from '@/src/services/supabaseClient';
+import { logEvent } from '@/src/services/activityEvents';
 import { colorForProgram } from '../_lib/programColor';
+import RoleBadge from '../_components/RoleBadge';
 
 export type ForumPost = {
   id: string;
   course_id: string;
   user_id: string;
   author_name: string;
+  author_role?: string | null;
   title: string | null;
   body: string;
   parent_id: string | null;
@@ -40,6 +43,8 @@ export type CourseTab = {
 
 interface Props {
   profileId: string;
+  actorRole?: string;
+  actorName?: string | null;
   courses: CourseTab[];
   initialPosts: ForumPost[];
 }
@@ -104,7 +109,7 @@ function getSectionTag(post: ForumPost): string | null {
   return null;
 }
 
-export default function ForumClient({ profileId, courses, initialPosts }: Props) {
+export default function ForumClient({ profileId, actorRole, actorName, courses, initialPosts }: Props) {
   const [posts, setPosts] = useState<ForumPost[]>(initialPosts);
   const [selectedCourse, setSelectedCourse] = useState<string>('all');
   const [search, setSearch] = useState('');
@@ -154,9 +159,30 @@ export default function ForumClient({ profileId, courses, initialPosts }: Props)
         const newPostObj: ForumPost = {
           ...data,
           author_name: 'Vos',
+          author_role: actorRole,
           replies: [],
         };
         setPosts(prev => [newPostObj, ...prev]);
+
+        // Bandeja: only first-level posts (parent_id null). Type depends on role.
+        const isStaffOrCoach =
+          actorRole === 'admin' || actorRole === 'sysadmin' ||
+          actorRole === 'super_admin' || actorRole === 'coach';
+        logEvent({
+          type: isStaffOrCoach ? 'content.forum_announcement' : 'student.forum_question',
+          actorProfileId: profileId,
+          actorRole: actorRole ?? 'student',
+          subjectProfileId: isStaffOrCoach ? null : profileId,
+          targetKind: 'forum_post',
+          targetId: data.id,
+          details: {
+            actorName,
+            courseId: newCourse,
+            title: newTitle.trim() || null,
+            bodyPreview: newBody.trim().slice(0, 160),
+          },
+        });
+
         setNewTitle('');
         setNewBody('');
         setShowNewPost(false);
@@ -183,7 +209,7 @@ export default function ForumClient({ profileId, courses, initialPosts }: Props)
         .single();
 
       if (!error && data) {
-        const replyObj: ForumPost = { ...data, author_name: 'Vos', replies: [] };
+        const replyObj: ForumPost = { ...data, author_name: 'Vos', author_role: actorRole, replies: [] };
         setPosts(prev =>
           prev.map(p =>
             p.id === postId ? { ...p, replies: [...p.replies, replyObj] } : p
@@ -336,8 +362,9 @@ export default function ForumClient({ profileId, courses, initialPosts }: Props)
                             <h3 className="font-bold text-slate-900 text-base leading-tight">{post.title}</h3>
                           )}
                           <p className="text-sm text-slate-600 line-clamp-2 mt-1">{post.body}</p>
-                          <div className="flex items-center flex-wrap gap-3 text-xs font-medium text-slate-500 mt-2">
+                          <div className="flex items-center flex-wrap gap-2 text-xs font-medium text-slate-500 mt-2">
                             <span className="font-semibold text-slate-700">{post.author_name}</span>
+                            <RoleBadge role={post.author_role} size="xs" />
                             <span>·</span>
                             <span>{timeAgo(post.created_at)}</span>
                             <span>·</span>
@@ -365,8 +392,9 @@ export default function ForumClient({ profileId, courses, initialPosts }: Props)
                                   {initials(reply.author_name)}
                                 </div>
                                 <div className="flex-1 bg-white rounded-xl border border-slate-200 p-3">
-                                  <div className="flex items-center gap-2 mb-1">
+                                  <div className="flex items-center flex-wrap gap-1.5 mb-1">
                                     <span className="text-xs font-bold text-slate-700">{reply.author_name}</span>
+                                    <RoleBadge role={reply.author_role} size="xs" />
                                     <span className="text-xs text-slate-400">{timeAgo(reply.created_at)}</span>
                                   </div>
                                   <p className="text-sm text-slate-700 whitespace-pre-line">{reply.body}</p>

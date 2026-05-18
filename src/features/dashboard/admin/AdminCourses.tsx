@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restInsert, restUpdate, restDelete } from '../../../services/supabaseRest';
 import { normalizeImageUrl } from '../../../services/imageUrl';
+import { logEvent, getMyActorInfo } from '../../../services/activityEvents';
+import CoachAssignmentsPanel from './CoachAssignmentsPanel';
 import {
   IoAddOutline, IoTrashOutline, IoPencilOutline, IoChevronDownOutline,
   IoChevronForwardOutline, IoEyeOutline, IoEyeOffOutline, IoArrowBackOutline,
@@ -287,6 +289,7 @@ function LessonModal({
       };
 
       let lessonId = lesson?.id;
+      const wasPublished = lesson?.is_published === true;
 
       if (lessonId) {
         await restUpdate('lessons', payload, { id: `eq.${lessonId}` });
@@ -324,6 +327,43 @@ function LessonModal({
         }
       }
 
+      // Bandeja events: one for the lesson itself (only when newly published),
+      // one per material added in this save.
+      const actor = await getMyActorInfo();
+      if (actor && lessonId) {
+        const justPublished = published && !wasPublished;
+        if (justPublished) {
+          await logEvent({
+            type: 'content.lesson_published',
+            actorProfileId: actor.profileId,
+            actorRole: actor.role,
+            targetKind: 'lesson',
+            targetId: lessonId,
+            details: {
+              actorName: actor.name,
+              lessonTitle: title.trim(),
+              hasVideo: !!videoUrl.trim(),
+              durationSeconds: Math.round(duration),
+            },
+          });
+        }
+        for (const r of resourcesToSave) {
+          await logEvent({
+            type: 'content.material_published',
+            actorProfileId: actor.profileId,
+            actorRole: actor.role,
+            targetKind: 'lesson_resource',
+            details: {
+              actorName: actor.name,
+              materialTitle: r.title,
+              materialType: r.type,
+              lessonId,
+              lessonTitle: title.trim(),
+            },
+          });
+        }
+      }
+
       toast.success(lesson ? 'Clase actualizada.' : 'Clase creada.');
       onSaved();
     } catch (err: any) {
@@ -351,6 +391,25 @@ function LessonModal({
       });
       if (data) { setResources(prev => [...prev, data]); setNewResTitle(''); setNewResUrl(''); }
       toast.success('Material agregado');
+
+      // Bandeja event: staff published a new support material.
+      const actor = await getMyActorInfo();
+      if (actor && data) {
+        await logEvent({
+          type: 'content.material_published',
+          actorProfileId: actor.profileId,
+          actorRole: actor.role,
+          targetKind: 'lesson_resource',
+          targetId: data.id,
+          details: {
+            actorName: actor.name,
+            materialTitle: newResTitle.trim(),
+            materialType: newResType,
+            lessonId: lesson.id,
+            lessonTitle: lesson.title,
+          },
+        });
+      }
     } catch (err: any) {
       toast.error('Error al agregar material: ' + err.message);
     }
@@ -654,14 +713,36 @@ export default function AdminCourses() {
     }
     setSavingSession(true);
     try {
-      await restInsert('course_sessions', {
+      const created = await restInsert<{ id: string }>('course_sessions', {
         course_id: selectedCourse.id,
         session_date: newSessionDate,
         session_time: newSessionTime || null,
         label: newSessionLabel.trim() || null,
         location_url: newSessionLocation.trim() || null,
         is_mandatory: newSessionMandatory,
-      }, { returning: 'minimal' });
+      });
+
+      // Bandeja event — encuentro programado.
+      const actor = await getMyActorInfo();
+      if (actor) {
+        await logEvent({
+          type: 'content.session_scheduled',
+          actorProfileId: actor.profileId,
+          actorRole: actor.role,
+          targetKind: 'course_session',
+          targetId: created?.id ?? null,
+          details: {
+            actorName: actor.name,
+            courseId: selectedCourse.id,
+            courseTitle: selectedCourse.title,
+            sessionDate: newSessionDate,
+            sessionTime: newSessionTime || null,
+            label: newSessionLabel.trim() || null,
+            isMandatory: newSessionMandatory,
+          },
+        });
+      }
+
       setNewSessionDate('');
       setNewSessionTime('');
       setNewSessionLabel('');
@@ -944,6 +1025,13 @@ export default function AdminCourses() {
               </div>
             )}
           </div>
+
+          {/* Equipo de coaches */}
+          <CoachAssignmentsPanel
+            courseId={selectedCourse.id}
+            courseTitle={selectedCourse.title}
+            linkedCycleIds={linkedCycles.map(c => c.id)}
+          />
 
           {/* Encuentros / Fechas */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">

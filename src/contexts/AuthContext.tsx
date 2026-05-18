@@ -5,6 +5,58 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../services/supabaseClient';
 import { resolveRole as resolveRoleService, UserRole } from '../services/roleService';
 
+/**
+ * Pull the access_token cookie out of document.cookie and decode the JWT
+ * claims (no signature verification — purely for client-side identity).
+ * Returns null if there's no cookie or the token can't be decoded.
+ *
+ * Used as a fallback path in initializeAuth() when supabase.auth.getSession()
+ * fails because the cookie's refresh_token was invalidated by a prior race.
+ * The access_token in the cookie is still valid (the server is using it for
+ * SSR), so we can keep the dashboard alive instead of bouncing to login.
+ */
+function readJwtClaimsFromCookie(): { sub: string; email?: string } | null {
+    if (typeof document === 'undefined') return null;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+    const projectRef = url.match(/https:\/\/([^.]+)/)?.[1] ?? '';
+    if (!projectRef) return null;
+    const cookieBase = `sb-${projectRef}-auth-token`;
+    const allCookies = document.cookie.split(';').map(c => c.trim());
+    const chunks: string[] = [];
+    const base = allCookies.find(c => c.startsWith(`${cookieBase}=`));
+    if (base) chunks.push(base.split('=').slice(1).join('='));
+    for (let i = 0; ; i++) {
+        const chunk = allCookies.find(c => c.startsWith(`${cookieBase}.${i}=`));
+        if (!chunk) break;
+        chunks.push(chunk.split('=').slice(1).join('='));
+    }
+    if (chunks.length === 0) return null;
+    let raw = decodeURIComponent(chunks.join(''));
+    if (raw.startsWith('base64-')) {
+        const b64 = raw.slice(7).replace(/-/g, '+').replace(/_/g, '/');
+        try {
+            raw = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+        } catch {
+            return null;
+        }
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        const token: string = parsed.access_token ?? '';
+        if (!token) return null;
+        const payload = token.split('.')[1];
+        const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+        return { sub: decoded.sub, email: decoded.email };
+    } catch {
+        return null;
+    }
+}
+
+function isRefreshTokenError(err: any): boolean {
+    const msg = String(err?.message ?? err ?? '').toLowerCase();
+    return msg.includes('refresh token') || msg.includes('refresh_token');
+}
+
 interface AuthContextType {
     session: Session | null;
     user: User | null;
@@ -77,6 +129,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     setRole(null);
                 }
             } catch (err) {
+                // Specific recovery: when the cookie has a stale refresh_token
+                // (typically left over from a prior concurrent-refresh race),
+                // supabase.auth.getSession() throws "Invalid Refresh Token".
+                // The access_token in the cookie is still valid though — the
+                // SSR layer is using it just fine — so instead of nuking the
+                // session and tipping the user out, we read the user identity
+                // from the JWT claims and continue. The next clean login (or
+                // cookie rotation on navigation) heals the refresh_token.
+                if (isRefreshTokenError(err)) {
+                    const claims = readJwtClaimsFromCookie();
+                    if (claims?.sub) {
+                        try {
+                            const resolvedRole = await resolveRole(claims.sub);
+                            if (!mountedRef.current) return;
+                            // Build a minimal User. The JS client's full User
+                            // object isn't reachable without a working refresh,
+                            // but the dashboard only consumes id/email.
+                            const minimalUser = {
+                                id: claims.sub,
+                                email: claims.email ?? '',
+                                aud: 'authenticated',
+                                app_metadata: {},
+                                user_metadata: {},
+                                created_at: '',
+                            } as unknown as User;
+                            setSession(null);
+                            setUser(minimalUser);
+                            setRole(resolvedRole);
+                            console.warn('[AuthContext] Recovered from stale refresh token via cookie JWT.');
+                            return;
+                        } catch (recoveryErr) {
+                            console.error('[AuthContext] Cookie-based recovery failed:', recoveryErr);
+                        }
+                    }
+                }
                 console.error("Error in initializeAuth:", err);
                 setSession(null);
                 setUser(null);

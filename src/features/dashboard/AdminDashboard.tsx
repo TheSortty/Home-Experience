@@ -10,7 +10,7 @@ import DocumentIcon from '../../ui/icons/DocumentIcon';
 import MailIcon from '../../ui/icons/MailIcon';
 import { IoMenuOutline, IoCloseOutline } from 'react-icons/io5';
 import { supabase } from '../../services/supabaseClient';
-import { restSelect } from '../../services/supabaseRest';
+import { restSelect, restRpc } from '../../services/supabaseRest';
 import AdminCalendar from './admin/AdminCalendar';
 import AdminStudents from './admin/AdminStudents';
 import AdminAdmissions from './admin/AdminAdmissions';
@@ -18,7 +18,9 @@ import AdminSettings from './admin/AdminSettings';
 import AdminForms from './admin/AdminForms';
 import AdminLogs from './admin/AdminLogs';
 import AdminCourses from './admin/AdminCourses';
+import AdminActivity from './admin/AdminActivity';
 import { useAuth } from '../../contexts/AuthContext';
+import { IoNotificationsOutline } from 'react-icons/io5';
 
 import './admin/admin-reboot.css';
 
@@ -27,7 +29,7 @@ interface AdminDashboardProps {
   onRegisterTest: () => void;
 }
 
-type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'courses' | 'communications' | 'forms' | 'settings' | 'logs';
+type Tab = 'overview' | 'admissions' | 'students' | 'calendar' | 'courses' | 'activity' | 'communications' | 'forms' | 'settings' | 'logs';
 
 interface DashboardStats {
   pendingAdmissions: number;
@@ -70,6 +72,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+  const [unreadActivityCount, setUnreadActivityCount] = useState(0);
   // Tracks whether the first load has completed — background refreshes never show spinners.
   const hasLoadedOnceRef = useRef(false);
 
@@ -243,6 +246,36 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchDashboardData, fetchGlobalStats]);
+
+  // ─── Activity badge — unread count + realtime ─────────────────────────────
+  // Lives separately from fetchDashboardData because it needs to update even
+  // when the user is on a tab other than "activity".
+  const refreshUnreadActivity = useCallback(async () => {
+    try {
+      const count = await restRpc<number>('staff_activity_unread_count');
+      setUnreadActivityCount(typeof count === 'number' ? count : Number(count) || 0);
+    } catch (err) {
+      console.warn('[AdminDashboard] unread count refresh failed', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshUnreadActivity();
+
+    const channelName = 'activity_badge';
+    supabase.getChannels().forEach(ch => {
+      if (ch.topic.includes(channelName)) supabase.removeChannel(ch);
+    });
+
+    const channel = supabase.channel(channelName)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'staff_activity_events' },
+        () => { refreshUnreadActivity(); }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [refreshUnreadActivity]);
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -473,13 +506,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
 
   const adminItems = [
     { id: 'overview', label: 'Resumen', icon: ChartIcon },
+    { id: 'activity', label: 'Actividad', icon: IoNotificationsOutline },
     { id: 'admissions', label: 'Admisiones', icon: DocumentIcon },
     { id: 'students', label: 'Alumnos', icon: UsersIcon },
     { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
-    { 
-      id: 'courses', 
-      label: 'CAMPUS', 
-      icon: (props: any) => <img src="/logo-circle.png" alt="Home" className={`object-cover rounded-full ${props.className}`} /> 
+    {
+      id: 'courses',
+      label: 'CAMPUS',
+      icon: (props: any) => <img src="/logo-circle.png" alt="Home" className={`object-cover rounded-full ${props.className}`} />
     },
   ];
 
@@ -558,6 +592,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                   {stats.pendingAdmissions}
                 </span>
               )}
+              {item.id === 'activity' && unreadActivityCount > 0 && (
+                <span className="ml-auto bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none animate-pulse">
+                  {unreadActivityCount > 99 ? '99+' : unreadActivityCount}
+                </span>
+              )}
             </button>
           ))}
 
@@ -586,13 +625,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
         </nav>
 
         <div className="p-6 border-t border-white/5 bg-black/20 space-y-3">
-          <a href="/dashboard?preview=true" target="_blank" rel="noopener noreferrer" className="w-full flex items-center gap-3 px-4 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest text-blue-400 border border-blue-400/20 hover:bg-blue-400/10 transition-all group">
+          {/* Primary: enter campus as organizador */}
+          <a
+            href="/dashboard"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest text-amber-200 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-400/30 hover:from-amber-500/30 hover:to-orange-500/30 hover:text-white transition-all group"
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Ir al Campus
+          </a>
+
+          {/* Secondary: preview as student */}
+          <a
+            href="/dashboard?as=student"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-blue-300 transition-colors group"
+          >
             <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
-            Vista Previa (Alumno)
+            Vista alumno (preview)
           </a>
+
           <a href="/" className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
             <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -691,6 +748,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
                 ) : (
                   <>
                     {activeTab === 'overview' && renderOverview()}
+                    {activeTab === 'activity' && <AdminActivity onUnreadChange={setUnreadActivityCount} />}
                     {/* Keep these three mounted to avoid state loss on tab switch */}
                     <div style={{ display: activeTab === 'admissions' ? undefined : 'none' }}>
                       <AdminAdmissions searchTerm={globalSearch} />

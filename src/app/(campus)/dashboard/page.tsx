@@ -3,11 +3,13 @@ import Link from 'next/link';
 import {
   IoPlayCircleOutline, IoCheckmarkCircleOutline, IoFlameOutline,
   IoTimeOutline, IoChevronForwardOutline, IoBookOutline, IoCalendarOutline,
+  IoEyeOutline,
 } from 'react-icons/io5';
 import { createClient } from '@/utils/supabase/server';
 import { resolveRole } from '@/src/services/roleService';
 import { getStudentProgress } from '@/src/services/progressService';
 import { normalizeImageUrl } from '@/src/services/imageUrl';
+import { resolveViewMode } from '@/src/services/campusViewMode';
 import QuoteOfTheDay from '../_components/QuoteOfTheDay';
 
 const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -47,10 +49,11 @@ export default async function CampusDashboardPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { preview } = await searchParams;
-  const isPreview = preview === 'true';
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  const role = user ? await resolveRole(supabase, user.id) : null;
+  const viewMode = resolveViewMode(role, sp);
 
   let firstName = 'Alumno';
   let enrollments: any[] = [];
@@ -68,22 +71,14 @@ export default async function CampusDashboardPage({
 
     if (profile?.first_name) firstName = profile.first_name;
 
-    const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
-    const canSeeEverything = isAdmin && isPreview;
+    // Organizer mode = full visibility. Preview-as-student narrows to the
+    // admin's actual student-side data (typically empty for staff).
+    const canSeeEverything = viewMode === 'organizer';
 
     // Cargamos SIEMPRE todos los cursos publicados (visibles para todos)
-    const { data: allCourses, error: coursesError } = await supabase
+    const { data: allCourses } = await supabase
       .from('courses')
       .select('id, title, cover_image_url, is_published');
-    console.log('[Dashboard] allCourses query →', {
-      userId: user.id,
-      hasProfile: !!profile,
-      profileId: profile?.id,
-      totalCourses: allCourses?.length ?? 0,
-      publishedCount: allCourses?.filter(c => c.is_published).length ?? 0,
-      sample: allCourses?.slice(0, 3),
-      error: coursesError?.message,
-    });
     const publishedCourses = (allCourses || []).filter(c => c.is_published);
 
     // Si hay perfil, calculamos progreso real del alumno
@@ -205,30 +200,54 @@ export default async function CampusDashboardPage({
             <IoBookOutline size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Programas en curso</p>
+            <p className="text-sm font-medium text-slate-500">{viewMode === 'organizer' ? 'Programas activos' : 'Programas en curso'}</p>
             <p className="text-2xl font-bold text-slate-900">{activeCoursesCount}</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center">
-            <IoCheckmarkCircleOutline size={24} />
+        {viewMode === 'organizer' ? (
+          <div className="bg-amber-50 rounded-xl p-5 border border-amber-200 shadow-sm flex items-center gap-4 col-span-1 md:col-span-1">
+            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
+              <IoEyeOutline size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-amber-700">Modo</p>
+              <p className="text-base font-bold text-amber-800">Organizador</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500">Clases atravesadas</p>
-            <p className="text-2xl font-bold text-slate-900">{completedCount}</p>
+        ) : (
+          <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center">
+              <IoCheckmarkCircleOutline size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Clases atravesadas</p>
+              <p className="text-2xl font-bold text-slate-900">{completedCount}</p>
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center">
-            <IoFlameOutline size={24} />
+        {viewMode === 'organizer' ? (
+          <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 col-span-1 md:col-span-1 opacity-40">
+            <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center">
+              <IoFlameOutline size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Progreso</p>
+              <p className="text-base font-bold text-slate-400">—</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500">Cuánto recorriste</p>
-            <p className="text-2xl font-bold text-slate-900">{overallProgress}%</p>
+        ) : (
+          <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center">
+              <IoFlameOutline size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Cuánto recorriste</p>
+              <p className="text-2xl font-bold text-slate-900">{overallProgress}%</p>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-purple-50 text-purple-500 flex items-center justify-center">
@@ -295,7 +314,9 @@ export default async function CampusDashboardPage({
         {/* Programs — 2 cols */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-serif text-2xl font-medium tracking-tight text-slate-900">Tus programas</h2>
+            <h2 className="font-serif text-2xl font-medium tracking-tight text-slate-900">
+              {viewMode === 'organizer' ? 'Programas del campus' : 'Tus programas'}
+            </h2>
             <Link href="/cursos" className="text-sm font-medium text-[#00A9CE] hover:underline flex items-center gap-1">
               Ver todos <IoChevronForwardOutline />
             </Link>
@@ -322,8 +343,8 @@ export default async function CampusDashboardPage({
                           referrerPolicy="no-referrer"
                         />
                       )}
-                      <div className="absolute top-3 right-3 px-2 py-1 bg-white/20 backdrop-blur-md rounded-md text-white text-xs font-bold">
-                        Cursando
+                      <div className="absolute top-3 right-3 px-2 py-1 bg-white/20 backdrop-blur-md rounded-md text-white text-xs font-bold flex items-center gap-1">
+                        {viewMode === 'organizer' ? <><IoEyeOutline size={11} /> Organizando</> : 'Cursando'}
                       </div>
                     </div>
                     <div className="p-4 flex flex-col flex-1">
@@ -332,13 +353,21 @@ export default async function CampusDashboardPage({
                         <p className="text-xs text-slate-500 mb-1">{enr.cycles.name}</p>
                       )}
                       <div className="mt-auto pt-4 border-t border-slate-100">
-                        <div className="flex justify-between text-xs font-medium text-slate-500 mb-1">
-                          <span>Tu recorrido</span>
-                          <span className="text-[#00A9CE]">{enr.progressPercent ?? 0}%</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-2">
-                          <div className="h-full bg-[#00A9CE] rounded-full transition-all" style={{ width: `${enr.progressPercent ?? 0}%` }} />
-                        </div>
+                        {viewMode === 'organizer' ? (
+                          <p className="text-xs text-amber-600 font-bold uppercase tracking-wide flex items-center gap-1">
+                            <IoEyeOutline size={11} /> Vista completa
+                          </p>
+                        ) : (
+                          <>
+                            <div className="flex justify-between text-xs font-medium text-slate-500 mb-1">
+                              <span>Tu recorrido</span>
+                              <span className="text-[#00A9CE]">{enr.progressPercent ?? 0}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-2">
+                              <div className="h-full bg-[#00A9CE] rounded-full transition-all" style={{ width: `${enr.progressPercent ?? 0}%` }} />
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </Link>

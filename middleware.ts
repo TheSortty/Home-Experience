@@ -93,7 +93,6 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   // Step 3: Role-based Redirection Logic
   const role = user ? await resolveRole(supabase, user.id) : null
   const isAdmin = role === 'admin' || role === 'sysadmin'
-  const isPreview = request.nextUrl.searchParams.get('preview') === 'true'
 
   // Guard /admin routes — only admins allowed
   if (isAdminRoute) {
@@ -119,22 +118,19 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     }
   }
 
-  // Guard campus routes — students allowed, admins allowed ONLY if isPreview
+  // Guard campus routes — must be authenticated. Admins/sysadmins can be
+  // here in two modes:
+  //   - default (no param)        → "organizador" mode: their real identity,
+  //                                  badges and all-courses view.
+  //   - ?as=student / ?preview=true → "vista alumno" preview mode: the campus
+  //                                    rendered as a student would see it.
+  // We no longer redirect admins out of the campus — the campus layout reads
+  // the view mode from the URL and renders accordingly. See campus layout.
   if (isCampusRoute) {
     if (!user) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/auth/login'
       redirectUrl.searchParams.delete('next')
-      const redirectResponse = NextResponse.redirect(redirectUrl)
-      supabaseResponse.cookies.getAll().forEach((cookie) => {
-        redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))
-      })
-      return redirectResponse
-    }
-
-    if (isAdmin && !isPreview) {
-      const redirectUrl = request.nextUrl.clone()
-      redirectUrl.pathname = '/admin/dashboard'
       const redirectResponse = NextResponse.redirect(redirectUrl)
       supabaseResponse.cookies.getAll().forEach((cookie) => {
         redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))

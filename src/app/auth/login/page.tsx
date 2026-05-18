@@ -11,7 +11,8 @@ export default function LoginPage() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const [checking, setChecking] = useState(true)
-  const passwordSet  = searchParams.get('message') === 'password_set'
+  const passwordSet    = searchParams.get('message') === 'password_set'
+  const invalidToken   = searchParams.get('error') === 'InvalidToken'
 
   const checkRoleAndRedirect = async (userId: string) => {
     const role = await resolveRole(supabase, userId);
@@ -78,6 +79,11 @@ export default function LoginPage() {
         {passwordSet && (
           <div className="mb-4 bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-medium px-4 py-3 rounded-lg text-center">
             ¡Contraseña creada! Ya podés iniciar sesión.
+          </div>
+        )}
+        {invalidToken && (
+          <div className="mb-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium px-4 py-3 rounded-lg text-center">
+            El enlace expiró o ya fue utilizado. Solicitá uno nuevo desde "¿Olvidaste tu contraseña?".
           </div>
         )}
         <Login onLoginSuccess={handleLoginSuccess} />

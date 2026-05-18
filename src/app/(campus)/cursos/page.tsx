@@ -2,8 +2,9 @@ import { createClient } from '@/utils/supabase/server';
 import { resolveRole } from '@/src/services/roleService';
 import { getStudentProgress } from '@/src/services/progressService';
 import { normalizeImageUrl } from '@/src/services/imageUrl';
+import { resolveViewMode } from '@/src/services/campusViewMode';
 import Link from 'next/link';
-import { IoBookOutline, IoCheckmarkCircleOutline, IoPlayCircleOutline, IoCalendarOutline } from 'react-icons/io5';
+import { IoBookOutline, IoCheckmarkCircleOutline, IoPlayCircleOutline, IoCalendarOutline, IoEyeOutline } from 'react-icons/io5';
 
 const GRADIENTS = [
   'from-[#00A9CE] to-blue-600',
@@ -12,7 +13,14 @@ const GRADIENTS = [
   'from-orange-400 to-rose-500',
 ];
 
-function StatusBadge({ status, progress }: { status: string; progress: number }) {
+function StatusBadge({ status, progress, isOrganizer }: { status: string; progress: number; isOrganizer?: boolean }) {
+  if (isOrganizer) {
+    return (
+      <span className="px-2.5 py-1 bg-amber-400/30 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+        <IoEyeOutline size={12} /> Organizando
+      </span>
+    );
+  }
   if (status === 'completed' || progress === 100) {
     return (
       <span className="px-2.5 py-1 bg-terra/30 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1">
@@ -46,14 +54,16 @@ export default async function CampusCursosPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { tab = 'activos', preview } = await searchParams;
-  const isPreview = preview === 'true';
+  const sp = await searchParams;
+  const { tab = 'activos' } = sp;
   const activeTab = (['activos', 'completados', 'todos'] as const).includes(tab as any)
     ? (tab as 'activos' | 'completados' | 'todos')
     : 'activos';
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  const role = user ? await resolveRole(supabase, user.id) : null;
+  const viewMode = resolveViewMode(role, sp);
 
   type CourseCard = {
     enrollmentId: string;
@@ -79,8 +89,10 @@ export default async function CampusCursosPage({
       .eq('user_id', user.id)
       .maybeSingle();
 
-    const isAdmin = (await resolveRole(supabase, user.id)) === 'admin' || (await resolveRole(supabase, user.id)) === 'sysadmin';
-    const canSeeEverything = isAdmin && isPreview;
+    // Organizer mode (admin/sysadmin browsing campus as staff) shows the full
+    // catalogue without faking progress. Preview-as-student narrows to what
+    // the alumno actually has access to.
+    const canSeeEverything = viewMode === 'organizer';
 
     // Siempre cargamos TODOS los cursos publicados — visibles para todos.
     // No depende de profile ni de enrollment.
@@ -203,6 +215,7 @@ export default async function CampusCursosPage({
                       <StatusBadge
                         status={course.enrollmentStatus}
                         progress={course.progressPercent}
+                        isOrganizer={viewMode === 'organizer'}
                       />
                     </div>
                     {!course.hasLms && (
@@ -227,7 +240,11 @@ export default async function CampusCursosPage({
                     )}
 
                     <div className="mt-auto">
-                      {course.hasLms && course.totalLessons > 0 ? (
+                      {viewMode === 'organizer' ? (
+                        <p className="text-xs text-amber-600 font-bold uppercase tracking-wide flex items-center gap-1">
+                          <IoEyeOutline size={12} /> Vista completa del programa
+                        </p>
+                      ) : course.hasLms && course.totalLessons > 0 ? (
                         <>
                           <div className="flex justify-between text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">
                             <span>{course.completedLessons}/{course.totalLessons} clases</span>
@@ -253,15 +270,38 @@ export default async function CampusCursosPage({
           })
         )}
 
-        {/* Discover more */}
-        <div className="rounded-2xl border-2 border-dashed border-cream-deep bg-cream flex flex-col items-center justify-center p-8 text-center hover:bg-cream-deep hover:border-terra-soft transition-colors cursor-pointer">
-          <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-terra shadow-sm mb-4">
-            <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 512 512" height="28px" width="28px" xmlns="http://www.w3.org/2000/svg">
-              <path fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32" d="M256 112v288m144-144H112" />
-            </svg>
+        {/* Coming soon — no es interactivo, sólo señala que hay más en camino */}
+        <div
+          className="coming-soon rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[300px]"
+          role="status"
+          aria-label="Próximamente: más programas en camino"
+        >
+          <div className="coming-soon__inner flex flex-col items-center gap-5">
+            <div className="coming-soon__sonar" aria-hidden="true">
+              <span className="coming-soon__sonar-ring" />
+              <span className="coming-soon__sonar-ring coming-soon__sonar-ring--b" />
+              <span className="coming-soon__sonar-ring coming-soon__sonar-ring--c" />
+              <span className="coming-soon__sonar-core" />
+            </div>
+
+            <span className="coming-soon__pill">
+              <span className="coming-soon__pill-dot" aria-hidden="true" />
+              Próximamente
+            </span>
+
+            <div>
+              <h3 className="font-serif text-2xl font-medium tracking-tight text-ink mb-1.5">¿Qué sigue?</h3>
+              <p className="text-sm text-slate-600 font-serif italic max-w-[22ch] mx-auto leading-relaxed">
+                Estamos gestando los próximos programas. Te avisamos en cuanto se sumen al camino.
+              </p>
+            </div>
+
+            <div className="coming-soon__steps" aria-hidden="true">
+              <span className="coming-soon__step coming-soon__step--active" />
+              <span className="coming-soon__step coming-soon__step--active" />
+              <span className="coming-soon__step coming-soon__step--next" />
+            </div>
           </div>
-          <h3 className="font-serif text-2xl font-medium tracking-tight text-ink mb-2">¿Qué sigue?</h3>
-          <p className="text-sm text-slate-600">Mirá los demás programas y elegí por dónde seguir.</p>
         </div>
       </section>
     </div>

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { logEventServer } from '@/src/services/activityEvents';
 
 async function assertStaff() {
   const supabase = await createClient();
@@ -76,15 +77,53 @@ export async function submitAdminReview(formData: FormData) {
     revisedFileName = file.name;
   }
 
-  const { error } = await supabase.from('submission_reviews').insert({
-    submission_id: submissionId,
-    reviewed_by: reviewer.id,
-    feedback_text: feedbackText?.trim() || null,
-    revised_storage_path: revisedStoragePath,
-    revised_file_name: revisedFileName,
-  });
+  const { data: insertedReview, error } = await supabase
+    .from('submission_reviews')
+    .insert({
+      submission_id: submissionId,
+      reviewed_by: reviewer.id,
+      feedback_text: feedbackText?.trim() || null,
+      revised_storage_path: revisedStoragePath,
+      revised_file_name: revisedFileName,
+    })
+    .select('id')
+    .single();
 
   if (error) return { error: error.message };
+
+  // Bandeja event: coach returned a worked submission. We resolve the reviewer
+  // role and the student-being-reviewed to anchor the event to that student.
+  const { data: reviewerProfile } = await supabase
+    .from('profiles').select('role, first_name, last_name').eq('id', reviewer.id).single();
+  const { data: submission } = await supabase
+    .from('submissions')
+    .select('user_id, lesson_id, version, file_name, lessons(title, modules(title, courses(id, title)))')
+    .eq('id', submissionId)
+    .single();
+
+  if (insertedReview?.id && submission) {
+    await logEventServer(supabase, {
+      type: 'coach.work_returned',
+      actorProfileId: reviewer.id,
+      actorRole: reviewerProfile?.role ?? null,
+      subjectProfileId: (submission as any).user_id,
+      targetKind: 'submission_review',
+      targetId: insertedReview.id,
+      details: {
+        actorName: `${reviewerProfile?.first_name ?? ''} ${reviewerProfile?.last_name ?? ''}`.trim() || null,
+        submissionId,
+        submissionVersion: (submission as any).version,
+        submissionFileName: (submission as any).file_name,
+        hasFeedback: !!feedbackText?.trim(),
+        hasRevisedFile: !!revisedFileName,
+        revisedFileName,
+        lessonTitle: (submission as any).lessons?.title ?? null,
+        moduleTitle: (submission as any).lessons?.modules?.title ?? null,
+        courseId: (submission as any).lessons?.modules?.courses?.id ?? null,
+        courseTitle: (submission as any).lessons?.modules?.courses?.title ?? null,
+      },
+    });
+  }
 
   revalidatePath(`/admin/lms/${courseId}/entregas`);
   revalidatePath(`/cursos/${courseId}/${lessonId}`);
