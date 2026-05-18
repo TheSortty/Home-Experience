@@ -53,6 +53,15 @@ type LessonResource = {
   type: string;
 };
 
+type LessonVideoRow = {
+  id: string;
+  lesson_id: string;
+  title: string | null;
+  video_url: string;
+  duration_seconds: number;
+  order_index: number;
+};
+
 type Cycle = { id: string; name: string; course_id: string | null };
 
 type CourseSession = {
@@ -255,11 +264,17 @@ function LessonModal({
 }) {
   const [title, setTitle] = useState(lesson?.title ?? '');
   const [desc, setDesc] = useState(lesson?.description ?? '');
-  const [videoUrl, setVideoUrl] = useState(lesson?.video_url ?? '');
-  const [duration, setDuration] = useState(lesson?.duration_seconds ?? 0);
   const [order, setOrder] = useState(lesson?.order_index ?? nextOrder);
   const [published, setPublished] = useState(lesson?.is_published ?? false);
 
+  // ── Videos (multi-video) ──────────────────────────────────────────────────
+  const [videos, setVideos] = useState<LessonVideoRow[]>([]);
+  const [pendingVideos, setPendingVideos] = useState<{ url: string; title: string; duration: number }[]>([]);
+  const [newVidUrl, setNewVidUrl] = useState('');
+  const [newVidTitle, setNewVidTitle] = useState('');
+  const [newVidDuration, setNewVidDuration] = useState(0);
+
+  // ── Resources ─────────────────────────────────────────────────────────────
   const [resources, setResources] = useState<LessonResource[]>([]);
   const [pendingResources, setPendingResources] = useState<{ title: string; url: string; type: string }[]>([]);
   const [newResTitle, setNewResTitle] = useState('');
@@ -268,22 +283,48 @@ function LessonModal({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (lesson) {
-      restSelect<LessonResource>('lesson_resources', { filters: { lesson_id: `eq.${lesson.id}` } })
-        .then(({ data }) => setResources(data))
-        .catch(err => console.error('[LessonModal] Failed to load resources:', err));
-    }
+    if (!lesson) return;
+    restSelect<LessonResource>('lesson_resources', { filters: { lesson_id: `eq.${lesson.id}` } })
+      .then(({ data }) => setResources(data))
+      .catch(err => console.error('[LessonModal] Failed to load resources:', err));
+    restSelect<LessonVideoRow>('lesson_videos', {
+      filters: { lesson_id: `eq.${lesson.id}` },
+      order: 'order_index.asc',
+    })
+      .then(({ data }) => {
+        setVideos(data);
+        // If no lesson_videos yet but lesson has video_url, seed from legacy field
+        if (data.length === 0 && lesson.video_url) {
+          setPendingVideos([{ url: lesson.video_url, title: '', duration: lesson.duration_seconds ?? 0 }]);
+        }
+      })
+      .catch(err => console.error('[LessonModal] Failed to load videos:', err));
   }, [lesson?.id]);
 
   const handleSave = async () => {
     if (!title.trim()) return;
     try {
       setSaving(true);
+
+      // Build the full video list: existing (already in DB) + pending
+      const allVideos = [...pendingVideos];
+      if (newVidUrl.trim()) {
+        allVideos.push({ url: newVidUrl.trim(), title: newVidTitle.trim(), duration: newVidDuration });
+      }
+
+      // Derive legacy fields from first video for backward-compat
+      const allExistingAndPending = [...videos, ...allVideos.map((v, i) => ({
+        id: '', lesson_id: '', title: v.title || null,
+        video_url: v.url, duration_seconds: v.duration, order_index: videos.length + i + 1,
+      }))];
+      const firstVideoUrl = allExistingAndPending[0]?.video_url ?? null;
+      const totalDuration = allExistingAndPending.reduce((s, v) => s + (v.duration_seconds ?? 0), 0);
+
       const payload = {
         title: title.trim(),
         description: desc.trim() || null,
-        video_url: videoUrl.trim() || null,
-        duration_seconds: Math.round(duration),
+        video_url: firstVideoUrl,
+        duration_seconds: totalDuration,
         order_index: order,
         is_published: published,
       };
@@ -298,27 +339,38 @@ function LessonModal({
         lessonId = created?.id;
       }
 
-      // If the admin typed a material but didn't click "Agregar material" before
-      // hitting Guardar, fold it into the pending list so it doesn't get lost.
-      const resourcesToSave = [...pendingResources];
-      if (newResTitle.trim() && newResUrl.trim()) {
-        resourcesToSave.push({
-          title: newResTitle.trim(),
-          url: newResUrl.trim(),
-          type: newResType,
-        });
+      // Save pending videos to lesson_videos table
+      const videosToSave = [...allVideos];
+      if (videosToSave.length > 0 && lessonId) {
+        try {
+          const nextOrder = videos.length + 1;
+          await restInsert(
+            'lesson_videos',
+            videosToSave.map((v, i) => ({
+              lesson_id: lessonId!,
+              title: v.title || null,
+              video_url: v.url,
+              duration_seconds: Math.round(v.duration),
+              order_index: nextOrder + i,
+            })),
+            { returning: 'minimal' }
+          );
+        } catch (vidErr: any) {
+          toast.error('Error al guardar videos: ' + vidErr.message);
+        }
       }
 
-      // Guardar materiales pendientes
+      // Save pending resources (typed but not clicked "Agregar")
+      const resourcesToSave = [...pendingResources];
+      if (newResTitle.trim() && newResUrl.trim()) {
+        resourcesToSave.push({ title: newResTitle.trim(), url: newResUrl.trim(), type: newResType });
+      }
       if (resourcesToSave.length > 0 && lessonId) {
         try {
           await restInsert(
             'lesson_resources',
             resourcesToSave.map(r => ({
-              lesson_id: lessonId!,
-              title: r.title,
-              file_url: r.url,
-              type: r.type,
+              lesson_id: lessonId!, title: r.title, file_url: r.url, type: r.type,
             })),
             { returning: 'minimal' }
           );
@@ -327,8 +379,7 @@ function LessonModal({
         }
       }
 
-      // Bandeja events: one for the lesson itself (only when newly published),
-      // one per material added in this save.
+      // Bandeja events
       const actor = await getMyActorInfo();
       if (actor && lessonId) {
         const justPublished = published && !wasPublished;
@@ -342,8 +393,8 @@ function LessonModal({
             details: {
               actorName: actor.name,
               lessonTitle: title.trim(),
-              hasVideo: !!videoUrl.trim(),
-              durationSeconds: Math.round(duration),
+              hasVideo: !!firstVideoUrl,
+              durationSeconds: totalDuration,
             },
           });
         }
@@ -443,16 +494,101 @@ function LessonModal({
               <textarea rows={4} className={inputCls} value={desc} onChange={e => setDesc(e.target.value)} placeholder="Si la clase es solo de lectura, usá este campo para el contenido completo." />
             </div>
             <div className="col-span-2">
-              <label className={labelCls}>URL del video (opcional — dejá vacío para clase de solo lectura)</label>
-              <input className={inputCls} value={videoUrl} onChange={e => setVideoUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." />
+              <div className="pt-2 border-t border-slate-100">
+                <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-1.5">
+                  <IoVideocamOutline size={16} /> Videos
+                  <span className="text-xs text-slate-400 font-normal ml-1">(si hay más de uno se muestra un carrusel)</span>
+                </h3>
+
+                {/* Existing videos */}
+                {videos.map((v, idx) => (
+                  <div key={v.id} className="flex items-center gap-2 mb-2 bg-slate-50 rounded-lg p-2">
+                    <IoVideocamOutline size={14} className="text-[#00A9CE] shrink-0" />
+                    <span className="text-xs text-slate-500 shrink-0 font-bold w-4">{idx + 1}.</span>
+                    <a href={v.video_url} target="_blank" rel="noopener noreferrer" className="flex-1 text-sm text-[#00A9CE] truncate hover:underline">
+                      {v.title || v.video_url}
+                    </a>
+                    {v.duration_seconds > 0 && (
+                      <span className="text-xs text-slate-400 shrink-0">
+                        {Math.floor(v.duration_seconds / 60)}min
+                      </span>
+                    )}
+                    <button
+                      onClick={async () => {
+                        try {
+                          await restDelete('lesson_videos', { id: `eq.${v.id}` });
+                          setVideos(prev => prev.filter(x => x.id !== v.id));
+                          toast.success('Video eliminado');
+                        } catch (e: any) { toast.error('Error: ' + e.message); }
+                      }}
+                      className="text-red-400 hover:text-red-600 shrink-0"
+                    >
+                      <IoTrashOutline size={14} />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Pending videos */}
+                {pendingVideos.map((v, idx) => (
+                  <div key={`pv-${idx}`} className="flex items-center gap-2 mb-2 bg-amber-50/50 border border-amber-100 rounded-lg p-2">
+                    <IoVideocamOutline size={14} className="text-amber-500 shrink-0" />
+                    <span className="text-xs text-amber-500 shrink-0 font-bold w-4">{videos.length + idx + 1}.</span>
+                    <span className="flex-1 text-sm text-slate-700 truncate">
+                      {v.title || v.url}
+                      <span className="text-[10px] uppercase font-bold text-amber-500 opacity-60 ml-1">(pendiente)</span>
+                    </span>
+                    {v.duration > 0 && <span className="text-xs text-slate-400 shrink-0">{Math.floor(v.duration / 60)}min</span>}
+                    <button onClick={() => setPendingVideos(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 shrink-0">
+                      <IoTrashOutline size={14} />
+                    </button>
+                  </div>
+                ))}
+
+                {videos.length === 0 && pendingVideos.length === 0 && (
+                  <p className="text-xs text-slate-400 italic mb-3">Sin videos todavía. Dejá vacío para clase de solo lectura.</p>
+                )}
+
+                {/* Add video row */}
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mt-2">
+                  <input
+                    className={`sm:col-span-3 ${inputCls}`}
+                    value={newVidUrl}
+                    onChange={e => setNewVidUrl(e.target.value)}
+                    placeholder="URL del video (YouTube...)"
+                  />
+                  <input
+                    className={`sm:col-span-1 ${inputCls}`}
+                    value={newVidTitle}
+                    onChange={e => setNewVidTitle(e.target.value)}
+                    placeholder="Título (opcional)"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    className={inputCls}
+                    value={newVidDuration || ''}
+                    onChange={e => setNewVidDuration(Number(e.target.value))}
+                    placeholder="Duración (seg)"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    if (!newVidUrl.trim()) return;
+                    setPendingVideos(prev => [...prev, { url: newVidUrl.trim(), title: newVidTitle.trim(), duration: newVidDuration }]);
+                    setNewVidUrl(''); setNewVidTitle(''); setNewVidDuration(0);
+                  }}
+                  disabled={!newVidUrl.trim()}
+                  className="mt-2 flex items-center gap-1 text-xs font-bold text-[#00A9CE] hover:underline disabled:opacity-40"
+                >
+                  <IoAddOutline size={14} /> Agregar video
+                </button>
+              </div>
             </div>
-            <div>
-              <label className={labelCls}>Duración (segundos)</label>
-              <input type="number" min={0} className={inputCls} value={duration} onChange={e => setDuration(Number(e.target.value))} placeholder="Ej: 1800 = 30min" />
-            </div>
-            <div>
-              <label className={labelCls}>Orden</label>
-              <input type="number" min={1} className={inputCls} value={order} onChange={e => setOrder(Number(e.target.value))} />
+            <div className="col-span-2 grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Orden</label>
+                <input type="number" min={1} className={inputCls} value={order} onChange={e => setOrder(Number(e.target.value))} />
+              </div>
             </div>
             <div className="col-span-2 flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">Visible para alumnos</label>

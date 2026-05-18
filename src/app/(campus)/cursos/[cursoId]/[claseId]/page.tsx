@@ -8,7 +8,7 @@ import {
   IoChevronForwardOutline,
   IoLockClosedOutline,
 } from 'react-icons/io5';
-import LessonViewer, { type LessonResource } from './LessonViewer';
+import LessonViewer, { type LessonResource, type LessonVideo } from './LessonViewer';
 import type { LessonPost } from './LessonForum';
 import type { SubmissionData } from './SubmissionTab';
 
@@ -185,7 +185,20 @@ export default async function ClasePage({
     .eq('lesson_id', claseId);
 
   const resources: LessonResource[] = rawResources || [];
-  const embedUrl = getYoutubeEmbedUrl(lesson.video_url);
+
+  // Fetch videos for this lesson (multi-video support)
+  const { data: rawVideos } = await supabase
+    .from('lesson_videos')
+    .select('id, title, video_url, duration_seconds, order_index')
+    .eq('lesson_id', claseId)
+    .order('order_index', { ascending: true });
+
+  // Fall back to the legacy single video_url on the lesson row
+  const lessonVideos: LessonVideo[] = rawVideos && rawVideos.length > 0
+    ? rawVideos
+    : lesson.video_url
+      ? [{ id: 'legacy', title: null, video_url: lesson.video_url, duration_seconds: lesson.duration_seconds ?? 0, order_index: 1 }]
+      : [];
 
   // Fetch forum posts
   const { data: rawPosts } = await supabase
@@ -370,7 +383,7 @@ export default async function ClasePage({
               initialPosts={lessonPosts}
               currentUserName={currentUserName}
               currentUserRole={profile?.role ?? null}
-              embedUrl={embedUrl}
+              videos={lessonVideos}
               submissionData={submissionData}
             />
           </div>
