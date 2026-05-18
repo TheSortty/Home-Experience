@@ -239,7 +239,10 @@ export async function restSelect<T = any>(table: string, opts: SelectOptions = {
 
 export async function restInsert<T = any>(table: string, payload: any, opts: { returning?: 'minimal' | 'representation' } = {}): Promise<T | null> {
   const url = `${SUPABASE_URL}/rest/v1/${table}`
-  const returning = opts.returning ?? 'representation'
+  // When payload is an array (bulk insert), force return=minimal to avoid
+  // PostgREST requiring an Accept: application/vnd.pgrst.array+json header.
+  const isBulk = Array.isArray(payload)
+  const returning = isBulk ? 'minimal' : (opts.returning ?? 'representation')
   const headerBuilder = () => buildHeaders({ Prefer: `return=${returning}` })
   const response = await fetchWithAuthRetry(url, {
     method: 'POST',
@@ -247,9 +250,37 @@ export async function restInsert<T = any>(table: string, payload: any, opts: { r
     body: JSON.stringify(payload),
     rebuildHeaders: headerBuilder,
   })
+  if (isBulk) {
+    // For bulk inserts we only care about errors; 204 = success
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      throw new RestError(response.status, body)
+    }
+    return null
+  }
   const data = await parseResponse<T[]>(response)
   if (Array.isArray(data) && data.length > 0) return data[0]
   return null
+}
+
+/**
+ * Dedicated bulk-insert helper. Always uses return=minimal.
+ * Throws RestError on any HTTP error.
+ */
+export async function restBulkInsert(table: string, rows: Record<string, any>[]): Promise<void> {
+  if (rows.length === 0) return
+  const url = `${SUPABASE_URL}/rest/v1/${table}`
+  const headerBuilder = () => buildHeaders({ Prefer: 'return=minimal' })
+  const response = await fetchWithAuthRetry(url, {
+    method: 'POST',
+    headers: headerBuilder(),
+    body: JSON.stringify(rows),
+    rebuildHeaders: headerBuilder,
+  })
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    throw new RestError(response.status, body)
+  }
 }
 
 export async function restUpdate<T = any>(

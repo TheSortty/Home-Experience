@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabaseClient';
-import { restSelect, restInsert, restUpdate, restDelete } from '../../../services/supabaseRest';
+import { restSelect, restInsert, restUpdate, restDelete, restBulkInsert } from '../../../services/supabaseRest';
 import { normalizeImageUrl } from '../../../services/imageUrl';
 import { logEvent, getMyActorInfo } from '../../../services/activityEvents';
 import CoachAssignmentsPanel from './CoachAssignmentsPanel';
@@ -344,7 +344,7 @@ function LessonModal({
       if (videosToSave.length > 0 && lessonId) {
         try {
           const nextOrder = videos.length + 1;
-          await restInsert(
+          await restBulkInsert(
             'lesson_videos',
             videosToSave.map((v, i) => ({
               lesson_id: lessonId!,
@@ -352,11 +352,10 @@ function LessonModal({
               video_url: v.url,
               duration_seconds: Math.round(v.duration),
               order_index: nextOrder + i,
-            })),
-            { returning: 'minimal' }
+            }))
           );
         } catch (vidErr: any) {
-          toast.error('Error al guardar videos: ' + vidErr.message);
+          toast.error('Error al guardar videos: ' + (vidErr?.body || vidErr?.message || 'Error desconocido'));
         }
       }
 
