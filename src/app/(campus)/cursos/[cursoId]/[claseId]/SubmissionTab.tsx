@@ -98,9 +98,9 @@ function DueDateBanner({ data }: { data: SubmissionTabData }) {
   );
 }
 
-// ─── Upload zone ──────────────────────────────────────────────────────────────
+// ─── Link submit zone ─────────────────────────────────────────────────────────
 
-function UploadZone({
+function LinkZone({
   lessonId,
   courseId,
   nextVersion,
@@ -109,22 +109,20 @@ function UploadZone({
   lessonId: string;
   courseId: string;
   nextVersion: number;
-  onSuccess: (fileName: string, version: number) => void;
+  onSuccess: (url: string, version: number) => void;
 }) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [url, setUrl] = useState('');
   const [feedback, setFeedback] = useState<{ ok?: string; err?: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const handleUpload = () => {
-    const file = selectedFile ?? fileRef.current?.files?.[0];
-    if (!file) { setFeedback({ err: 'Seleccioná un archivo primero' }); return; }
+  const handleSubmit = () => {
+    if (!url.trim()) { setFeedback({ err: 'Pegá el link de tu trabajo' }); return; }
     setFeedback(null);
 
     const fd = new FormData();
     fd.append('lessonId', lessonId);
     fd.append('courseId', courseId);
-    fd.append('file', file);
+    fd.append('submission_url', url.trim());
 
     startTransition(async () => {
       const res = await submitLesson(fd);
@@ -132,37 +130,29 @@ function UploadZone({
         setFeedback({ err: res.error });
       } else {
         setFeedback({ ok: `v${res.version ?? nextVersion} enviada correctamente.` });
-        setSelectedFile(null);
-        if (fileRef.current) fileRef.current.value = '';
-        onSuccess(file.name, res.version ?? nextVersion);
+        setUrl('');
+        onSuccess(url.trim(), res.version ?? nextVersion);
       }
     });
   };
 
   return (
     <div className="space-y-3 pt-4 border-t border-slate-100">
-      <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
-        <IoCloudUploadOutline size={16} />
-        {nextVersion === 1 ? 'Subir entrega' : `Subir versión ${nextVersion}`}
+      <p className="text-sm font-bold text-slate-700">
+        {nextVersion === 1 ? 'Enviar entrega' : `Enviar versión ${nextVersion}`}
+      </p>
+      <p className="text-xs text-slate-500">
+        Compartí el link de tu trabajo (Google Drive, Dropbox, Notion, YouTube, etc.). Asegurate de que el link tenga permisos para quien tenga el link.
       </p>
 
-      <div
-        className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center hover:border-[#00A9CE]/50 transition-colors cursor-pointer"
-        onClick={() => fileRef.current?.click()}
-      >
-        <IoCloudUploadOutline size={36} className="mx-auto text-slate-300 mb-2" />
-        <p className="text-sm font-medium text-slate-500">
-          {selectedFile?.name ?? 'Hacé clic para seleccionar un archivo'}
-        </p>
-        <p className="text-xs text-slate-400 mt-1">PDF, Word, imagen · máx 50 MB</p>
-        <input
-          ref={fileRef}
-          type="file"
-          className="hidden"
-          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.ppt,.pptx,.txt"
-          onChange={(e) => { setSelectedFile(e.target.files?.[0] ?? null); setFeedback(null); }}
-        />
-      </div>
+      <input
+        type="url"
+        value={url}
+        onChange={(e) => { setUrl(e.target.value); setFeedback(null); }}
+        placeholder="https://drive.google.com/..."
+        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-[#00A9CE] focus:ring-2 focus:ring-[#00A9CE]/20 transition-all"
+        onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+      />
 
       {feedback?.err && (
         <p className="text-sm text-red-600 flex items-center gap-1.5">
@@ -176,12 +166,12 @@ function UploadZone({
       )}
 
       <button
-        onClick={handleUpload}
-        disabled={isPending || (!selectedFile && !fileRef.current?.files?.[0])}
+        onClick={handleSubmit}
+        disabled={isPending || !url.trim()}
         className="w-full py-3 bg-[#00A9CE] text-white font-bold text-sm rounded-xl hover:bg-blue-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-2"
       >
-        <IoCloudUploadOutline size={18} />
-        {isPending ? 'Subiendo…' : 'Enviar entrega'}
+        <IoSendOutline size={16} />
+        {isPending ? 'Enviando…' : 'Enviar entrega'}
       </button>
     </div>
   );
@@ -221,7 +211,6 @@ function HiloView({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                  <span className="text-sm font-bold text-slate-900 truncate">{sub.file_name}</span>
                   {sub.is_late
                     ? <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-600">Atrasada</span>
                     : <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">A tiempo</span>
@@ -229,12 +218,16 @@ function HiloView({
                 </div>
                 <p className="text-xs text-slate-400">{fmtShort(sub.submitted_at)}</p>
               </div>
-              <button
-                onClick={() => onDownloadSubmission(sub.id)}
-                className="shrink-0 text-xs font-bold text-[#00A9CE] hover:text-blue-700 flex items-center gap-1 transition-colors"
-              >
-                <IoDocumentOutline size={14} /> Ver
-              </button>
+              {sub.submission_url ? (
+                <a
+                  href={sub.submission_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-xs font-bold text-[#00A9CE] hover:text-blue-700 flex items-center gap-1 transition-colors"
+                >
+                  <IoDocumentOutline size={14} /> Abrir
+                </a>
+              ) : null}
             </div>
           );
         }
@@ -568,7 +561,7 @@ export default function SubmissionTab({ lessonId, courseId, data, studentProfile
               onDownloadRevised={handleDownloadRevised}
             />
             {canUpload && (
-              <UploadZone
+              <LinkZone
                 lessonId={lessonId}
                 courseId={courseId}
                 nextVersion={nextVersion}

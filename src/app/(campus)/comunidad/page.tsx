@@ -19,27 +19,17 @@ export default async function CampusComunidadPage() {
     if (profile) {
       profileId = profile.id;
 
-      // Get enrolled courses that have an LMS course linked
-      const { data: enrollments } = await supabase
-        .from('enrollments')
-        .select('id, cycle_id, cycles(id, name, course_id, courses(id, title))')
-        .eq('user_id', profile.id)
-        .in('status', ['active', 'completed']);
+      // All published courses are visible to any campus user — same logic as
+      // the courses page. The enrollment system and the LMS course system are
+      // not yet linked via cycle.course_id, so we load courses directly.
+      const { data: publishedCourses } = await supabase
+        .from('courses')
+        .select('id, title')
+        .eq('is_published', true)
+        .order('title');
 
-      const courseMap: Record<string, CourseTab> = {};
-      const courseIds: string[] = [];
-
-      (enrollments || []).forEach((e: any) => {
-        const course = e.cycles?.courses;
-        if (course?.id) {
-          if (!courseMap[course.id]) {
-            courseMap[course.id] = { id: course.id, title: course.title };
-            courseIds.push(course.id);
-          }
-        }
-      });
-
-      courses = Object.values(courseMap);
+      const courseIds: string[] = (publishedCourses || []).map((c: any) => c.id);
+      courses = (publishedCourses || []).map((c: any) => ({ id: c.id, title: c.title }));
 
       if (courseIds.length > 0) {
         // Load all posts (root + replies) for these courses, joining lesson +

@@ -61,6 +61,7 @@ export async function updateLessonLifecycle(formData: FormData) {
   if (error) return { error: error.message };
 
   revalidatePath(`/admin/lms/${courseId}`);
+  revalidatePath(`/admin/lms/${courseId}/entregas`);
   revalidatePath(`/cursos/${courseId}`);
   return { success: true };
 }

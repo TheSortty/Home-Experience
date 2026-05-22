@@ -1368,7 +1368,8 @@ export type Database = {
           is_late: boolean
           lesson_id: string
           status: string
-          storage_path: string
+          storage_path: string | null
+          submission_url: string | null
           submitted_at: string
           user_id: string
           version: number
@@ -1381,7 +1382,8 @@ export type Database = {
           is_late?: boolean
           lesson_id: string
           status?: string
-          storage_path: string
+          storage_path?: string | null
+          submission_url?: string | null
           submitted_at?: string
           user_id: string
           version?: number
@@ -1394,7 +1396,8 @@ export type Database = {
           is_late?: boolean
           lesson_id?: string
           status?: string
-          storage_path?: string
+          storage_path?: string | null
+          submission_url?: string | null
           submitted_at?: string
           user_id?: string
           version?: number

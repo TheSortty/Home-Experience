@@ -6,8 +6,9 @@ export interface Submission {
   id: string;
   user_id: string;
   lesson_id: string;
-  storage_path: string;
+  storage_path: string | null;
   file_name: string;
+  submission_url?: string | null;
   is_late: boolean;
   version: number;
   status: SubmissionStatus;

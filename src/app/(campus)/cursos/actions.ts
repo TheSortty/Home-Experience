@@ -255,10 +255,13 @@ export async function submitLesson(formData: FormData) {
 
   const lessonId = formData.get('lessonId') as string;
   const courseId = formData.get('courseId') as string;
-  const file = formData.get('file') as File;
+  const submissionUrl = (formData.get('submission_url') as string | null)?.trim();
 
-  if (!lessonId || !file || file.size === 0) return { error: 'Archivo requerido' };
-  if (file.size > 52428800) return { error: 'El archivo supera el límite de 50 MB' };
+  if (!lessonId || !submissionUrl) return { error: 'El link de tu trabajo es requerido' };
+
+  try { new URL(submissionUrl); } catch {
+    return { error: 'El link no es válido. Asegurate de incluir https://' };
+  }
 
   const { data: lesson } = await supabase
     .from('lessons')
@@ -268,7 +271,7 @@ export async function submitLesson(formData: FormData) {
 
   if (!lesson || lesson.status !== 'unlocked') return { error: 'Esta clase no acepta entregas en este momento' };
 
-  // ── Strict-round check: can't submit a new version until the coach responds ─
+  // ── Strict-round check ────────────────────────────────────────────────────────
   const { data: latestSub } = await supabase
     .from('submissions')
     .select('status, version')
@@ -279,7 +282,7 @@ export async function submitLesson(formData: FormData) {
     .maybeSingle();
 
   if (latestSub?.status === 'pending_review') {
-    return { error: 'Tu entrega está esperando devolución. Podrás subir una nueva versión cuando tu coach te responda.' };
+    return { error: 'Tu entrega está esperando devolución. Podrás enviar una nueva versión cuando tu coach te responda.' };
   }
   if (latestSub?.status === 'approved') {
     return { error: '¡Esta entrega ya fue aprobada! El hilo está cerrado.' };
@@ -300,35 +303,22 @@ export async function submitLesson(formData: FormData) {
     .limit(1);
 
   const nextVersion = (prevVersions?.[0]?.version ?? 0) + 1;
-  const ext = file.name.split('.').pop() ?? 'bin';
-  const storagePath = `${profile.id}/${lessonId}/v${nextVersion}_${Date.now()}.${ext}`;
-
-  const arrayBuffer = await file.arrayBuffer();
-  const { error: uploadError } = await supabase.storage
-    .from('submissions')
-    .upload(storagePath, arrayBuffer, { contentType: file.type, upsert: false });
-
-  if (uploadError) return { error: uploadError.message };
 
   const { data: inserted, error: dbError } = await supabase
     .from('submissions')
     .insert({
       user_id: profile.id,
       lesson_id: lessonId,
-      storage_path: storagePath,
-      file_name: file.name,
+      submission_url: submissionUrl,
+      file_name: submissionUrl,
       is_late: isLate,
       version: nextVersion,
     })
     .select('id')
     .single();
 
-  if (dbError) {
-    await supabase.storage.from('submissions').remove([storagePath]);
-    return { error: dbError.message };
-  }
+  if (dbError) return { error: dbError.message };
 
-  // Bandeja event: student submitted work. Pull lesson context for the card.
   const { data: lessonInfo } = await supabase
     .from('lessons')
     .select('title, modules(title, courses(id, title))')
@@ -345,7 +335,7 @@ export async function submitLesson(formData: FormData) {
       targetId: inserted.id,
       details: {
         actorName: actor.name,
-        fileName: file.name,
+        submissionUrl,
         version: nextVersion,
         isLate,
         lessonId,
@@ -377,6 +367,7 @@ export async function getSubmissionDownloadUrl(submissionId: string) {
   if (!sub) return { error: 'Entrega no encontrada' };
   if (sub.user_id !== profileId && !(await isStaff(supabase))) return { error: 'Sin acceso' };
 
+  if (!sub.storage_path) return { error: 'Esta entrega usa link externo' };
   const { data } = await supabase.storage
     .from('submissions')
     .createSignedUrl(sub.storage_path, 300);
