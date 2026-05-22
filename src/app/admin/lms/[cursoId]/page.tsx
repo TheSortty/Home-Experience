@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { IoArrowBackOutline, IoDocumentTextOutline } from 'react-icons/io5';
+import { isAdminRole } from '@/src/services/roleService';
 import LessonLifecycleForm from './LessonLifecycleForm';
 
 export default async function AdminCursoPage({
@@ -17,7 +18,7 @@ export default async function AdminCursoPage({
 
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('user_id', user.id).single();
-  if (!['admin', 'sysadmin', 'super_admin'].includes(profile?.role ?? '')) redirect('/dashboard');
+  if (!isAdminRole(profile?.role ?? '')) redirect('/dashboard');
 
   const { data: course } = await supabase
     .from('courses')

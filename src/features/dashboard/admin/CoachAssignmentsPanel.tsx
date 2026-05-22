@@ -8,6 +8,7 @@ import {
   IoTrashOutline, IoSwapHorizontalOutline,
 } from 'react-icons/io5';
 import { restSelect, restInsert, restUpdate, restDelete } from '../../../services/supabaseRest';
+import { isReviewerRole } from '../../../services/roleService';
 
 interface Props {
   courseId: string;
@@ -126,8 +127,7 @@ export default function CoachAssignmentsPanel({ courseId, courseTitle, linkedCyc
         });
         // Hide profiles that are already coaches and staff (promoting an admin
         // would silently demote them, that's a footgun).
-        const STAFF = new Set(['admin', 'sysadmin', 'super_admin', 'coach']);
-        setPromoteResults(data.filter(p => !STAFF.has(p.role)));
+        setPromoteResults(data.filter(p => !isReviewerRole(p.role ?? '')));
       } catch (err) {
         console.error('[CoachAssignmentsPanel] search failed', err);
       } finally {

@@ -53,7 +53,7 @@ export default async function CampusLayout({ children }: { children: React.React
 
           {/* Nav (handles mobile drawer + desktop horizontal links) */}
           <div className="flex-1 flex justify-center">
-            <CampusNav />
+            <CampusNav role={role} />
           </div>
 
           {/* Profile */}

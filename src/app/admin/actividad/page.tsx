@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import ActivityTimelineClient, { type CourseTab } from './ActivityTimelineClient';
+import { isAdminRole } from '@/src/services/roleService';
 
 export default async function ActividadHistorialPage() {
   const supabase = await createClient();
@@ -9,7 +10,7 @@ export default async function ActividadHistorialPage() {
 
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('user_id', user.id).single();
-  if (!['admin', 'sysadmin', 'super_admin'].includes(profile?.role ?? '')) redirect('/dashboard');
+  if (!isAdminRole(profile?.role ?? '')) redirect('/dashboard');
 
   const { data: courses } = await supabase
     .from('courses')

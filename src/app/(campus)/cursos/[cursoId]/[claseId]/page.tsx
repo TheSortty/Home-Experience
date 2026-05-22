@@ -10,7 +10,9 @@ import {
 } from 'react-icons/io5';
 import LessonViewer, { type LessonResource, type LessonVideo } from './LessonViewer';
 import type { LessonPost } from './LessonForum';
-import type { SubmissionData } from './SubmissionTab';
+import type { SubmissionTabData } from '@/src/types/submissions';
+import { getStudentThread } from '../../actions';
+
 
 function formatDuration(seconds: number) {
   if (!seconds) return '';
@@ -250,51 +252,31 @@ export default async function ClasePage({
     ? `${currentProfile.first_name ?? ''} ${currentProfile.last_name ?? ''}`.trim() || 'Alumno'
     : 'Alumno';
 
-  // ── Submission data ────────────────────────────────────────────────────────
+  // ── Submission data (thread) ───────────────────────────────────────────────
 
-  let submissionData: SubmissionData = {
-    requiresSubmission: lesson.requires_submission ?? false,
-    dueDate: null,
-    isOverdue: false,
-    daysRemaining: null,
-    latestSubmission: null,
-    latestReview: null,
-  };
+  let dueDate: string | null = null;
+  let isOverdue = false;
+  let daysRemaining: number | null = null;
 
-  if (lesson.requires_submission && profile?.id) {
+  if (lesson.requires_submission && lesson.unlocked_at && lesson.due_days_after_unlock) {
     const nowMs = Date.now();
-
-    if (lesson.unlocked_at && lesson.due_days_after_unlock) {
-      const dueMs = new Date(lesson.unlocked_at).getTime() + lesson.due_days_after_unlock * 86400000;
-      submissionData.dueDate = new Date(dueMs).toISOString();
-      submissionData.isOverdue = nowMs > dueMs;
-      submissionData.daysRemaining = submissionData.isOverdue
-        ? null
-        : Math.ceil((dueMs - nowMs) / 86400000);
-    }
-
-    const { data: latestSubs } = await supabase
-      .from('submissions')
-      .select('id, file_name, submitted_at, is_late, version')
-      .eq('user_id', profile.id)
-      .eq('lesson_id', claseId)
-      .order('version', { ascending: false })
-      .limit(1);
-
-    if (latestSubs?.length) {
-      const sub = latestSubs[0];
-      submissionData.latestSubmission = sub;
-
-      const { data: reviews } = await supabase
-        .from('submission_reviews')
-        .select('feedback_text, revised_storage_path, revised_file_name, reviewed_at, submission_id')
-        .eq('submission_id', sub.id)
-        .order('reviewed_at', { ascending: false })
-        .limit(1);
-
-      if (reviews?.length) submissionData.latestReview = reviews[0];
-    }
+    const dueMs = new Date(lesson.unlocked_at).getTime() + lesson.due_days_after_unlock * 86400000;
+    dueDate = new Date(dueMs).toISOString();
+    isOverdue = nowMs > dueMs;
+    daysRemaining = isOverdue ? null : Math.ceil((dueMs - nowMs) / 86400000);
   }
+
+  const thread = lesson.requires_submission && profile?.id
+    ? await getStudentThread(claseId)
+    : null;
+
+  const submissionData: SubmissionTabData = {
+    requiresSubmission: lesson.requires_submission ?? false,
+    dueDate,
+    isOverdue,
+    daysRemaining,
+    thread,
+  };
 
   // ── Locked gate ───────────────────────────────────────────────────────────
 
@@ -376,13 +358,14 @@ export default async function ClasePage({
               lessonTitle={lesson.title}
               lessonIndex={lesson.order_index}
               moduleTitle={module.title}
-              durationLabel={formatDuration(lesson.duration_seconds)}
+              durationLabel={formatDuration(lesson.duration_seconds ?? 0)}
               description={lesson.description}
               initialCompleted={isCurrentLessonCompleted}
               resources={resources}
               initialPosts={lessonPosts}
               currentUserName={currentUserName}
               currentUserRole={profile?.role ?? null}
+              studentProfileId={profile?.id ?? null}
               videos={lessonVideos}
               submissionData={submissionData}
             />

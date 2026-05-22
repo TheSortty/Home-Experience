@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import { normalizeImageUrl } from '@/src/services/imageUrl';
+import { isAdminRole } from '@/src/services/roleService';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
@@ -40,7 +41,7 @@ export default async function CursoDetallePage({
 
   if (!profile) notFound();
 
-  const isOrganizer = ['admin', 'sysadmin', 'super_admin'].includes(profile.role ?? '');
+  const isOrganizer = isAdminRole(profile.role ?? '');
 
   // NOTA: Por el momento permitimos que CUALQUIER alumno autenticado acceda
   // a los cursos publicados, sin requerir enrollment. El RLS de courses ya

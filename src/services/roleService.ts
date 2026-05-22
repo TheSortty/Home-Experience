@@ -1,8 +1,9 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { restRpc, RestError } from './supabaseRest';
 
-export const ADMIN_ROLES = ['admin', 'sysadmin', 'super_admin'] as const;
-export type UserRole = typeof ADMIN_ROLES[number] | 'student';
+export const ADMIN_ROLES    = ['admin', 'sysadmin', 'super_admin'] as const;
+export const REVIEWER_ROLES = ['admin', 'sysadmin', 'super_admin', 'coach'] as const;
+export type UserRole = typeof ADMIN_ROLES[number] | 'coach' | 'student';
 
 const BROWSER_RPC_TIMEOUT_MS = 6_000;
 
@@ -43,7 +44,6 @@ async function resolveRoleInBrowser(
       ),
     ]);
     if (typeof role === 'string' && role.length > 0) {
-      console.log('[RoleService] Role resolved via REST RPC:', role);
       return role as UserRole;
     }
     console.warn('[RoleService] REST RPC returned empty role, defaulting to student');
@@ -69,7 +69,6 @@ async function resolveRoleInBrowser(
       ),
     ]);
     if (typeof role === 'string' && role.length > 0) {
-      console.log('[RoleService] Role resolved via JS client RPC (fallback):', role);
       return role as UserRole;
     }
   } catch (err) {
@@ -88,7 +87,6 @@ async function resolveRoleOnServer(
     const { data, error } = await supabase.rpc('get_user_role');
     if (!error && data) {
       const role = data as string;
-      console.log('[RoleService] Role resolved via RPC:', role);
       return (role as UserRole) || 'student';
     }
     if (error) {
@@ -106,7 +104,6 @@ async function resolveRoleOnServer(
       .single();
 
     if (!error && data?.role) {
-      console.log('[RoleService] Role resolved via direct query:', data.role);
       return data.role as UserRole;
     }
   } catch (err) {
@@ -120,6 +117,9 @@ async function resolveRoleOnServer(
 /**
  * Helper to check if a role is an admin role.
  */
-export const isAdminRole = (role: string): boolean => {
-  return ADMIN_ROLES.includes(role as any);
-};
+export const isAdminRole = (role: string): role is typeof ADMIN_ROLES[number] =>
+  (ADMIN_ROLES as readonly string[]).includes(role);
+
+/** True for admin, sysadmin, super_admin AND coach (can review submissions). */
+export const isReviewerRole = (role: string): role is typeof REVIEWER_ROLES[number] =>
+  (REVIEWER_ROLES as readonly string[]).includes(role);

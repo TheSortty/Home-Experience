@@ -54,7 +54,6 @@ const AdminForms: React.FC = () => {
 
     const fetchForms = async () => {
         setIsLoading(true);
-        console.log('Fetching forms...');
         const { data, error } = await supabase
             .from('forms')
             .select('*')
@@ -64,7 +63,7 @@ const AdminForms: React.FC = () => {
             console.error('Error fetching forms:', error);
             toast.error('Error al cargar formularios: ' + error.message);
         } else if (data) {
-            setForms(data);
+            setForms(data as unknown as Form[]);
             if (data.length > 0) {
                 if (!selectedFormId || !data.find(f => f.id === selectedFormId)) {
                     setSelectedFormId(data[0].id);
@@ -106,7 +105,7 @@ const AdminForms: React.FC = () => {
         try {
             const { error } = await supabase
                 .from('forms')
-                .update({ schema: newSchema })
+                .update({ schema: newSchema as unknown as import('@/src/types/database.types').Json })
                 .eq('id', selectedFormId);
 
             if (error) throw error;

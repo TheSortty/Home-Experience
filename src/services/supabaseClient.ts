@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
+import type { Database } from '@/src/types/database.types'
 
 /**
  * Cliente Supabase para el navegador.
@@ -15,7 +16,7 @@ import { createBrowserClient } from '@supabase/ssr'
  *   - Auth (login/logout, onAuthStateChange)
  *   - Realtime channels (supabase.channel)
  */
-export const supabase = createBrowserClient(
+export const supabase = createBrowserClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   {

@@ -3,6 +3,11 @@
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { logEventServer } from '@/src/services/activityEvents';
+import { isAdminRole, isReviewerRole } from '@/src/services/roleService';
+import type {
+  SubmissionThread, SubmissionStatus, Submission,
+  SubmissionReview, ChatMessage, ThreadItem,
+} from '@/src/types/submissions';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,7 +48,7 @@ async function getActor() {
 async function isStaffActor(): Promise<boolean> {
   const actor = await getActor();
   if (!actor) return false;
-  return ['admin', 'sysadmin', 'super_admin', 'coach'].includes(actor.role);
+  return isReviewerRole(actor.role);
 }
 
 // ── mark lesson complete ──────────────────────────────────────────────────────
@@ -106,7 +111,7 @@ export async function postLessonComment(
   if (!options?.parentId) {
     const actor = await getActor();
     if (actor) {
-      const isStaffOrCoach = ['admin', 'sysadmin', 'super_admin', 'coach'].includes(actor.role);
+      const isStaffOrCoach = isReviewerRole(actor.role);
       await logEventServer(supabase, {
         type: isStaffOrCoach ? 'content.forum_announcement' : 'student.forum_question',
         actorProfileId: actor.profileId,
@@ -208,7 +213,7 @@ export async function trackResourceOpen(resourceId: string) {
     .eq('id', resourceId)
     .maybeSingle();
 
-  const isStaff = ['admin', 'sysadmin', 'super_admin'].includes(actor.role);
+  const isStaff = isAdminRole(actor.role);
   const isCoach = actor.role === 'coach';
 
   // Staff openings are not part of the bandeja — they're the ones who uploaded
@@ -262,6 +267,23 @@ export async function submitLesson(formData: FormData) {
     .single();
 
   if (!lesson || lesson.status !== 'unlocked') return { error: 'Esta clase no acepta entregas en este momento' };
+
+  // ── Strict-round check: can't submit a new version until the coach responds ─
+  const { data: latestSub } = await supabase
+    .from('submissions')
+    .select('status, version')
+    .eq('user_id', profile.id)
+    .eq('lesson_id', lessonId)
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestSub?.status === 'pending_review') {
+    return { error: 'Tu entrega está esperando devolución. Podrás subir una nueva versión cuando tu coach te responda.' };
+  }
+  if (latestSub?.status === 'approved') {
+    return { error: '¡Esta entrega ya fue aprobada! El hilo está cerrado.' };
+  }
 
   const isLate = !!(
     lesson.unlocked_at &&
@@ -370,5 +392,152 @@ async function isStaff(supabase: Awaited<ReturnType<typeof createClient>>) {
     .select('role')
     .eq('user_id', user.id)
     .single();
-  return ['admin', 'sysadmin', 'super_admin'].includes(data?.role ?? '');
+  return isAdminRole(data?.role ?? '');
+}
+
+// ── submission: get signed URL for coach's revised file ──────────────────────
+
+export async function getStudentReviewFileUrl(storagePath: string) {
+  if (!storagePath) return { error: 'Ruta inválida' };
+  const supabase = await createClient();
+  const profileId = await getProfileId();
+  if (!profileId) return { error: 'No autenticado' };
+
+  // Verify the student owns a submission that has a review with this path
+  const { data: review } = await supabase
+    .from('submission_reviews')
+    .select('id, submission_id, submissions(user_id)')
+    .eq('revised_storage_path', storagePath)
+    .maybeSingle();
+
+  const ownsSubmission = (review as any)?.submissions?.user_id === profileId;
+  if (!ownsSubmission) return { error: 'Sin acceso' };
+
+  const { data } = await supabase.storage
+    .from('submissions')
+    .createSignedUrl(storagePath, 300);
+
+  return data ? { url: data.signedUrl } : { error: 'No se pudo generar el enlace' };
+}
+
+// ── submission: get full thread for current student ──────────────────────────
+
+export async function getStudentThread(lessonId: string): Promise<SubmissionThread | null> {
+  const supabase = await createClient();
+  const profileId = await getProfileId();
+  if (!profileId) return null;
+
+  // All versions this student has submitted for this lesson
+  const { data: rawSubs } = await supabase
+    .from('submissions')
+    .select('id, file_name, storage_path, is_late, version, status, approved_by, approved_at, submitted_at')
+    .eq('user_id', profileId)
+    .eq('lesson_id', lessonId)
+    .order('version', { ascending: true });
+
+  if (!rawSubs || rawSubs.length === 0) return null;
+
+  const submissionIds = rawSubs.map(s => s.id);
+
+  // All reviews on those submissions
+  const { data: rawReviews } = await supabase
+    .from('submission_reviews')
+    .select('id, submission_id, reviewed_by, feedback_text, revised_storage_path, revised_file_name, reviewed_at, profiles(first_name, last_name)')
+    .in('submission_id', submissionIds)
+    .order('reviewed_at', { ascending: true });
+
+  // Chat messages for this thread
+  const { data: rawChat } = await supabase
+    .from('submission_chat_messages')
+    .select('id, author_id, body, created_at, profiles(first_name, last_name, role)')
+    .eq('lesson_id', lessonId)
+    .eq('student_id', profileId)
+    .order('created_at', { ascending: true });
+
+  // ── Map raw rows to typed shapes ─────────────────────────────────────────
+  const submissions: Submission[] = rawSubs.map(s => ({
+    ...s,
+    user_id: profileId,
+    lesson_id: lessonId,
+    status: s.status as SubmissionStatus,
+  }));
+
+  const reviewsBySubmission: Record<string, SubmissionReview[]> = {};
+  for (const r of (rawReviews ?? [])) {
+    const p = (r as any).profiles;
+    const mapped: SubmissionReview = {
+      id: r.id,
+      submission_id: r.submission_id,
+      reviewed_by: r.reviewed_by,
+      feedback_text: r.feedback_text,
+      revised_storage_path: r.revised_storage_path,
+      revised_file_name: r.revised_file_name,
+      reviewed_at: r.reviewed_at,
+      reviewer_name: p ? `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || null : null,
+    };
+    if (!reviewsBySubmission[r.submission_id]) reviewsBySubmission[r.submission_id] = [];
+    reviewsBySubmission[r.submission_id].push(mapped);
+  }
+
+  const chatMessages: ChatMessage[] = (rawChat ?? []).map((m: any) => {
+    const p = m.profiles;
+    const role: string = p?.role ?? 'student';
+    return {
+      id: m.id,
+      lesson_id: lessonId,
+      student_id: profileId,
+      author_id: m.author_id,
+      body: m.body,
+      created_at: m.created_at,
+      author_name: p ? `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || null : null,
+      author_side: isReviewerRole(role) ? 'reviewer' : 'student',
+    };
+  });
+
+  // ── Unified sorted timeline ───────────────────────────────────────────────
+  const timeline: ThreadItem[] = [];
+  for (const sub of submissions) {
+    timeline.push({ kind: 'submission', data: sub });
+    for (const rev of (reviewsBySubmission[sub.id] ?? [])) {
+      timeline.push({ kind: 'review', data: rev });
+    }
+  }
+  for (const msg of chatMessages) {
+    timeline.push({ kind: 'chat', data: msg });
+  }
+  timeline.sort((a, b) => {
+    const d = (item: ThreadItem) =>
+      item.kind === 'submission' ? item.data.submitted_at
+      : item.kind === 'review'   ? item.data.reviewed_at
+      :                            item.data.created_at;
+    return new Date(d(a)).getTime() - new Date(d(b)).getTime();
+  });
+
+  const latestStatus = submissions[submissions.length - 1].status;
+
+  return { status: latestStatus, submissions, reviewsBySubmission, chatMessages, timeline };
+}
+
+// ── chat: student posts a message ────────────────────────────────────────────
+
+export async function postStudentChatMessage(lessonId: string, body: string) {
+  const trimmed = body.trim();
+  if (!trimmed) return { error: 'El mensaje no puede estar vacío' };
+  if (trimmed.length > 2000) return { error: 'Máximo 2000 caracteres' };
+
+  const supabase = await createClient();
+  const profileId = await getProfileId();
+  if (!profileId) return { error: 'No autenticado' };
+
+  const { error } = await supabase
+    .from('submission_chat_messages')
+    .insert({
+      lesson_id: lessonId,
+      student_id: profileId,
+      author_id: profileId,
+      body: trimmed,
+    });
+
+  if (error) return { error: error.message };
+  return { success: true };
 }

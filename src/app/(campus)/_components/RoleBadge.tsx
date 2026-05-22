@@ -1,10 +1,11 @@
 import { IoShieldCheckmarkOutline, IoPersonOutline } from 'react-icons/io5';
+import { isAdminRole } from '@/src/services/roleService';
 
 type RoleBadgeVariant = 'organizador' | 'coach';
 
 function resolveVariant(role?: string | null): RoleBadgeVariant | null {
   if (!role) return null;
-  if (['admin', 'sysadmin', 'super_admin'].includes(role)) return 'organizador';
+  if (isAdminRole(role)) return 'organizador';
   if (role === 'coach') return 'coach';
   return null;
 }

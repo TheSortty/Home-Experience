@@ -24,7 +24,8 @@ export type ActivityEventType =
   | 'student.work_submitted'
   | 'student.forum_question'
   | 'coach.material_accessed'
-  | 'coach.work_returned';
+  | 'coach.work_returned'
+  | 'coach.work_approved';
 
 export type ActivityTargetKind =
   | 'lesson_resource'

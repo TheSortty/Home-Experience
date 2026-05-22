@@ -11,14 +11,16 @@ import {
   IoChevronForwardOutline,
 } from 'react-icons/io5';
 import { markLessonComplete, trackLessonEnter, trackVideoPlay, trackResourceOpen } from '../../actions';
+import { isReviewerRole } from '@/src/services/roleService';
 import LessonForum, { type LessonPost } from './LessonForum';
-import SubmissionTab, { type SubmissionData } from './SubmissionTab';
+import SubmissionTab from './SubmissionTab';
+import type { SubmissionTabData } from '@/src/types/submissions';
 
 export interface LessonResource {
   id: string;
   title: string;
   file_url: string;
-  type: string;
+  type: string | null;
 }
 
 export interface LessonVideo {
@@ -43,7 +45,8 @@ interface Props {
   initialPosts: LessonPost[];
   currentUserName: string;
   currentUserRole?: string | null;
-  submissionData: SubmissionData;
+  studentProfileId?: string | null;
+  submissionData: SubmissionTabData;
 }
 
 function getYoutubeEmbedUrl(url: string): string | null {
@@ -75,6 +78,7 @@ export default function LessonViewer({
   initialPosts,
   currentUserName,
   currentUserRole,
+  studentProfileId,
   submissionData,
 }: Props) {
   const [isCompleted, setIsCompleted] = useState(initialCompleted);
@@ -91,7 +95,7 @@ export default function LessonViewer({
 
   const trackedVideosRef = useRef<Set<number>>(new Set());
   const enterTrackedRef = useRef(false);
-  const isStaff = !!(currentUserRole && ['admin', 'sysadmin', 'super_admin', 'coach'].includes(currentUserRole));
+  const isStaff = !!(currentUserRole && isReviewerRole(currentUserRole));
 
   // Track first entry
   useEffect(() => {
@@ -142,7 +146,7 @@ export default function LessonViewer({
     { id: 'materiales' as const, label: `Materiales${resources.length > 0 ? ` (${resources.length})` : ''}` },
     { id: 'foro' as const, label: 'Foro' },
     ...(submissionData.requiresSubmission
-      ? [{ id: 'entrega' as const, label: submissionData.latestSubmission ? 'Entrega ✓' : 'Entrega' }]
+      ? [{ id: 'entrega' as const, label: submissionData.thread?.status === 'approved' ? 'Entrega ✓' : 'Entrega' }]
       : []),
   ];
 
@@ -376,7 +380,12 @@ export default function LessonViewer({
           )}
 
           {activeTab === 'entrega' && (
-            <SubmissionTab lessonId={lessonId} courseId={courseId} data={submissionData} />
+            <SubmissionTab
+              lessonId={lessonId}
+              courseId={courseId}
+              data={submissionData}
+              studentProfileId={studentProfileId}
+            />
           )}
         </div>
       </div>

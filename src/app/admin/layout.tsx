@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
-import { resolveRole, isAdminRole } from '@/src/services/roleService'
+import { resolveRole, isAdminRole, isReviewerRole } from '@/src/services/roleService'
 
 const LoadingFallback = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white">
@@ -17,7 +17,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const role = await resolveRole(supabase, user.id)
   
-  if (!isAdminRole(role)) {
+  // Admins & coaches can enter the admin section.
+  // Coaches are redirected away from the dashboard to their review area.
+  if (!isReviewerRole(role)) {
     redirect('/dashboard')
   }
 

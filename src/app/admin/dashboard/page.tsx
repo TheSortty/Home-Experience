@@ -1,16 +1,20 @@
-'use client'
+import { createClient } from '@/utils/supabase/server';
+import { resolveRole, isAdminRole } from '@/src/services/roleService';
+import { redirect } from 'next/navigation';
+import AdminDashboardClient from './AdminDashboardClient';
 
-import React from 'react'
-import { useRouter } from 'next/navigation'
-import AdminDashboard from '@/src/features/dashboard/AdminDashboard'
+export default async function AdminDashboardPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/auth/login');
 
-export default function AdminDashboardPage() {
-  const router = useRouter()
+  const role = await resolveRole(supabase, user.id);
 
-  return (
-    <AdminDashboard
-      onLogout={() => router.push('/')}
-      onRegisterTest={() => router.push('/auth/register')}
-    />
-  )
+  // Coaches can reach /admin (layout allows them), but the full admin dashboard
+  // is not for them — send them directly to their review area.
+  if (!isAdminRole(role)) {
+    redirect('/admin/lms');
+  }
+
+  return <AdminDashboardClient />;
 }

@@ -166,7 +166,7 @@ const TestimonialFormModal: React.FC<TestimonialFormModalProps> = ({ isOpen, onC
 
             const { error: insertError } = await supabase
                 .from('testimonials')
-                .insert([payload]);
+                .insert([payload as any]);
 
             if (insertError) throw insertError;
 

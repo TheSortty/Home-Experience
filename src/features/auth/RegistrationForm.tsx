@@ -516,16 +516,10 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
                 .single();
 
             if (data && data.schema) {
-                console.log('Form schema fetched successfully from Supabase:', data.id);
-                let schema = Array.isArray(data.schema) ? data.schema : JSON.parse(data.schema);
-                
-                // Log the sections found in the schema to help debug missing steps
-                const sections = [...new Set(schema.map((f: any) => f.section))];
-                console.log('Available sections in fetched schema:', sections);
-
+                let schema = Array.isArray(data.schema) ? data.schema : JSON.parse(data.schema as string);
                 schema = injectSelectedService(schema);
                 setFields(schema);
-                setFormId(data.id);
+                setFormId(data.id as string);
 
                 // Initialize data for new fields
                 setFormData(prev => {

@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { isAdminRole } from '@/src/services/roleService';
 import {
   IoArrowBackOutline,
   IoCheckmarkCircle,
@@ -30,7 +31,7 @@ export default async function ActividadPage({
 
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('user_id', user.id).single();
-  if (!['admin', 'sysadmin', 'super_admin'].includes(profile?.role ?? '')) redirect('/dashboard');
+  if (!isAdminRole(profile?.role ?? '')) redirect('/dashboard');
 
   // Courses with LMS content
   const { data: courses } = await supabase

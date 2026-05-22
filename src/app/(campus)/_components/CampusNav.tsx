@@ -6,32 +6,44 @@ import { usePathname } from 'next/navigation';
 import {
   IoHomeOutline, IoBookOutline, IoCalendarOutline,
   IoPeopleOutline, IoMenuOutline, IoCloseOutline,
+  IoCheckmarkDoneOutline,
 } from 'react-icons/io5';
+import { isAdminRole } from '@/src/services/roleService';
 
-const NAV_LINKS = [
+const BASE_LINKS = [
   { href: '/dashboard',  label: 'Inicio',     icon: IoHomeOutline     },
   { href: '/cursos',     label: 'Mis Cursos', icon: IoBookOutline     },
   { href: '/comunidad',  label: 'Comunidad',  icon: IoPeopleOutline   },
   { href: '/calendario', label: 'Calendario', icon: IoCalendarOutline },
 ];
 
-export default function CampusNav() {
+interface Props {
+  role?: string;
+}
+
+export default function CampusNav({ role }: Props) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const isCoachOrAdmin = role === 'coach' || isAdminRole(role ?? '');
+
+  const navLinks = isCoachOrAdmin
+    ? [
+        ...BASE_LINKS,
+        { href: '/admin/lms', label: 'Entregas', icon: IoCheckmarkDoneOutline },
+      ]
+    : BASE_LINKS;
 
   const isActive = (href: string) =>
     href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href);
 
-  // Close mobile drawer when route changes
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   return (
     <>
       {/* Desktop horizontal nav */}
       <nav className="hidden md:flex items-center gap-1">
-        {NAV_LINKS.map(({ href, label }) => (
+        {navLinks.map(({ href, label }) => (
           <Link
             key={href}
             href={href}
@@ -73,7 +85,7 @@ export default function CampusNav() {
               </button>
             </div>
             <nav className="flex-1 px-4 py-4 space-y-1">
-              {NAV_LINKS.map(({ href, label, icon: Icon }) => (
+              {navLinks.map(({ href, label, icon: Icon }) => (
                 <Link
                   key={href}
                   href={href}
