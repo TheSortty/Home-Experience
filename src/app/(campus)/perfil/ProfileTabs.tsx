@@ -8,7 +8,7 @@ import {
   IoCameraOutline, IoCloudUploadOutline,
 } from 'react-icons/io5';
 import { updateProfile, updateMedicalInfo, changePassword, uploadAvatar } from './actions';
-import { compressToWebP } from '@/src/utils/imageCompress';
+import ImageCropper from '../_components/ImageCropper';
 
 type Tab = 'personal' | 'emergencia' | 'seguridad';
 
@@ -51,26 +51,34 @@ function Feedback({ result }: { result: { success?: boolean; error?: string } | 
 // ─── Avatar Uploader ─────────────────────────────────────────────────────────
 
 function AvatarUploader({ initials, avatarUrl }: { initials: string; avatarUrl: string | null }) {
-  const [preview, setPreview] = useState<string | null>(null);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview]       = useState<string | null>(null);
+  const [rawFile, setRawFile]       = useState<File | null>(null);   // before crop
+  const [pendingFile, setPendingFile] = useState<File | null>(null); // after crop
+  const [uploading, setUploading]   = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success?: boolean; error?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const currentAvatar = preview ?? avatarUrl;
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  const currentAvatar = preview ?? avatarUrl;
+  const cropMode = rawFile !== null;
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadResult(null);
-    try {
-      const compressed = await compressToWebP(file);
-      setPendingFile(compressed);
-      setPreview(URL.createObjectURL(compressed));
-    } catch {
-      setUploadResult({ error: 'No se pudo procesar la imagen.' });
-    }
-    // Reset input so the same file can be re-selected
+    setRawFile(file);
     e.target.value = '';
+  }
+
+  function handleCropConfirm(cropped: File) {
+    if (preview) URL.revokeObjectURL(preview);
+    setPendingFile(cropped);
+    setPreview(URL.createObjectURL(cropped));
+    setRawFile(null);
+  }
+
+  function handleCropCancel() {
+    setRawFile(null);
+    fileInputRef.current?.click(); // go straight back to picker
   }
 
   async function handleSave() {
@@ -93,6 +101,18 @@ function AvatarUploader({ initials, avatarUrl }: { initials: string; avatarUrl: 
     setPendingFile(null);
     if (preview) { URL.revokeObjectURL(preview); setPreview(null); }
     setUploadResult(null);
+  }
+
+  /* ── Crop mode: show the cropper in place of the avatar ── */
+  if (cropMode) {
+    return (
+      <ImageCropper
+        file={rawFile!}
+        displaySize={200}
+        onConfirm={handleCropConfirm}
+        onCancel={handleCropCancel}
+      />
+    );
   }
 
   return (
