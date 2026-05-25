@@ -6,6 +6,7 @@ import { resolveRole } from '@/src/services/roleService';
 import CampusNav from './_components/CampusNav';
 import ProfileMenu from './_components/ProfileMenu';
 import StaffModeBar from './_components/StaffModeBar';
+import WelcomeProfileModal from './_components/WelcomeProfileModal';
 
 export const metadata = {
   title: 'Mi Campus | HOME Experience',
@@ -20,11 +21,12 @@ export default async function CampusLayout({ children }: { children: React.React
 
   const role = await resolveRole(supabase, user.id);
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('first_name, last_name, email, avatar_url')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: profile } = await (supabase
+    .from('profiles') as any)
+    .select('first_name, last_name, email, avatar_url, profile_completed_at')
     .eq('user_id', user.id)
-    .single();
+    .single() as { data: { first_name: string; last_name: string; email: string; avatar_url: string | null; profile_completed_at: string | null } | null };
 
   const firstName = profile?.first_name || 'Alumno';
   const lastName  = profile?.last_name  || '';
@@ -33,6 +35,9 @@ export default async function CampusLayout({ children }: { children: React.React
   const initials  =
     firstName.substring(0, 1).toUpperCase() +
     (lastName.substring(0, 1).toUpperCase() || '');
+
+  // Show modal when the user has never completed their profile
+  const showWelcome = profile?.profile_completed_at == null;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
@@ -72,6 +77,12 @@ export default async function CampusLayout({ children }: { children: React.React
       <main className="px-4 md:px-8 py-6 md:py-10">
         {children}
       </main>
+
+      {/* ── Welcome / profile-completion modal ────────────────────────── */}
+      <WelcomeProfileModal
+        firstName={firstName}
+        showOnLoad={showWelcome}
+      />
 
     </div>
   );

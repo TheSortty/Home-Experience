@@ -313,21 +313,21 @@ export default async function ClasePage({
             <div className="bg-slate-900 rounded-2xl aspect-video flex items-center justify-center text-white/60">
               <div className="text-center px-8">
                 <IoLockClosedOutline size={64} className="mx-auto mb-4 opacity-40" />
-                <h2 className="text-xl font-bold text-white mb-2">Clase bloqueada</h2>
+                <h2 className="text-xl font-bold text-white mb-2">Tema bloqueado</h2>
                 {lesson.unlock_at ? (
                   <p className="text-sm text-white/60">
                     Se libera el <strong className="text-white/80">{formatUnlockDate(lesson.unlock_at)}</strong>
                   </p>
                 ) : (
                   <p className="text-sm text-white/60">
-                    Esta clase se desbloqueará pronto.
+                    Este tema se desbloqueará pronto.
                   </p>
                 )}
               </div>
             </div>
             <div className="mt-6 bg-white rounded-2xl border border-slate-200 p-6 text-center">
               <p className="text-slate-500 text-sm">
-                El contenido de esta clase todavía no está disponible.
+                El contenido de este tema todavía no está disponible.
                 {lesson.unlock_at && ` Volvé el ${formatUnlockDate(lesson.unlock_at)}.`}
               </p>
             </div>

@@ -246,7 +246,7 @@ export default function LessonViewer({
               </span>
               {!hasVideos && (
                 <span className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-md flex items-center gap-1">
-                  <IoDocumentTextOutline size={12} /> Clase de lectura
+                  <IoDocumentTextOutline size={12} /> Tema de lectura
                 </span>
               )}
               {isMulti && (
@@ -288,7 +288,7 @@ export default function LessonViewer({
               }`}
             >
               <IoCheckmarkCircle size={20} />
-              {isCompleted ? 'Clase Completada' : isPending ? 'Guardando...' : 'Marcar como Terminada'}
+              {isCompleted ? 'Tema Completado' : isPending ? 'Guardando...' : 'Marcar como Terminado'}
             </button>
           )}
         </div>
@@ -315,13 +315,13 @@ export default function LessonViewer({
         <div className="p-6 md:p-8 min-h-[280px]">
           {activeTab === 'resumen' && (
             <div>
-              <h3 className="text-lg font-bold text-slate-900 mb-4">Sobre esta clase</h3>
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Sobre este tema</h3>
               {description ? (
                 <div className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
                   {description}
                 </div>
               ) : (
-                <p className="text-slate-400 italic">El instructor no añadió descripción para esta clase.</p>
+                <p className="text-slate-400 italic">El instructor no añadió descripción para este tema.</p>
               )}
             </div>
           )}
@@ -333,7 +333,7 @@ export default function LessonViewer({
                 Material Descargable
               </h3>
               {resources.length === 0 ? (
-                <p className="text-slate-400 italic">No hay materiales adjuntos para esta clase.</p>
+                <p className="text-slate-400 italic">No hay materiales adjuntos para este tema.</p>
               ) : (
                 <ul className="space-y-3">
                   {resources.map((r) => {

@@ -9,10 +9,10 @@ import { logEvent, getMyActorInfo } from '../../../services/activityEvents';
 import CoachAssignmentsPanel from './CoachAssignmentsPanel';
 import {
   IoAddOutline, IoTrashOutline, IoPencilOutline, IoChevronDownOutline,
-  IoChevronForwardOutline, IoEyeOutline, IoEyeOffOutline, IoArrowBackOutline,
-  IoBookOutline, IoCloseOutline, IoCheckmarkOutline, IoLinkOutline,
+  IoChevronForwardOutline, IoChevronBackOutline, IoEyeOutline, IoEyeOffOutline,
+  IoArrowBackOutline, IoBookOutline, IoCloseOutline, IoCheckmarkOutline,
   IoVideocamOutline, IoDocumentTextOutline, IoReorderFourOutline,
-  IoCalendarOutline, IoTimeOutline,
+  IoCalendarOutline, IoTimeOutline, IoLinkOutline,
 } from 'react-icons/io5';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,6 +32,7 @@ type Module = {
   title: string;
   order_index: number;
   is_published: boolean;
+  module_type: string;
 };
 
 type Lesson = {
@@ -179,15 +180,18 @@ function ModuleModal({
   mod,
   courseId,
   nextOrder,
+  moduleType,
   onClose,
   onSaved,
 }: {
   mod: Module | null;
   courseId: string;
   nextOrder: number;
+  moduleType?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const isWorkshop = mod ? mod.module_type === 'workshop' : moduleType === 'workshop';
   const [title, setTitle] = useState(mod?.title ?? '');
   const [order, setOrder] = useState(mod?.order_index ?? nextOrder);
   const [published, setPublished] = useState(mod?.is_published ?? true);
@@ -202,10 +206,10 @@ function ModuleModal({
       if (mod) {
         await restUpdate('modules', payload, { id: `eq.${mod.id}` });
       } else {
-        await restInsert('modules', { course_id: courseId, ...payload }, { returning: 'minimal' });
+        await restInsert('modules', { course_id: courseId, module_type: isWorkshop ? 'workshop' : 'module', ...payload }, { returning: 'minimal' });
       }
 
-      toast.success(mod ? 'Módulo actualizado.' : 'Módulo creado.');
+      toast.success(mod ? (isWorkshop ? 'Taller actualizado.' : 'Módulo actualizado.') : (isWorkshop ? 'Taller creado.' : 'Módulo creado.'));
       onSaved();
     } catch (err: any) {
       console.error('[ModuleModal] Unexpected error:', err);
@@ -219,13 +223,13 @@ function ModuleModal({
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-slate-200">
-          <h2 className="font-bold text-slate-900">{mod ? 'Editar Módulo' : 'Nuevo Módulo'}</h2>
+          <h2 className="font-bold text-slate-900">{mod ? (isWorkshop ? 'Editar Taller' : 'Editar Módulo') : (isWorkshop ? 'Nuevo Taller' : 'Nuevo Módulo')}</h2>
           <button onClick={onClose}><IoCloseOutline size={22} className="text-slate-400" /></button>
         </div>
         <div className="p-5 space-y-4">
           <div>
             <label className={labelCls}>Título *</label>
-            <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Módulo 1 — Fundamentos" />
+            <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder={isWorkshop ? 'Ej: Competencias del Coach' : 'Ej: Módulo 1 — Fundamentos'} />
           </div>
           <div>
             <label className={labelCls}>Orden</label>
@@ -414,7 +418,7 @@ function LessonModal({
         }
       }
 
-      toast.success(lesson ? 'Clase actualizada.' : 'Clase creada.');
+      toast.success(lesson ? 'Tema actualizado.' : 'Tema creado.');
       onSaved();
     } catch (err: any) {
       console.error('[LessonModal] Save error:', err);
@@ -479,7 +483,7 @@ function LessonModal({
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-5 border-b border-slate-200 flex-shrink-0">
-          <h2 className="font-bold text-slate-900">{lesson ? 'Editar Clase' : 'Nueva Clase'}</h2>
+          <h2 className="font-bold text-slate-900">{lesson ? 'Editar Tema' : 'Nuevo Tema'}</h2>
           <button onClick={onClose}><IoCloseOutline size={22} className="text-slate-400" /></button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
@@ -489,8 +493,8 @@ function LessonModal({
               <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Introducción al Coaching Ontológico" />
             </div>
             <div className="col-span-2">
-              <label className={labelCls}>Descripción / Contenido de la clase</label>
-              <textarea rows={4} className={inputCls} value={desc} onChange={e => setDesc(e.target.value)} placeholder="Si la clase es solo de lectura, usá este campo para el contenido completo." />
+              <label className={labelCls}>Descripción / Contenido del tema</label>
+              <textarea rows={4} className={inputCls} value={desc} onChange={e => setDesc(e.target.value)} placeholder="Si el tema es solo de lectura, usá este campo para el contenido completo." />
             </div>
             <div className="col-span-2">
               <div className="pt-2 border-t border-slate-100">
@@ -544,7 +548,7 @@ function LessonModal({
                 ))}
 
                 {videos.length === 0 && pendingVideos.length === 0 && (
-                  <p className="text-xs text-slate-400 italic mb-3">Sin videos todavía. Dejá vacío para clase de solo lectura.</p>
+                  <p className="text-xs text-slate-400 italic mb-3">Sin videos todavía. Dejá vacío para tema de solo lectura.</p>
                 )}
 
                 {/* Add video row */}
@@ -676,6 +680,213 @@ function LessonModal({
   );
 }
 
+// ─── Admin Calendar helpers ───────────────────────────────────────────────────
+
+const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const SHORT_DAYS = ['L','M','M','J','V','S','D'];
+
+function pad2(n: number) { return String(n).padStart(2, '0'); }
+function parseLocalDate(s: string) { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+function toISO(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+function buildGrid(year: number, month: number): Date[] {
+  const first = new Date(year, month, 1);
+  const offset = first.getDay() === 0 ? 6 : first.getDay() - 1;
+  const start = new Date(year, month, 1 - offset);
+  return Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
+}
+
+function AdminCourseCalendar({
+  sessions,
+  onDelete,
+  newDate, newTime, newLabel, newLocation, newMandatory, saving,
+  setNewDate, setNewTime, setNewLabel, setNewLocation, setNewMandatory,
+  onAdd,
+}: {
+  sessions: CourseSession[];
+  onDelete: (id: string) => void;
+  newDate: string; newTime: string; newLabel: string; newLocation: string; newMandatory: boolean; saving: boolean;
+  setNewDate: (v: string) => void; setNewTime: (v: string) => void; setNewLabel: (v: string) => void;
+  setNewLocation: (v: string) => void; setNewMandatory: (v: boolean) => void;
+  onAdd: () => void;
+}) {
+  const todayISO = toISO(new Date());
+  const initialMonth = (() => {
+    const upcoming = sessions.map(s => parseLocalDate(s.session_date)).filter(d => toISO(d) >= todayISO).sort((a, b) => a.getTime() - b.getTime())[0];
+    const ref = upcoming ?? new Date();
+    return { year: ref.getFullYear(), month: ref.getMonth() };
+  })();
+  const [{ year, month }, setDisplayed] = useState(initialMonth);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const byDate = new Map<string, CourseSession[]>();
+  sessions.forEach(s => {
+    const list = byDate.get(s.session_date) ?? [];
+    list.push(s);
+    byDate.set(s.session_date, list);
+  });
+  const cells = buildGrid(year, month);
+
+  const listSessions = selectedDate
+    ? (byDate.get(selectedDate) ?? [])
+    : [...sessions].sort((a, b) => a.session_date.localeCompare(b.session_date));
+
+  const upcoming = listSessions.filter(s => s.session_date >= todayISO);
+  const past = listSessions.filter(s => s.session_date < todayISO).reverse();
+  const ordered = [...upcoming, ...past];
+
+  const goPrev = () => { const d = new Date(year, month - 1, 1); setDisplayed({ year: d.getFullYear(), month: d.getMonth() }); };
+  const goNext = () => { const d = new Date(year, month + 1, 1); setDisplayed({ year: d.getFullYear(), month: d.getMonth() }); };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
+
+      {/* ── Month grid ── */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-xl font-bold text-slate-900 capitalize">
+            {MONTHS_ES[month]} <span className="text-slate-400 font-normal text-base">{year}</span>
+          </h3>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { setDisplayed({ year: new Date().getFullYear(), month: new Date().getMonth() }); setSelectedDate(null); }}
+              className="px-2.5 py-1 text-xs font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              Hoy
+            </button>
+            <button onClick={goPrev} className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
+              <IoChevronBackOutline size={16} />
+            </button>
+            <button onClick={goNext} className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
+              <IoChevronForwardOutline size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Day headers */}
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {SHORT_DAYS.map((d, i) => (
+            <div key={i} className="text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">{d}</div>
+          ))}
+        </div>
+
+        {/* Cells */}
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((d) => {
+            const iso = toISO(d);
+            const inMonth = d.getMonth() === month;
+            const isToday = iso === todayISO;
+            const isSelected = iso === selectedDate;
+            const daySessions = byDate.get(iso) ?? [];
+            const hasSessions = daySessions.length > 0;
+            const isPast = iso < todayISO;
+            return (
+              <button
+                key={iso}
+                onClick={() => setSelectedDate(isSelected ? null : iso)}
+                disabled={!hasSessions && !isToday}
+                className={`
+                  aspect-square flex flex-col items-center justify-start p-1 gap-1 rounded-lg text-sm transition-colors
+                  ${isSelected ? 'bg-slate-900 text-white' : isToday ? 'bg-[#00A9CE]/10 ring-1 ring-[#00A9CE]/40' : hasSessions ? 'bg-slate-50 hover:bg-slate-100 cursor-pointer' : !inMonth ? 'opacity-30' : 'disabled:cursor-default'}
+                `}
+              >
+                <span className={`text-xs font-bold leading-none ${isSelected ? 'text-white' : isToday ? 'text-[#00A9CE]' : !inMonth || isPast ? 'text-slate-400' : 'text-slate-700'}`}>
+                  {d.getDate()}
+                </span>
+                {hasSessions && (
+                  <div className="flex flex-wrap gap-0.5 justify-center">
+                    {daySessions.slice(0, 3).map((_, i) => (
+                      <span key={i} className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : s => s.is_mandatory ? 'bg-[#00A9CE]' : 'bg-amber-400'}`} style={{ backgroundColor: isSelected ? 'white' : '#00A9CE' }} />
+                    ))}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected day tag */}
+        {selectedDate && (
+          <button
+            onClick={() => setSelectedDate(null)}
+            className="mt-3 flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors"
+          >
+            <IoCloseOutline size={14} />
+            {parseLocalDate(selectedDate).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
+          </button>
+        )}
+      </div>
+
+      {/* ── Sessions panel + form ── */}
+      <div className="space-y-4">
+
+        {/* Session list */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-2 max-h-64 overflow-y-auto">
+          {ordered.length === 0 ? (
+            <p className="text-xs text-slate-400 italic text-center py-4">
+              {selectedDate ? 'Sin encuentros en esta fecha.' : 'Sin encuentros agendados.'}
+            </p>
+          ) : (
+            ordered.map(s => {
+              const dateObj = parseLocalDate(s.session_date);
+              const isPast = s.session_date < todayISO;
+              return (
+                <div key={s.id} className={`flex items-start gap-2.5 rounded-xl px-3 py-2.5 ${isPast ? 'bg-slate-50' : 'bg-[#00A9CE]/5 border border-[#00A9CE]/10'}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-xs font-bold ${isPast ? 'text-slate-500' : 'text-slate-800'}`}>
+                        {dateObj.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                        {s.session_time ? ` · ${s.session_time.slice(0, 5)}` : ''}
+                      </span>
+                      {!s.is_mandatory && (
+                        <span className="text-[9px] font-black uppercase bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                          Opcional
+                        </span>
+                      )}
+                    </div>
+                    {s.label && <p className="text-xs text-slate-600 truncate mt-0.5">{s.label}</p>}
+                    {s.location_url && (
+                      <a href={s.location_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#00A9CE] hover:underline truncate block">
+                        🔗 Ver link
+                      </a>
+                    )}
+                  </div>
+                  <button onClick={() => onDelete(s.id)} className="text-slate-300 hover:text-red-500 shrink-0 transition-colors p-0.5">
+                    <IoTrashOutline size={13} />
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Quick-add form */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-2.5">
+          <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Nuevo encuentro</p>
+          <div className="grid grid-cols-2 gap-2">
+            <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]" />
+            <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]" />
+          </div>
+          <input type="text" value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Título (ej: Sesión 1 — Apertura)"
+            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]" />
+          <input type="url" value={newLocation} onChange={e => setNewLocation(e.target.value)} placeholder="Link (Zoom/Meet, opcional)"
+            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]" />
+          <label className="flex items-center justify-between text-xs text-slate-700">
+            <span>Obligatorio</span>
+            <Toggle checked={newMandatory} onChange={setNewMandatory} />
+          </label>
+          <button onClick={onAdd} disabled={saving || !newDate}
+            className="w-full flex items-center justify-center gap-1.5 bg-[#00A9CE] text-white text-xs font-bold py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors">
+            <IoAddOutline size={14} /> {saving ? 'Agregando…' : 'Agregar encuentro'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdminCourses() {
@@ -692,7 +903,7 @@ export default function AdminCourses() {
 
   // Modals
   const [courseModal, setCourseModal] = useState<{ open: boolean; course: Course | null }>({ open: false, course: null });
-  const [moduleModal, setModuleModal] = useState<{ open: boolean; mod: Module | null; courseId: string } | null>(null);
+  const [moduleModal, setModuleModal] = useState<{ open: boolean; mod: Module | null; courseId: string; moduleType?: string } | null>(null);
   const [lessonModal, setLessonModal] = useState<{ open: boolean; lesson: Lesson | null; moduleId: string } | null>(null);
   const [courseSessions, setCourseSessions] = useState<CourseSession[]>([]);
   const [newSessionDate, setNewSessionDate] = useState('');
@@ -701,6 +912,7 @@ export default function AdminCourses() {
   const [newSessionLocation, setNewSessionLocation] = useState('');
   const [newSessionMandatory, setNewSessionMandatory] = useState(true);
   const [savingSession, setSavingSession] = useState(false);
+  const [courseTab, setCourseTab] = useState<'modules' | 'workshop' | 'calendar'>('modules');
   const hasLoadedOnceRef = useRef(false);
 
   const fetchData = useCallback(async (_isBackgroundRefresh = false) => {
@@ -789,7 +1001,7 @@ export default function AdminCourses() {
   };
 
   const deleteModule = async (id: string) => {
-    if (!confirm('¿Eliminar este módulo y todas sus clases?')) return;
+    if (!confirm('¿Eliminar este módulo y todos sus temas?')) return;
     try {
       await restDelete('modules', { id: `eq.${id}` });
       setModules(prev => prev.filter(m => m.id !== id));
@@ -800,13 +1012,13 @@ export default function AdminCourses() {
   };
 
   const deleteLesson = async (id: string) => {
-    if (!confirm('¿Eliminar esta clase?')) return;
+    if (!confirm('¿Eliminar este tema?')) return;
     try {
       await restDelete('lessons', { id: `eq.${id}` });
       setLessons(prev => prev.filter(l => l.id !== id));
       toast.success('Clase eliminada');
     } catch (err: any) {
-      toast.error('Error al eliminar clase: ' + err.message);
+      toast.error('Error al eliminar tema: ' + err.message);
     }
   };
 
@@ -919,7 +1131,7 @@ export default function AdminCourses() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-slate-900">Gestión de Cursos LMS</h2>
-            <p className="text-sm text-slate-500 mt-0.5">Administrá cursos, módulos, clases y materiales.</p>
+            <p className="text-sm text-slate-500 mt-0.5">Administrá cursos, módulos, temas y materiales.</p>
           </div>
           <button
             onClick={() => setCourseModal({ open: true, course: null })}
@@ -1005,7 +1217,7 @@ export default function AdminCourses() {
         </button>
         <div className="flex-1 min-w-0">
           <h2 className="text-xl font-bold text-slate-900 truncate">{selectedCourse.title}</h2>
-          <p className="text-sm text-slate-500">{modules.filter(m => m.course_id === selectedCourse.id).length} módulos · {lessons.filter(l => modules.filter(m => m.course_id === selectedCourse.id).map(m => m.id).includes(l.module_id)).length} clases</p>
+          <p className="text-sm text-slate-500">{modules.filter(m => m.course_id === selectedCourse.id).length} módulos · {lessons.filter(l => modules.filter(m => m.course_id === selectedCourse.id).map(m => m.id).includes(l.module_id)).length} temas</p>
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${selectedCourse.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -1019,46 +1231,115 @@ export default function AdminCourses() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-        {/* Modules + Lessons — 2 cols */}
-        <div className="xl:col-span-2 space-y-3">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="font-bold text-slate-700">Módulos y Clases</h3>
-            <button
-              onClick={() => setModuleModal({ open: true, mod: null, courseId: selectedCourse.id })}
-              className="flex items-center gap-1.5 text-sm font-bold text-[#00A9CE] hover:underline"
-            >
-              <IoAddOutline size={16} /> Módulo
-            </button>
+        {/* Modules + Lessons / Calendar — 2 cols */}
+        <div className="xl:col-span-2 space-y-4">
+          {/* Tabs */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex bg-slate-100 p-0.5 rounded-xl gap-0.5">
+              <button
+                onClick={() => setCourseTab('modules')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'modules' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <span className="text-base leading-none">📚</span> Módulos y Temas
+              </button>
+              <button
+                onClick={() => setCourseTab('workshop')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'workshop' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500 hover:text-amber-600'}`}
+              >
+                <span className="text-base leading-none">🎯</span> Taller
+                {modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'workshop').length > 0 && (
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${courseTab === 'workshop' ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-500'}`}>
+                    {modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'workshop').length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setCourseTab('calendar')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'calendar' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <span className="text-base leading-none">🗓️</span> Calendario
+                {courseSessionsForSelected.length > 0 && (
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${courseTab === 'calendar' ? 'bg-slate-100 text-slate-600' : 'bg-slate-200 text-slate-500'}`}>
+                    {courseSessionsForSelected.length}
+                  </span>
+                )}
+              </button>
+            </div>
+            {courseTab === 'modules' && (
+              <button
+                onClick={() => setModuleModal({ open: true, mod: null, courseId: selectedCourse.id, moduleType: 'module' })}
+                className="flex items-center gap-1.5 text-sm font-bold text-[#00A9CE] hover:underline"
+              >
+                <IoAddOutline size={16} /> Módulo
+              </button>
+            )}
+            {courseTab === 'workshop' && (
+              <button
+                onClick={() => setModuleModal({ open: true, mod: null, courseId: selectedCourse.id, moduleType: 'workshop' })}
+                className="flex items-center gap-1.5 text-sm font-bold text-amber-600 hover:underline"
+              >
+                <IoAddOutline size={16} /> Taller
+              </button>
+            )}
           </div>
 
-          {loadingCourses && modules.filter(m => m.course_id === selectedCourse.id).length === 0 ? (
-            <div className="text-center py-10 text-slate-400 text-sm">Cargando...</div>
-          ) : modules.filter(m => m.course_id === selectedCourse.id).length === 0 ? (
-            <div className="bg-white rounded-xl border-2 border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm">
-              No hay módulos. Creá el primero para comenzar.
-            </div>
-          ) : (
-            modules.filter(m => m.course_id === selectedCourse.id).map(mod => {
+          {courseTab === 'calendar' && (
+            <AdminCourseCalendar
+              sessions={courseSessionsForSelected}
+              onDelete={deleteCourseSession}
+              newDate={newSessionDate} newTime={newSessionTime} newLabel={newSessionLabel}
+              newLocation={newSessionLocation} newMandatory={newSessionMandatory} saving={savingSession}
+              setNewDate={setNewSessionDate} setNewTime={setNewSessionTime} setNewLabel={setNewSessionLabel}
+              setNewLocation={setNewSessionLocation} setNewMandatory={setNewSessionMandatory}
+              onAdd={addCourseSession}
+            />
+          )}
+
+          {(courseTab === 'modules' || courseTab === 'workshop') && (() => {
+            const isWorkshopTab = courseTab === 'workshop';
+            const filteredMods = modules.filter(m =>
+              m.course_id === selectedCourse.id &&
+              (isWorkshopTab ? m.module_type === 'workshop' : m.module_type !== 'workshop')
+            );
+            const accentColor = isWorkshopTab ? 'text-amber-600' : 'text-[#00A9CE]';
+            const accentBg = isWorkshopTab ? 'bg-amber-500' : 'bg-[#00A9CE]';
+            const emptyLabel = isWorkshopTab
+              ? 'No hay talleres todavía. Creá el primero para comenzar.'
+              : 'No hay módulos. Creá el primero para comenzar.';
+
+            if (loadingCourses && filteredMods.length === 0) {
+              return <div className="text-center py-10 text-slate-400 text-sm">Cargando...</div>;
+            }
+            if (filteredMods.length === 0) {
+              return (
+                <div className="bg-white rounded-xl border-2 border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm">
+                  {emptyLabel}
+                </div>
+              );
+            }
+            return filteredMods.map(mod => {
               const modLessons = lessons.filter(l => l.module_id === mod.id).sort((a, b) => a.order_index - b.order_index);
               const isOpen = expandedModule === mod.id;
               return (
-                <div key={mod.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div key={mod.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden ${isWorkshopTab ? 'border-amber-100' : 'border-slate-200'}`}>
                   {/* Module header */}
                   <div
-                    className="flex items-center gap-3 p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                    className={`flex items-center gap-3 p-4 cursor-pointer transition-colors ${isWorkshopTab ? 'hover:bg-amber-50/40' : 'hover:bg-slate-50'}`}
                     onClick={() => setExpandedModule(isOpen ? null : mod.id)}
                   >
                     <IoReorderFourOutline size={18} className="text-slate-300" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-400">Módulo {mod.order_index}</span>
+                        <span className={`text-xs font-bold ${isWorkshopTab ? 'text-amber-500' : 'text-slate-400'}`}>
+                          {isWorkshopTab ? '🎯 Taller' : `Módulo ${mod.order_index}`}
+                        </span>
                         {!mod.is_published && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">Oculto</span>}
                       </div>
                       <h4 className="font-bold text-slate-900 truncate">{mod.title}</h4>
                     </div>
-                    <span className="text-xs text-slate-400 font-medium shrink-0">{modLessons.length} clases</span>
+                    <span className="text-xs text-slate-400 font-medium shrink-0">{modLessons.length} temas</span>
                     <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => setModuleModal({ open: true, mod, courseId: selectedCourse.id })} className="p-1.5 text-slate-400 hover:text-[#00A9CE]">
+                      <button onClick={() => setModuleModal({ open: true, mod, courseId: selectedCourse.id })} className={`p-1.5 text-slate-400 hover:${accentColor}`}>
                         <IoPencilOutline size={14} />
                       </button>
                       <button onClick={() => deleteModule(mod.id)} className="p-1.5 text-slate-400 hover:text-red-500">
@@ -1070,9 +1351,9 @@ export default function AdminCourses() {
 
                   {/* Lessons */}
                   {isOpen && (
-                    <div className="border-t border-slate-100">
+                    <div className={`border-t ${isWorkshopTab ? 'border-amber-100' : 'border-slate-100'}`}>
                       {modLessons.map((lesson, idx) => (
-                        <div key={lesson.id} className="flex items-center gap-3 px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 group">
+                        <div key={lesson.id} className={`flex items-center gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50/50 group ${isWorkshopTab ? 'border-amber-50' : 'border-slate-50'}`}>
                           <span className="text-xs text-slate-400 font-mono w-4 shrink-0">{idx + 1}</span>
                           <IoVideocamOutline size={14} className="text-slate-300 shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -1086,17 +1367,17 @@ export default function AdminCourses() {
                             )}
                           </div>
                           <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => toggleLessonPublished(lesson)} title={lesson.is_published ? 'Ocultar' : 'Publicar'} className="p-1.5 text-slate-400 hover:text-[#00A9CE]">
+                            <button onClick={() => toggleLessonPublished(lesson)} title={lesson.is_published ? 'Ocultar' : 'Publicar'} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : 'hover:text-[#00A9CE]'}`}>
                               {lesson.is_published ? <IoEyeOutline size={14} /> : <IoEyeOffOutline size={14} />}
                             </button>
-                            <button onClick={() => setLessonModal({ open: true, lesson, moduleId: mod.id })} className="p-1.5 text-slate-400 hover:text-[#00A9CE]">
+                            <button onClick={() => setLessonModal({ open: true, lesson, moduleId: mod.id })} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : 'hover:text-[#00A9CE]'}`}>
                               <IoPencilOutline size={14} />
                             </button>
                             <button onClick={() => deleteLesson(lesson.id)} className="p-1.5 text-slate-400 hover:text-red-500">
                               <IoTrashOutline size={14} />
                             </button>
                           </div>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${lesson.is_published ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${lesson.is_published ? (isWorkshopTab ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700') : 'bg-slate-100 text-slate-500'}`}>
                             {lesson.is_published ? '✓' : 'borrador'}
                           </span>
                         </div>
@@ -1104,181 +1385,56 @@ export default function AdminCourses() {
                       <div className="px-4 py-2.5">
                         <button
                           onClick={() => setLessonModal({ open: true, lesson: null, moduleId: mod.id })}
-                          className="flex items-center gap-1.5 text-xs font-bold text-[#00A9CE] hover:underline"
+                          className={`flex items-center gap-1.5 text-xs font-bold hover:underline ${isWorkshopTab ? 'text-amber-600' : 'text-[#00A9CE]'}`}
                         >
-                          <IoAddOutline size={14} /> Agregar clase
+                          <IoAddOutline size={14} /> Agregar tema
                         </button>
                       </div>
                     </div>
                   )}
                 </div>
               );
-            })
-          )}
+            });
+          })()}
         </div>
 
         {/* Sidebar — 1 col */}
         <div className="space-y-4">
 
-          {/* Linked cycles */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
-              <IoLinkOutline size={16} className="text-[#00A9CE]" /> Ciclos Vinculados
-            </h3>
-            <p className="text-xs text-slate-500 mb-3">Los alumnos de estos ciclos verán este curso en su campus.</p>
-
-            {linkedCycles.length === 0 ? (
-              <p className="text-xs text-slate-400 italic mb-3">Sin ciclos vinculados.</p>
-            ) : (
-              <div className="space-y-2 mb-3">
-                {linkedCycles.map(c => (
-                  <div key={c.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
-                    <span className="text-sm font-medium text-slate-800 truncate">{c.name}</span>
-                    <button onClick={() => unlinkCycle(c.id)} className="text-slate-400 hover:text-red-500 ml-2 shrink-0">
-                      <IoCloseOutline size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {unlinkedCycles.length > 0 && (
-              <div>
-                <p className="text-xs font-bold text-slate-500 mb-1.5">Vincular ciclo:</p>
-                <div className="space-y-1">
-                  {unlinkedCycles.map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => linkCycle(c.id)}
-                      className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 rounded-lg hover:text-[#00A9CE] transition-colors"
-                    >
-                      <IoAddOutline size={14} className="text-slate-400 shrink-0" />
-                      <span className="truncate">{c.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Equipo de coaches */}
           <CoachAssignmentsPanel
             courseId={selectedCourse.id}
             courseTitle={selectedCourse.title}
-            linkedCycleIds={linkedCycles.map(c => c.id)}
+            linkedCycleIds={[]}
           />
 
-          {/* Encuentros / Fechas */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h3 className="font-bold text-slate-700 mb-1 flex items-center gap-2">
-              <IoCalendarOutline size={16} className="text-[#00A9CE]" /> Encuentros del Programa
-            </h3>
-            <p className="text-xs text-slate-500 mb-3">Fechas que aparecen en el calendario de los alumnos con acceso a este curso.</p>
-
-            {/* Lista de encuentros existentes */}
-            {courseSessionsForSelected.length === 0 ? (
-              <p className="text-xs text-slate-400 italic mb-3">Sin encuentros agendados todavía.</p>
-            ) : (
-              <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
-                {courseSessionsForSelected.map(s => {
-                  const dateObj = new Date(s.session_date + 'T00:00:00');
-                  const dateStr = dateObj.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
-                  const isPast = dateObj.getTime() < Date.now() - 86400000;
-                  return (
-                    <div key={s.id} className={`flex items-start gap-2 rounded-lg px-2.5 py-1.5 ${isPast ? 'bg-slate-50' : 'bg-blue-50/50'}`}>
-                      <IoTimeOutline size={14} className={`mt-0.5 shrink-0 ${isPast ? 'text-slate-400' : 'text-[#00A9CE]'}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-xs font-bold ${isPast ? 'text-slate-500' : 'text-slate-800'}`}>
-                            {dateStr}{s.session_time ? ` · ${s.session_time.slice(0, 5)}` : ''}
-                          </span>
-                          {!s.is_mandatory && (
-                            <span className="text-[9px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded font-bold">OPCIONAL</span>
-                          )}
-                        </div>
-                        {s.label && <p className="text-xs text-slate-600 truncate">{s.label}</p>}
-                        {s.location_url && (
-                          <a
-                            href={s.location_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] text-[#00A9CE] hover:underline truncate block"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            🔗 {s.location_url}
-                          </a>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => deleteCourseSession(s.id)}
-                        className="text-slate-300 hover:text-red-500 shrink-0 p-1"
-                        title="Eliminar encuentro"
-                      >
-                        <IoTrashOutline size={14} />
-                      </button>
+          {/* Quick calendar nav */}
+          {courseTab !== 'calendar' && courseSessionsForSelected.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Próximos encuentros</h3>
+                <button
+                  onClick={() => setCourseTab('calendar')}
+                  className="text-xs font-bold text-[#00A9CE] hover:underline"
+                >
+                  Ver calendario →
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                {courseSessionsForSelected
+                  .filter(s => s.session_date >= toISO(new Date()))
+                  .slice(0, 3)
+                  .map(s => (
+                    <div key={s.id} className="flex items-center gap-2 text-xs text-slate-600">
+                      <IoCalendarOutline size={12} className="text-[#00A9CE] shrink-0" />
+                      <span className="font-bold">{parseLocalDate(s.session_date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
+                      {s.session_time && <span className="text-slate-400">{s.session_time.slice(0, 5)}</span>}
+                      {s.label && <span className="truncate text-slate-500">{s.label}</span>}
                     </div>
-                  );
-                })}
+                  ))}
               </div>
-            )}
-
-            {/* Formulario para agregar nuevo encuentro */}
-            <div className="border-t border-slate-100 pt-3 space-y-2">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Nuevo encuentro</p>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="date"
-                  value={newSessionDate}
-                  onChange={e => setNewSessionDate(e.target.value)}
-                  className="px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]"
-                />
-                <input
-                  type="time"
-                  value={newSessionTime}
-                  onChange={e => setNewSessionTime(e.target.value)}
-                  placeholder="Hora"
-                  className="px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]"
-                />
-              </div>
-              <input
-                type="text"
-                value={newSessionLabel}
-                onChange={e => setNewSessionLabel(e.target.value)}
-                placeholder="Título (ej: Sesión 1 — Apertura)"
-                className="w-full px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]"
-              />
-              <input
-                type="url"
-                value={newSessionLocation}
-                onChange={e => setNewSessionLocation(e.target.value)}
-                placeholder="Link (Zoom/Meet/dirección, opcional)"
-                className="w-full px-2.5 py-1.5 rounded-md border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]"
-              />
-              <label className="flex items-center justify-between text-xs text-slate-700">
-                <span>Obligatorio</span>
-                <Toggle checked={newSessionMandatory} onChange={setNewSessionMandatory} />
-              </label>
-              <button
-                onClick={addCourseSession}
-                disabled={savingSession || !newSessionDate}
-                className="w-full flex items-center justify-center gap-1.5 bg-[#00A9CE] text-white text-xs font-bold py-2 rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <IoAddOutline size={14} /> {savingSession ? 'Agregando...' : 'Agregar encuentro'}
-              </button>
             </div>
-          </div>
-
-          {/* Course info summary */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-            <h3 className="font-bold text-slate-700 mb-3">Estadísticas</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-slate-500">Módulos</span><span className="font-bold text-slate-800">{modules.filter(m => m.course_id === selectedCourse.id).length}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Clases totales</span><span className="font-bold text-slate-800">{lessons.filter(l => modules.filter(m => m.course_id === selectedCourse.id).map(m => m.id).includes(l.module_id)).length}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Clases publicadas</span><span className="font-bold text-emerald-700">{lessons.filter(l => modules.filter(m => m.course_id === selectedCourse.id).map(m => m.id).includes(l.module_id) && l.is_published).length}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Ciclos vinculados</span><span className="font-bold text-slate-800">{linkedCycles.length}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Encuentros agendados</span><span className="font-bold text-slate-800">{courseSessionsForSelected.length}</span></div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -1303,7 +1459,8 @@ export default function AdminCourses() {
         <ModuleModal
           mod={moduleModal.mod}
           courseId={moduleModal.courseId}
-          nextOrder={modules.length + 1}
+          nextOrder={modules.filter(m => m.course_id === moduleModal.courseId && m.module_type === (moduleModal.moduleType ?? 'module')).length + 1}
+          moduleType={moduleModal.moduleType}
           onClose={() => setModuleModal(null)}
           onSaved={() => { setModuleModal(null); fetchData(true); }}
         />

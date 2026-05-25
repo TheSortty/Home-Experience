@@ -77,7 +77,7 @@ export default async function CursoDetallePage({
   const { data: rawModules } = await supabase
     .from('modules')
     .select(`
-      id, title, order_index,
+      id, title, order_index, module_type,
       lessons (
         id, title, description, video_url, duration_seconds, order_index, is_published
       )
@@ -100,18 +100,23 @@ export default async function CursoDetallePage({
     id: string;
     title: string;
     order_index: number;
+    module_type: string;
     lessons: Lesson[];
   };
 
-  const modules: Module[] = (rawModules || []).map((m: any) => ({
+  const allModules: Module[] = (rawModules || []).map((m: any) => ({
     ...m,
+    module_type: m.module_type ?? 'module',
     lessons: [...(m.lessons || [])]
       .filter((l: Lesson) => l.is_published)
       .sort((a: Lesson, b: Lesson) => a.order_index - b.order_index),
   }));
 
+  const modules = allModules.filter(m => m.module_type !== 'workshop');
+  const workshopModules = allModules.filter(m => m.module_type === 'workshop');
+
   // Fetch lesson_progress (skip for organizer — they have none and it would show 0%)
-  const allLessonIds = modules.flatMap((m) => m.lessons.map((l) => l.id));
+  const allLessonIds = allModules.flatMap((m) => m.lessons.map((l) => l.id));
   const completedSet = new Set<string>();
 
   if (!isOrganizer && allLessonIds.length > 0) {
@@ -131,7 +136,7 @@ export default async function CursoDetallePage({
   // Find the first incomplete lesson for the "Continuar" link (skip for organizer)
   let nextLessonId: string | null = null;
   if (!isOrganizer) {
-    outer: for (const mod of modules) {
+    outer: for (const mod of allModules) {
       for (const lesson of mod.lessons) {
         if (!completedSet.has(lesson.id)) {
           nextLessonId = lesson.id;
@@ -141,7 +146,7 @@ export default async function CursoDetallePage({
     }
   }
   // Organizer: link to first lesson for easy navigation
-  const firstLessonId = modules[0]?.lessons[0]?.id ?? null;
+  const firstLessonId = allModules[0]?.lessons[0]?.id ?? null;
 
   // Fetch lesson_resources for all lessons (sidebar material)
   const { data: resources } = await supabase
@@ -219,7 +224,8 @@ export default async function CursoDetallePage({
               </span>
             )}
             <span className="text-sm font-medium text-slate-500">
-              {totalLessons} {totalLessons === 1 ? 'clase' : 'clases'} · {modules.length} {modules.length === 1 ? 'módulo' : 'módulos'}
+              {totalLessons} {totalLessons === 1 ? 'tema' : 'temas'} · {modules.length} {modules.length === 1 ? 'módulo' : 'módulos'}
+              {workshopModules.length > 0 && ` · ${workshopModules.length} taller${workshopModules.length !== 1 ? 'es' : ''}`}
             </span>
           </div>
 
@@ -235,7 +241,7 @@ export default async function CursoDetallePage({
             <div className="space-y-2 mb-2">
               <div className="flex justify-between text-sm font-bold text-slate-700">
                 <span>Progreso General</span>
-                <span className="text-[#00A9CE]">{completedCount}/{totalLessons} clases ({progressPercent}%)</span>
+                <span className="text-[#00A9CE]">{completedCount}/{totalLessons} temas ({progressPercent}%)</span>
               </div>
               <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
@@ -273,17 +279,21 @@ export default async function CursoDetallePage({
         <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
           <IoDocumentTextOutline size={40} className="mx-auto text-slate-300 mb-3" />
           <h3 className="font-bold text-slate-700 mb-1">Contenido en preparación</h3>
-          <p className="text-sm text-slate-500">Las clases de este programa estarán disponibles pronto.</p>
+          <p className="text-sm text-slate-500">Los temas de este programa estarán disponibles pronto.</p>
         </div>
       ) : (
         /* CONTENT GRID */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-4">
 
           {/* MODULE LIST — 2 cols */}
-          <div className="lg:col-span-2 space-y-6">
-            <h2 className="text-2xl font-bold text-slate-900">Contenido del Programa</h2>
-            <div className="space-y-4">
-              {modules.map((mod, modIdx) => {
+          <div className="lg:col-span-2 space-y-8">
+
+            {/* Regular modules */}
+            {modules.length > 0 && (
+              <div className="space-y-4">
+                <h2 className="text-2xl font-bold text-slate-900">Contenido del Programa</h2>
+                <div className="space-y-4">
+            {modules.map((mod, modIdx) => {
                 const modCompleted = mod.lessons.filter((l) => completedSet.has(l.id)).length;
                 const modTotal = mod.lessons.length;
                 const isCurrentModule = !isOrganizer &&
@@ -312,7 +322,7 @@ export default async function CursoDetallePage({
                         <h3 className="text-lg font-bold text-slate-900">{mod.title}</h3>
                       </div>
                       {isOrganizer ? (
-                        <div className="text-xs font-bold text-amber-600">{modTotal} clases</div>
+                        <div className="text-xs font-bold text-amber-600">{modTotal} temas</div>
                       ) : modCompleted === modTotal && modTotal > 0 ? (
                         <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
                           <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
@@ -387,7 +397,99 @@ export default async function CursoDetallePage({
                   </div>
                 );
               })}
-            </div>
+                </div>
+              </div>
+            )}
+
+            {/* Workshops section */}
+            {workshopModules.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-2xl font-bold text-slate-900">Talleres</h2>
+                  <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                    {workshopModules.length} taller{workshopModules.length !== 1 ? 'es' : ''}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-500 -mt-1">Módulos prácticos que complementan el programa.</p>
+                <div className="space-y-4">
+                  {workshopModules.map((mod) => {
+                    const modCompleted = !isOrganizer ? mod.lessons.filter((l) => completedSet.has(l.id)).length : 0;
+                    const modTotal = mod.lessons.length;
+                    const allDone = !isOrganizer && modCompleted === modTotal && modTotal > 0;
+                    return (
+                      <div
+                        key={mod.id}
+                        className="bg-white rounded-2xl border border-l-4 border-amber-200 border-l-amber-400 shadow-sm overflow-hidden"
+                      >
+                        <div className="p-5 border-b border-amber-100 bg-amber-50/40 flex justify-between items-center">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-widest mb-1 text-amber-600">
+                              🎯 Taller
+                            </p>
+                            <h3 className="text-lg font-bold text-slate-900">{mod.title}</h3>
+                          </div>
+                          {isOrganizer ? (
+                            <div className="text-xs font-bold text-amber-600">{modTotal} temas</div>
+                          ) : allDone ? (
+                            <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
+                              <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
+                            </div>
+                          ) : (
+                            <div className="font-bold text-sm text-amber-600">{modCompleted}/{modTotal}</div>
+                          )}
+                        </div>
+                        <div className="divide-y divide-amber-50">
+                          {mod.lessons.map((lesson) => {
+                            const isDone = !isOrganizer && completedSet.has(lesson.id);
+                            const isNext = !isOrganizer && lesson.id === nextLessonId;
+                            return (
+                              <Link
+                                key={lesson.id}
+                                href={`/cursos/${cursoId}/${lesson.id}`}
+                                className={`flex items-center justify-between p-4 transition-colors group ${
+                                  isNext ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-4">
+                                  {isDone ? (
+                                    <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
+                                  ) : isNext ? (
+                                    <div className="w-6 h-6 rounded-full border-2 border-amber-400 flex items-center justify-center shrink-0">
+                                      <div className="w-2 h-2 bg-amber-400 rounded-full" />
+                                    </div>
+                                  ) : (
+                                    <IoEllipseOutline size={24} className="text-amber-200 shrink-0" />
+                                  )}
+                                  <div>
+                                    <p className={`text-sm font-bold transition-colors ${
+                                      isNext ? 'text-amber-600' : isDone ? 'text-slate-700 group-hover:text-amber-600' : 'text-slate-900 group-hover:text-amber-600'
+                                    }`}>
+                                      {lesson.order_index}. {lesson.title}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                                      {lesson.video_url ? (
+                                        <><IoPlayCircleOutline className="inline" /> Video{lesson.duration_seconds > 0 && ` · ${formatDuration(lesson.duration_seconds)}`}</>
+                                      ) : (
+                                        <><IoDocumentTextOutline className="inline" /> Lectura</>
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+                                {isNext && (
+                                  <span className="text-xs font-bold bg-white text-amber-600 px-2 py-1 rounded shadow-sm border border-amber-200 shrink-0">
+                                    Continuar
+                                  </span>
+                                )}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* SIDEBAR — 1 col */}
@@ -448,7 +550,7 @@ export default async function CursoDetallePage({
                 <h3 className="font-bold text-slate-900 mb-4">Tu Progreso</h3>
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm font-medium text-slate-600">
-                    <span>Clases completadas</span>
+                    <span>Temas completados</span>
                     <span className="font-bold">{completedCount}/{totalLessons}</span>
                   </div>
                   <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">

@@ -829,6 +829,7 @@ export type Database = {
           created_at: string
           id: string
           is_published: boolean | null
+          module_type: string
           order_index: number
           title: string
         }
@@ -837,6 +838,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_published?: boolean | null
+          module_type?: string
           order_index: number
           title: string
         }
@@ -845,6 +847,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_published?: boolean | null
+          module_type?: string
           order_index?: number
           title?: string
         }
@@ -1010,6 +1013,7 @@ export type Database = {
           is_deleted: boolean | null
           last_name: string | null
           phone: string | null
+          profile_completed_at: string | null
           role: string | null
           updated_at: string
           user_id: string | null
@@ -1027,6 +1031,7 @@ export type Database = {
           is_deleted?: boolean | null
           last_name?: string | null
           phone?: string | null
+          profile_completed_at?: string | null
           role?: string | null
           updated_at?: string
           user_id?: string | null
@@ -1044,6 +1049,7 @@ export type Database = {
           is_deleted?: boolean | null
           last_name?: string | null
           phone?: string | null
+          profile_completed_at?: string | null
           role?: string | null
           updated_at?: string
           user_id?: string | null

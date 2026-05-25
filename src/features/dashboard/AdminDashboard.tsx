@@ -8,7 +8,7 @@ import CalendarIcon from '../../ui/icons/CalendarIcon';
 import SettingsIcon from '../../ui/icons/SettingsIcon';
 import DocumentIcon from '../../ui/icons/DocumentIcon';
 import MailIcon from '../../ui/icons/MailIcon';
-import { IoMenuOutline, IoCloseOutline } from 'react-icons/io5';
+import { IoMenuOutline, IoCloseOutline, IoChevronDownOutline } from 'react-icons/io5';
 import { supabase } from '../../services/supabaseClient';
 import { restSelect, restRpc } from '../../services/supabaseRest';
 import AdminCalendar from './admin/AdminCalendar';
@@ -53,6 +53,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [globalSearch, setGlobalSearch] = useState('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = React.useRef<HTMLDivElement>(null);
   const { role, user, isLoading: isLoadingAuth } = useAuth();
   const userEmail = user?.email || '';
   const isAdmin = role === 'admin' || role === 'sysadmin';
@@ -193,6 +195,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
     // No deps: stable function, reads from roleRef/userRef
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [profileMenuOpen]);
 
   // ─── Trigger initial fetch as soon as role/user resolve ────────────────────
   // fetchDashboardData early-exits when roleRef/userRef are still null. The
@@ -624,43 +638,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
           )}
         </nav>
 
-        <div className="p-6 border-t border-white/5 bg-black/20 space-y-3">
-          {/* Primary: enter campus as organizador */}
-          <a
-            href="/dashboard"
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest text-amber-200 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-400/30 hover:from-amber-500/30 hover:to-orange-500/30 hover:text-white transition-all group"
-          >
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Ir al Campus
-          </a>
-
-          {/* Secondary: preview as student */}
-          <a
-            href="/dashboard?as=student"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-blue-300 transition-colors group"
-          >
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            Vista alumno (preview)
-          </a>
-
-          <a href="/" className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors">
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-            Volver a la Web
-          </a>
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-red-400 transition-colors">
-            <LogoutIcon className="w-4 h-4 flex-shrink-0" />
-            Cerrar Sesión
-          </button>
-        </div>
       </aside>
 
       {/* Main Content */}
@@ -695,17 +672,76 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout, onRegisterTes
             </div>
           </div>
 
-          <div className="flex items-center gap-3 md:gap-6 shrink-0">
-            <div className="hidden sm:flex flex-col items-end">
-              <span className="text-sm font-bold text-slate-900 leading-none truncate max-w-[180px]">{userEmail || 'Admin User'}</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase mt-1 ${
-                role === 'sysadmin' ? 'bg-blue-100 text-blue-600 border border-blue-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
-              }`}>
-                {role === 'sysadmin' ? 'Sysadmin' : 'Admin'}
-              </span>
+          <div className="flex items-center gap-2 md:gap-4 shrink-0">
+            {/* Nav links */}
+            <div className="hidden sm:flex items-center gap-2">
+              <a
+                href="/"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors"
+              >
+                ← Web principal
+              </a>
+              <div className="w-px h-4 bg-slate-200" />
+              <a
+                href="/dashboard"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all"
+              >
+                <svg className="w-3.5 h-3.5 text-[#00A9CE]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Ir al campus
+              </a>
             </div>
-            <div className="w-10 h-10 rounded-sm bg-slate-100 flex items-center justify-center text-slate-600 font-bold border border-slate-200 shadow-sm uppercase">
-              {(userEmail || 'Admin').substring(0, 2).toUpperCase()}
+
+            {/* Profile dropdown */}
+            <div ref={profileMenuRef} className="relative">
+              <button
+                onClick={() => setProfileMenuOpen(v => !v)}
+                className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 active:bg-slate-200 rounded-xl px-2 py-1.5 transition-all ring-1 ring-transparent hover:ring-slate-200"
+              >
+                <div className="hidden sm:flex flex-col items-end">
+                  <span className="text-sm font-bold text-slate-900 leading-none truncate max-w-[160px]">{userEmail || 'Admin'}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase mt-1 ${
+                    role === 'sysadmin' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {role === 'sysadmin' ? 'Sysadmin' : 'Admin'}
+                  </span>
+                </div>
+                <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-white text-sm font-bold shadow-sm uppercase ring-2 ring-slate-700">
+                  {(userEmail || 'Admin').substring(0, 2).toUpperCase()}
+                </div>
+                <IoChevronDownOutline size={13} className={`text-slate-400 transition-transform duration-150 ${profileMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {profileMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-slate-200 shadow-xl z-50 overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 border-b border-slate-100">
+                    <p className="text-sm font-bold text-slate-900 truncate">{userEmail || 'Admin'}</p>
+                    <p className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 ${role === 'sysadmin' ? 'text-blue-600' : 'text-slate-500'}`}>
+                      {role === 'sysadmin' ? 'Sysadmin' : 'Admin'}
+                    </p>
+                  </div>
+                  <a
+                    href="/perfil"
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    onClick={() => setProfileMenuOpen(false)}
+                  >
+                    <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Editar perfil
+                  </a>
+                  <div className="border-t border-slate-100">
+                    <button
+                      onClick={() => { setProfileMenuOpen(false); handleLogout(); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <LogoutIcon className="w-4 h-4 text-red-400" />
+                      Cerrar sesión
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

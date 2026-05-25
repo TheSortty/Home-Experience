@@ -12,7 +12,7 @@ export default async function CampusPerfilPage() {
   if (user) {
     const { data } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, email, phone, bio, instagram')
+      .select('id, first_name, last_name, email, phone, bio, instagram, avatar_url')
       .eq('user_id', user.id)
       .single();
     profile = data;
@@ -28,9 +28,9 @@ export default async function CampusPerfilPage() {
   }
 
   const firstName = profile?.first_name ?? '';
-  const lastName = profile?.last_name ?? '';
-  const email = profile?.email ?? user?.email ?? '';
-  const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || '?';
+  const lastName  = profile?.last_name  ?? '';
+  const email     = profile?.email ?? user?.email ?? '';
+  const initials  = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || '?';
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
@@ -51,6 +51,7 @@ export default async function CampusPerfilPage() {
         bio={profile?.bio ?? ''}
         instagram={profile?.instagram ?? ''}
         initials={initials}
+        avatarUrl={profile?.avatar_url ?? null}
         medical={medical}
       />
     </div>

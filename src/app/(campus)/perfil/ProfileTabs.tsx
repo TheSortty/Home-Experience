@@ -1,8 +1,14 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { IoPersonOutline, IoMedicalOutline, IoShieldCheckmarkOutline, IoCheckmarkCircle, IoAlertCircleOutline, IoEyeOutline, IoEyeOffOutline } from 'react-icons/io5';
-import { updateProfile, updateMedicalInfo, changePassword } from './actions';
+import { useState, useTransition, useRef } from 'react';
+import Image from 'next/image';
+import {
+  IoPersonOutline, IoMedicalOutline, IoShieldCheckmarkOutline,
+  IoCheckmarkCircle, IoAlertCircleOutline, IoEyeOutline, IoEyeOffOutline,
+  IoCameraOutline, IoCloudUploadOutline,
+} from 'react-icons/io5';
+import { updateProfile, updateMedicalInfo, changePassword, uploadAvatar } from './actions';
+import { compressToWebP } from '@/src/utils/imageCompress';
 
 type Tab = 'personal' | 'emergencia' | 'seguridad';
 
@@ -23,6 +29,7 @@ interface Props {
   bio: string;
   instagram: string;
   initials: string;
+  avatarUrl: string | null;
   medical: MedicalInfo | null;
 }
 
@@ -41,35 +48,159 @@ function Feedback({ result }: { result: { success?: boolean; error?: string } | 
   );
 }
 
-export default function ProfileTabs({ firstName, lastName, email, phone, bio, instagram, initials, medical }: Props) {
+// ─── Avatar Uploader ─────────────────────────────────────────────────────────
+
+function AvatarUploader({ initials, avatarUrl }: { initials: string; avatarUrl: string | null }) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{ success?: boolean; error?: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentAvatar = preview ?? avatarUrl;
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadResult(null);
+    try {
+      const compressed = await compressToWebP(file);
+      setPendingFile(compressed);
+      setPreview(URL.createObjectURL(compressed));
+    } catch {
+      setUploadResult({ error: 'No se pudo procesar la imagen.' });
+    }
+    // Reset input so the same file can be re-selected
+    e.target.value = '';
+  }
+
+  async function handleSave() {
+    if (!pendingFile) return;
+    setUploading(true);
+    setUploadResult(null);
+    const fd = new FormData();
+    fd.append('file', pendingFile);
+    const res = await uploadAvatar(fd);
+    setUploading(false);
+    if (res.success) {
+      setPendingFile(null);
+      setUploadResult({ success: true });
+    } else {
+      setUploadResult({ error: res.error });
+    }
+  }
+
+  function handleCancel() {
+    setPendingFile(null);
+    if (preview) { URL.revokeObjectURL(preview); setPreview(null); }
+    setUploadResult(null);
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      {/* Avatar circle */}
+      <div className="relative group">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="relative w-24 h-24 rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#00A9CE] focus:ring-offset-2"
+          title="Cambiar foto de perfil"
+        >
+          {currentAvatar ? (
+            <Image
+              src={currentAvatar}
+              alt="Foto de perfil"
+              fill
+              className="object-cover"
+              unoptimized
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-tr from-terra to-terra-soft flex items-center justify-center text-white text-3xl font-medium font-serif select-none">
+              {initials}
+            </div>
+          )}
+          {/* Hover overlay */}
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+            <IoCameraOutline size={28} className="text-white" />
+          </div>
+        </button>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {/* Pending upload controls */}
+      {pendingFile && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={uploading}
+            className="flex items-center gap-1.5 bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
+          >
+            <IoCloudUploadOutline size={14} />
+            {uploading ? 'Subiendo...' : 'Guardar foto'}
+          </button>
+          <button
+            onClick={handleCancel}
+            disabled={uploading}
+            className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {uploadResult && (
+        <div className={`text-xs font-medium px-3 py-1.5 rounded-lg ${
+          uploadResult.success
+            ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+            : 'text-red-700 bg-red-50 border border-red-200'
+        }`}>
+          {uploadResult.success ? '✓ Foto actualizada' : uploadResult.error}
+        </div>
+      )}
+
+      {!pendingFile && !uploadResult && (
+        <p className="text-xs text-slate-400">Hacé clic en la foto para cambiarla</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export default function ProfileTabs({
+  firstName, lastName, email, phone, bio, instagram, initials, avatarUrl, medical
+}: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('personal');
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<{ success?: boolean; error?: string } | null>(null);
 
   // Personal form state
-  const [pFirst, setPFirst] = useState(firstName);
-  const [pLast, setPLast] = useState(lastName);
-  const [pPhone, setPPhone] = useState(phone);
-  const [pBio, setPBio] = useState(bio);
+  const [pFirst, setPFirst]       = useState(firstName);
+  const [pLast, setPLast]         = useState(lastName);
+  const [pPhone, setPPhone]       = useState(phone);
+  const [pBio, setPBio]           = useState(bio);
   const [pInstagram, setPInstagram] = useState(instagram);
 
   // Medical form state
-  const [mTreatment, setMTreatment] = useState(medical?.under_treatment ?? false);
-  const [mDetails, setMDetails] = useState(medical?.treatment_details ?? '');
-  const [mMedication, setMMedication] = useState(medical?.medication ?? '');
-  const [mAllergies, setMAllergies] = useState(medical?.allergies ?? '');
+  const [mTreatment, setMTreatment]     = useState(medical?.under_treatment ?? false);
+  const [mDetails, setMDetails]         = useState(medical?.treatment_details ?? '');
+  const [mMedication, setMMedication]   = useState(medical?.medication ?? '');
+  const [mAllergies, setMAllergies]     = useState(medical?.allergies ?? '');
   const [mContactName, setMContactName] = useState(medical?.emergency_contact_name ?? '');
   const [mContactPhone, setMContactPhone] = useState(medical?.emergency_contact_phone ?? '');
 
   // Security form state
-  const [newPassword, setNewPassword] = useState('');
+  const [newPassword, setNewPassword]       = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showNewPwd, setShowNewPwd] = useState(false);
+  const [showNewPwd, setShowNewPwd]         = useState(false);
 
-  const handleTabChange = (tab: Tab) => {
-    setActiveTab(tab);
-    setResult(null);
-  };
+  const handleTabChange = (tab: Tab) => { setActiveTab(tab); setResult(null); };
 
   const handleSavePersonal = () => {
     setResult(null);
@@ -95,14 +226,8 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
   };
 
   const handleChangePassword = () => {
-    if (newPassword.length < 6) {
-      setResult({ error: 'La contraseña debe tener al menos 6 caracteres.' });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setResult({ error: 'Las contraseñas no coinciden.' });
-      return;
-    }
+    if (newPassword.length < 6) { setResult({ error: 'La contraseña debe tener al menos 6 caracteres.' }); return; }
+    if (newPassword !== confirmPassword) { setResult({ error: 'Las contraseñas no coinciden.' }); return; }
     setResult(null);
     startTransition(async () => {
       const res = await changePassword(newPassword);
@@ -115,9 +240,9 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
   const labelCls = 'block text-sm font-bold text-slate-700 mb-2';
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
-    { id: 'personal', label: 'Quién sos', icon: IoPersonOutline },
-    { id: 'emergencia', label: 'Si pasa algo', icon: IoMedicalOutline },
-    { id: 'seguridad', label: 'Tu acceso', icon: IoShieldCheckmarkOutline },
+    { id: 'personal',    label: 'Quién sos',   icon: IoPersonOutline },
+    { id: 'emergencia',  label: 'Si pasa algo', icon: IoMedicalOutline },
+    { id: 'seguridad',   label: 'Tu acceso',    icon: IoShieldCheckmarkOutline },
   ];
 
   return (
@@ -126,12 +251,10 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
       {/* SIDEBAR */}
       <div className="md:col-span-1 space-y-6">
         {/* Avatar card */}
-        <div className="bg-cream rounded-2xl border border-cream-deep p-6 text-center flex flex-col items-center">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-terra to-terra-soft flex items-center justify-center text-white text-3xl font-medium font-serif mb-4 shadow-md select-none">
-            {initials}
-          </div>
-          <h2 className="font-serif text-2xl font-medium tracking-tight text-slate-900">{pFirst} {pLast}</h2>
-          <p className="text-sm text-slate-500 mt-1">{email}</p>
+        <div className="bg-cream rounded-2xl border border-cream-deep p-6 text-center flex flex-col items-center gap-2">
+          <AvatarUploader initials={initials} avatarUrl={avatarUrl} />
+          <h2 className="font-serif text-2xl font-medium tracking-tight text-slate-900 mt-2">{pFirst} {pLast}</h2>
+          <p className="text-sm text-slate-500">{email}</p>
         </div>
 
         {/* Nav */}
@@ -222,13 +345,7 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
               <p className="text-sm text-slate-500 -mt-2">Esto queda entre vos y el equipo de CRESER. No lo ve nadie más.</p>
 
               <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="under_treatment"
-                  checked={mTreatment}
-                  onChange={e => setMTreatment(e.target.checked)}
-                  className="w-4 h-4 accent-[#00A9CE]"
-                />
+                <input type="checkbox" id="under_treatment" checked={mTreatment} onChange={e => setMTreatment(e.target.checked)} className="w-4 h-4 accent-[#00A9CE]" />
                 <label htmlFor="under_treatment" className="text-sm font-medium text-slate-700">
                   Estoy bajo tratamiento médico o psicológico
                 </label>
@@ -268,11 +385,7 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
               <Feedback result={result} />
 
               <div className="flex justify-end">
-                <button
-                  onClick={handleSaveMedical}
-                  disabled={isPending}
-                  className="bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm"
-                >
+                <button onClick={handleSaveMedical} disabled={isPending} className="bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
                   {isPending ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
               </div>
@@ -296,12 +409,7 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
                     autoComplete="new-password"
                     className={`${inputCls} pr-12`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPwd(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1"
-                    aria-label={showNewPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                  >
+                  <button type="button" onClick={() => setShowNewPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1" aria-label={showNewPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
                     {showNewPwd ? <IoEyeOffOutline size={20} /> : <IoEyeOutline size={20} />}
                   </button>
                 </div>
@@ -329,7 +437,7 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
 
               {result?.success ? (
                 <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5 text-sm font-medium">
-                  <IoCheckmarkCircle size={18} /> Contraseña actualizada correctamente. La próxima vez que entres, usá la nueva.
+                  <IoCheckmarkCircle size={18} /> Contraseña actualizada correctamente.
                 </div>
               ) : result?.error ? (
                 <div className="flex items-center gap-2 text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm font-medium">
@@ -338,11 +446,7 @@ export default function ProfileTabs({ firstName, lastName, email, phone, bio, in
               ) : null}
 
               <div className="flex justify-end">
-                <button
-                  onClick={handleChangePassword}
-                  disabled={isPending || !newPassword || !confirmPassword}
-                  className="bg-slate-900 hover:bg-slate-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm"
-                >
+                <button onClick={handleChangePassword} disabled={isPending || !newPassword || !confirmPassword} className="bg-slate-900 hover:bg-slate-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
                   {isPending ? 'Actualizando...' : 'Actualizar Contraseña'}
                 </button>
               </div>
