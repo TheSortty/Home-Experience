@@ -77,7 +77,8 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                 })
             });
 
-            const data = await res.json();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const data = await res.json() as any;
             if (!res.ok) throw new Error(data.error || 'Error al crear credenciales');
 
             toast.success(inviteMode === 'magic_link' ? 'Magic Link enviado por email' : 'Credenciales creadas correctamente');

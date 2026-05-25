@@ -40,7 +40,7 @@ const Retreats: React.FC = React.memo(() => {
         if (sliderRef.current) {
             const items = sliderRef.current.querySelectorAll('.retreats-item');
             if (items.length > 0) {
-                sliderRef.current.append(items[0]);
+                sliderRef.current.appendChild(items[0] as Node);
             }
         }
     }, []);
@@ -49,7 +49,7 @@ const Retreats: React.FC = React.memo(() => {
         if (sliderRef.current) {
             const items = sliderRef.current.querySelectorAll('.retreats-item');
             if (items.length > 0) {
-                sliderRef.current.prepend(items[items.length - 1]);
+                sliderRef.current.insertBefore(items[items.length - 1] as Node, sliderRef.current.firstChild);
             }
         }
     }, []);

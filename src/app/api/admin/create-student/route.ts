@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Parse request body
-    const body = await request.json();
+    const body = await request.json() as { email: string; mode: string; password?: string; firstName?: string; lastName?: string };
     const { email, mode, password, firstName, lastName } = body;
 
     if (!email || !mode) {

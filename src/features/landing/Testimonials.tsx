@@ -18,7 +18,8 @@ const Testimonials: React.FC<TestimonialsProps> = ({ onTestimonialClick, onViewA
     const fetchTestimonials = async () => {
       try {
         const res = await fetch('/api/reviews');
-        const json = await res.json();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const json = await res.json() as any;
         if (json.data) {
           // Mezclamos (shuffle) las reseñas directamente en el cliente (frontend)
           // para evitar que la caché agresiva del servidor de Next.js
