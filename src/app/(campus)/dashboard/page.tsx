@@ -51,8 +51,22 @@ export default async function CampusDashboardPage({
 }) {
   const sp = await searchParams;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const role = user ? await resolveRole(supabase, user.id) : null;
+
+  // ── Option B: use getSession() instead of getUser() to avoid a redundant
+  // network round-trip.  The layout + middleware already validated the JWT
+  // for this request — reading the session from the cookie is safe here.
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
+
+  // resolveRole uses the Supabase client RPC; wrap so a single failure
+  // doesn't abort the whole render (Option A).
+  let role: string | null = null;
+  try {
+    role = user ? await resolveRole(supabase, user.id) : null;
+  } catch {
+    role = null;
+  }
+
   const viewMode = resolveViewMode(role, sp);
 
   let firstName = 'Alumno';
@@ -63,28 +77,39 @@ export default async function CampusDashboardPage({
   let upcomingSessions: any[] = [];
 
   if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('first_name, id')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    // ── Option A: each query block is wrapped with try/catch so a Supabase
+    // I/O error (Cloudflare Error 1101) produces a safe fallback rather than
+    // crashing the Worker response.
+
+    // Profile ────────────────────────────────────────────────────────────────
+    let profile: { first_name: string | null; id: string } | null = null;
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('first_name, id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      profile = data;
+    } catch { /* safe default: null */ }
 
     if (profile?.first_name) firstName = profile.first_name;
 
-    // Organizer mode = full visibility. Preview-as-student narrows to the
-    // admin's actual student-side data (typically empty for staff).
     const canSeeEverything = viewMode === 'organizer';
 
-    // Cargamos SIEMPRE todos los cursos publicados (visibles para todos)
-    const { data: allCourses } = await supabase
-      .from('courses')
-      .select('id, title, cover_image_url, is_published');
-    const publishedCourses = (allCourses || []).filter(c => c.is_published);
+    // Courses ────────────────────────────────────────────────────────────────
+    let publishedCourses: any[] = [];
+    try {
+      const { data: allCourses } = await supabase
+        .from('courses')
+        .select('id, title, cover_image_url, is_published');
+      publishedCourses = (allCourses || []).filter((c: any) => c.is_published);
+    } catch { /* safe default: [] */ }
 
-    // Si hay perfil, calculamos progreso real del alumno
+    // Student progress ───────────────────────────────────────────────────────
     const studentProgressList = profile?.id && !canSeeEverything
-      ? await getStudentProgress(supabase, profile.id)
+      ? await getStudentProgress(supabase, profile.id).catch(() => [])
       : [];
+
     const progressByCourse = new Map(
       studentProgressList.filter(p => p.courseId).map(p => [p.courseId as string, p])
     );
@@ -127,17 +152,25 @@ export default async function CampusDashboardPage({
       };
     });
 
+    // Next lesson video URL ──────────────────────────────────────────────────
     if (nextLesson?.lessonId) {
-      const { data: lessData } = await supabase.from('lessons').select('video_url').eq('id', nextLesson.lessonId).single();
-      if (lessData?.video_url) nextLesson.videoUrl = lessData.video_url;
+      try {
+        const { data: lessData } = await supabase
+          .from('lessons')
+          .select('video_url')
+          .eq('id', nextLesson.lessonId)
+          .single();
+        if (lessData?.video_url) nextLesson.videoUrl = lessData.video_url;
+      } catch { /* safe default: null videoUrl */ }
     }
 
-    // Upcoming sessions (next 3) — mezclamos course_sessions (de cursos visibles)
-    // con cycle_sessions (de los ciclos donde está inscripto).
+    // Upcoming sessions ──────────────────────────────────────────────────────
+    // Use Promise.allSettled so one failing query doesn't cancel the other
+    // (and doesn't propagate an unhandled rejection into the Worker).
     const todayStr = new Date().toISOString().split('T')[0];
-    const publishedCourseIds = (allCourses || []).map(c => c.id);
+    const publishedCourseIds = publishedCourses.map((c: any) => c.id);
 
-    const [courseSessRes, cycleSessRes] = await Promise.all([
+    const [courseSessResult, cycleSessResult] = await Promise.allSettled([
       publishedCourseIds.length > 0
         ? supabase
             .from('course_sessions')
@@ -146,7 +179,7 @@ export default async function CampusDashboardPage({
             .gte('session_date', todayStr)
             .order('session_date', { ascending: true })
             .limit(5)
-        : Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [] as any[] }),
       cycleIds.length > 0
         ? supabase
             .from('cycle_sessions')
@@ -155,17 +188,22 @@ export default async function CampusDashboardPage({
             .gte('session_date', todayStr)
             .order('session_date', { ascending: true })
             .limit(5)
-        : Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [] as any[] }),
     ]);
 
+    const courseSessData =
+      courseSessResult.status === 'fulfilled' ? (courseSessResult.value.data || []) : [];
+    const cycleSessData =
+      cycleSessResult.status === 'fulfilled' ? (cycleSessResult.value.data || []) : [];
+
     const combinedSessions = [
-      ...(courseSessRes.data || []).map((s: any) => ({
+      ...(courseSessData as any[]).map((s: any) => ({
         id: `cs-${s.id}`,
         session_date: s.session_date,
         label: s.label,
         cycles: { name: s.courses?.title ?? 'Programa' },
       })),
-      ...(cycleSessRes.data || []),
+      ...(cycleSessData as any[]),
     ];
     combinedSessions.sort((a, b) => a.session_date.localeCompare(b.session_date));
     upcomingSessions = combinedSessions.slice(0, 3);

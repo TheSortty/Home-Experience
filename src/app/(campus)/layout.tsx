@@ -20,19 +20,29 @@ export default async function CampusLayout({ children }: { children: React.React
 
   if (!user) redirect('/auth/login');
 
-  const role = await resolveRole(supabase, user.id);
+  // Wrap role + profile in try/catch so a transient Supabase I/O error
+  // (Cloudflare Error 1101) doesn't crash the layout — we fall back to safe
+  // defaults and the page still renders (Option A).
+  let role: string | null = null;
+  try {
+    role = await resolveRole(supabase, user.id);
+  } catch { /* safe default */ }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profile } = await (supabase
-    .from('profiles') as any)
-    .select('first_name, last_name, email, avatar_url, profile_completed_at')
-    .eq('user_id', user.id)
-    .single() as { data: { first_name: string; last_name: string; email: string; avatar_url: string | null; profile_completed_at: string | null } | null };
+  type ProfileRow = { first_name: string; last_name: string; email: string; avatar_url: string | null; profile_completed_at: string | null };
+  let profile: ProfileRow | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('profiles') as any)
+      .select('first_name, last_name, email, avatar_url, profile_completed_at')
+      .eq('user_id', user.id)
+      .single() as { data: ProfileRow | null };
+    profile = data;
+  } catch { /* safe default: null */ }
 
   const firstName = profile?.first_name || 'Alumno';
   const lastName  = profile?.last_name  || '';
   const fullName  = `${firstName} ${lastName}`.trim();
-  const email     = profile?.email || user.email || '';
+  const email     = profile?.email || user.email || '' as string;
   const initials  =
     firstName.substring(0, 1).toUpperCase() +
     (lastName.substring(0, 1).toUpperCase() || '');
@@ -59,7 +69,7 @@ export default async function CampusLayout({ children }: { children: React.React
 
           {/* Nav (handles mobile drawer + desktop horizontal links) */}
           <div className="flex-1 flex justify-center">
-            <CampusNav role={role} />
+            <CampusNav role={role ?? undefined} />
           </div>
 
           {/* Profile */}

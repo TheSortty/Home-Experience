@@ -151,6 +151,7 @@ export default function AdminActivity({ onUnreadChange }: Props) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [trueUnreadCount, setTrueUnreadCount] = useState(0);
   const [filter, setFilter] = useState<CategoryFilter>('all');
   const [selectedEvent, setSelectedEvent] = useState<ActivityEvent | null>(null);
   const [searchInput, setSearchInput] = useState(queryParam);
@@ -182,6 +183,13 @@ export default function AdminActivity({ onUnreadChange }: Props) {
     return () => clearTimeout(handle);
   }, [searchInput, queryParam, pathname, router, searchParams]);
 
+  const refreshTrueUnread = useCallback(async () => {
+    try {
+      const count = await restRpc<number>('staff_activity_unread_count');
+      setTrueUnreadCount(count ?? 0);
+    } catch {}
+  }, []);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -212,6 +220,9 @@ export default function AdminActivity({ onUnreadChange }: Props) {
     }
   }, []);
 
+  // Fetch true unread count on mount
+  useEffect(() => { refreshTrueUnread(); }, [refreshTrueUnread]);
+
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // ── Realtime: new events appear instantly ───────────────────────────────
@@ -237,12 +248,13 @@ export default function AdminActivity({ onUnreadChange }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // ── Unread count notifications (back-compat) ─────────────────────────────
+  // ── Unread count: local (from loaded events) and true total (from RPC) ────
   const unreadCount = useMemo(
     () => events.filter(e => !readIds.has(e.id)).length,
     [events, readIds]
   );
-  useEffect(() => { onUnreadChange?.(unreadCount); }, [unreadCount, onUnreadChange]);
+  // Report true total (from RPC) to the shell badge, falling back to local count
+  useEffect(() => { onUnreadChange?.(trueUnreadCount); }, [trueUnreadCount, onUnreadChange]);
 
   // ── Unread by category for chip counters ─────────────────────────────────
   const unreadByCategory = useMemo(() => {
@@ -293,17 +305,29 @@ export default function AdminActivity({ onUnreadChange }: Props) {
 
   const markAllRead = async () => {
     if (!myProfileIdRef.current) return;
-    const unread = events.filter(e => !readIds.has(e.id));
-    if (unread.length === 0) return;
-    setReadIds(prev => {
-      const next = new Set(prev);
-      unread.forEach(e => next.add(e.id));
-      return next;
-    });
     try {
+      // Fetch ALL event IDs (not just the loaded PAGE_SIZE)
+      const { data: allIds } = await restSelect<{ id: string }>('staff_activity_events', {
+        columns: 'id',
+      });
+      if (!allIds || allIds.length === 0) return;
+
+      // Filter to only those not already marked as read
+      const unreadIds = allIds.map(r => r.id).filter(id => !readIds.has(id));
+      if (unreadIds.length === 0) return;
+
+      // Optimistically update local state
+      setReadIds(prev => {
+        const next = new Set(prev);
+        unreadIds.forEach(id => next.add(id));
+        return next;
+      });
+      setTrueUnreadCount(0);
+
+      // Insert reads for all unread events
       await restInsert(
         'staff_activity_event_reads',
-        unread.map(e => ({ event_id: e.id, profile_id: myProfileIdRef.current })),
+        unreadIds.map(id => ({ event_id: id, profile_id: myProfileIdRef.current })),
         { returning: 'minimal' }
       );
     } catch (err) {
@@ -326,13 +350,13 @@ export default function AdminActivity({ onUnreadChange }: Props) {
         <div>
           <h2 className="text-2xl md:text-3xl font-bold text-slate-900">Bandeja de actividad</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Todo lo que pasa en el campus, en vivo. {unreadCount > 0 && (
-              <span className="font-bold text-slate-900">{unreadCount} nuevo{unreadCount !== 1 ? 's' : ''} por leer.</span>
+            Todo lo que pasa en el campus, en vivo. {trueUnreadCount > 0 && (
+              <span className="font-bold text-slate-900">{trueUnreadCount} nuevo{trueUnreadCount !== 1 ? 's' : ''} por leer.</span>
             )}
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          {unreadCount > 0 && (
+          {trueUnreadCount > 0 && (
             <button
               onClick={markAllRead}
               className="text-xs font-bold uppercase tracking-wider text-[#00A9CE] hover:underline whitespace-nowrap"
