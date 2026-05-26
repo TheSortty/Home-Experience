@@ -7,6 +7,7 @@ import CampusNav from './_components/CampusNav';
 import ProfileMenu from './_components/ProfileMenu';
 import StaffModeBar from './_components/StaffModeBar';
 import WelcomeProfileModal from './_components/WelcomeProfileModal';
+import CampusAnimator     from './_components/CampusAnimator';
 
 export const metadata = {
   title: 'Mi Campus | HOME Experience',
@@ -83,6 +84,9 @@ export default async function CampusLayout({ children }: { children: React.React
         firstName={firstName}
         showOnLoad={showWelcome}
       />
+
+      {/* ── Page transition + scroll-reveal animations ────────────────── */}
+      <CampusAnimator />
 
     </div>
   );

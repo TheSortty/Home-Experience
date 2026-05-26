@@ -11,8 +11,8 @@ const PaymentOptions: React.FC = () => {
             subtitle: 'INICIAL + AVANZADO',
             description: 'Nuestra recomendación para quienes inician este camino. Incluye las dos etapas fundamentales: El Entrenamiento Inicial donde despertarás tu consciencia, y el Entrenamiento Avanzado para romper barreras y profundizar en tu transformación personal.',
             options: [
-                { label: 'Efectivo / Transferencia', price: '$340.000', link: 'https://mpago.la/12TzA5A', type: 'transfer' },
-                { label: 'Tarjeta (3 cuotas sin interés)', price: '$480.000', link: 'https://mpago.la/12n2ESQ', type: 'card' }
+                { label: 'Efectivo / Transferencia', price: '$390.000', link: 'https://mpago.la/12TzA5A', type: 'transfer' },
+                { label: 'Tarjeta (3 cuotas sin interés)', price: '$550.000', link: 'https://mpago.la/12n2ESQ', type: 'card' }
             ]
         },
         {
@@ -21,7 +21,7 @@ const PaymentOptions: React.FC = () => {
             description: 'La experiencia completa CRESER. Incluye las tres etapas: Inicial, Avanzado y el programa de Liderazgo integrativo. Diseñado para quienes buscan no solo transformar su vida, sino también consolidar resultados y desarrollar nuevas habilidades.',
             options: [
                 { label: 'Efectivo / Transferencia', price: '$630.000', link: 'https://mpago.la/12TzA5A', type: 'transfer' },
-                { label: 'Tarjeta (3 cuotas sin interés)', price: '$790.000', link: 'https://mpago.la/12n2ESQ', type: 'card' }
+                { label: 'Tarjeta (3 cuotas sin interés)', price: '$740.000', link: 'https://mpago.la/12n2ESQ', type: 'card' }
             ]
         }
     ];
@@ -31,21 +31,21 @@ const PaymentOptions: React.FC = () => {
             name: 'INICIAL',
             duration: '4 días',
             description: 'El despertar. Un espacio de 4 días para identificar creencias limitantes y redescubrir tu potencial.',
-            price: '$190.000',
+            price: '$210.000',
             link: 'https://wa.me/5491122334455?text=Hola,%20quiero%20abonar%20la%20etapa%20INICIAL'
         },
         {
             name: 'AVANZADO',
             duration: '5 días',
             description: 'Cinco días de inmersión para transformar miedos en poder personal y romper barreras.',
-            price: '$230.000',
+            price: '$250.000',
             link: 'https://wa.me/5491122334455?text=Hola,%20quiero%20abonar%20la%20etapa%20AVANZADO'
         },
         {
             name: 'LIDERAZGO',
             duration: '3 meses',
             description: 'La consolidación. Tres meses para aplicar lo aprendido y desarrollar liderazgo en tu vida diaria.',
-            price: '$350.000',
+            price: '$390.000',
             link: 'https://wa.me/5491122334455?text=Hola,%20quiero%20abonar%20la%20etapa%20LIDERAZGO'
         }
     ];

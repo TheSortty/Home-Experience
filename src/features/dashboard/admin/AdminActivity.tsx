@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import {
-  IoSparklesOutline, IoCloudUploadOutline, IoEyeOutline,
-  IoArrowDownCircleOutline, IoArrowUpCircleOutline, IoHelpCircleOutline,
+  IoSparklesOutline, IoEyeOutline,
+  IoArrowUpCircleOutline, IoHelpCircleOutline,
   IoMegaphoneOutline, IoCalendarOutline, IoVideocamOutline,
   IoDocumentTextOutline, IoCloseOutline, IoArrowForwardOutline,
-  IoCheckmarkDoneOutline, IoTimeOutline,
+  IoCheckmarkDoneOutline, IoTimeOutline, IoSearchOutline,
+  IoListOutline, IoGridOutline,
 } from 'react-icons/io5';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restInsert, restRpc } from '../../../services/supabaseRest';
@@ -31,6 +33,7 @@ interface ActivityEvent {
 interface ReadRow { event_id: string }
 
 type CategoryFilter = 'all' | 'content' | 'access' | 'submissions' | 'reviews' | 'forum';
+type ViewMode = 'list' | 'grid';
 
 // ─── Vocabulary maps ──────────────────────────────────────────────────────────
 
@@ -47,6 +50,19 @@ const CATEGORY_OF: Record<ActivityEventType, CategoryFilter> = {
   'coach.work_approved':         'reviews',
 };
 
+const EVENT_LABEL: Record<ActivityEventType, string> = {
+  'content.material_published':  'material publicado',
+  'content.lesson_published':    'clase publicada',
+  'content.session_scheduled':   'sesión programada',
+  'content.forum_announcement':  'anuncio del foro',
+  'student.material_accessed':   'descarga',
+  'student.work_submitted':      'entrega',
+  'student.forum_question':      'pregunta en foro',
+  'coach.material_accessed':     'acceso de coach',
+  'coach.work_returned':         'devolución',
+  'coach.work_approved':         'aprobación',
+};
+
 const FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: 'all',         label: 'Todas' },
   { id: 'content',     label: 'Contenido' },
@@ -58,8 +74,8 @@ const FILTERS: { id: CategoryFilter; label: string }[] = [
 
 interface CardVisuals {
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  accent: string;   // background/text for icon chip
-  border: string;   // unread left-bar color
+  accent: string;
+  border: string;
 }
 
 const VISUALS: Record<ActivityEventType, CardVisuals> = {
@@ -99,25 +115,72 @@ function timeAgo(dateStr: string): string {
   return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
 }
 
-// ─── Headline composition ────────────────────────────────────────────────────
-
+function matchesSearch(ev: ActivityEvent, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  const d = ev.details || {};
+  const haystack = [
+    d.actorName, d.subjectName,
+    d.courseTitle, d.cycleName, d.moduleTitle, d.lessonTitle, d.materialTitle,
+    d.fileName, d.submissionFileName, d.revisedFileName,
+    EVENT_LABEL[ev.event_type],
+    ev.actor_role,
+  ]
+    .filter(Boolean)
+    .map((s: any) => String(s).toLowerCase())
+    .join(' | ');
+  return haystack.includes(q);
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 60;
+const VIEW_MODE_KEY = 'admin_activity_view_mode';
 
 interface Props {
-  /** Notifies the parent sidebar so it can update the unread badge. */
+  /** Legacy notifier — the AdminShell badge now polls via RPC, but this prop is kept for back-compat. */
   onUnreadChange?: (count: number) => void;
 }
 
 export default function AdminActivity({ onUnreadChange }: Props) {
+  const router = useRouter();
+  const pathname = usePathname() || '/admin/actividad';
+  const searchParams = useSearchParams();
+  const queryParam = searchParams?.get('q') ?? '';
+
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<CategoryFilter>('all');
   const [selectedEvent, setSelectedEvent] = useState<ActivityEvent | null>(null);
+  const [searchInput, setSearchInput] = useState(queryParam);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const myProfileIdRef = useRef<string | null>(null);
+
+  // Load persisted view mode
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem(VIEW_MODE_KEY);
+    if (stored === 'list' || stored === 'grid') setViewMode(stored);
+  }, []);
+
+  const changeViewMode = (m: ViewMode) => {
+    setViewMode(m);
+    try { window.localStorage.setItem(VIEW_MODE_KEY, m); } catch {}
+  };
+
+  // Sync URL ?q= with searchInput (debounced)
+  useEffect(() => { setSearchInput(queryParam); }, [queryParam]);
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      if (searchInput === queryParam) return;
+      const sp = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
+      if (searchInput) sp.set('q', searchInput); else sp.delete('q');
+      const qs = sp.toString();
+      router.replace(`${pathname}${qs ? `?${qs}` : ''}`);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [searchInput, queryParam, pathname, router, searchParams]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -174,18 +237,34 @@ export default function AdminActivity({ onUnreadChange }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // ── Notify parent of unread count ────────────────────────────────────────
+  // ── Unread count notifications (back-compat) ─────────────────────────────
   const unreadCount = useMemo(
     () => events.filter(e => !readIds.has(e.id)).length,
     [events, readIds]
   );
   useEffect(() => { onUnreadChange?.(unreadCount); }, [unreadCount, onUnreadChange]);
 
-  // ── Filter + group ───────────────────────────────────────────────────────
-  const filtered = useMemo(
-    () => filter === 'all' ? events : events.filter(e => CATEGORY_OF[e.event_type] === filter),
-    [events, filter]
-  );
+  // ── Unread by category for chip counters ─────────────────────────────────
+  const unreadByCategory = useMemo(() => {
+    const out: Record<CategoryFilter, number> = { all: 0, content: 0, access: 0, submissions: 0, reviews: 0, forum: 0 };
+    for (const ev of events) {
+      if (readIds.has(ev.id)) continue;
+      out.all += 1;
+      const cat = CATEGORY_OF[ev.event_type];
+      if (cat) out[cat] += 1;
+    }
+    return out;
+  }, [events, readIds]);
+
+  // ── Filter + search + group ──────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    const q = queryParam.trim();
+    return events.filter(ev => {
+      if (filter !== 'all' && CATEGORY_OF[ev.event_type] !== filter) return false;
+      if (q && !matchesSearch(ev, q)) return false;
+      return true;
+    });
+  }, [events, filter, queryParam]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, ActivityEvent[]> = { 'Hoy': [], 'Ayer': [], 'Esta semana': [], 'Antes': [] };
@@ -200,10 +279,7 @@ export default function AdminActivity({ onUnreadChange }: Props) {
   const markRead = async (eventId: string) => {
     if (readIds.has(eventId)) return;
     if (!myProfileIdRef.current) return;
-
-    // Optimistic
     setReadIds(prev => new Set(prev).add(eventId));
-
     try {
       await restInsert(
         'staff_activity_event_reads',
@@ -219,14 +295,11 @@ export default function AdminActivity({ onUnreadChange }: Props) {
     if (!myProfileIdRef.current) return;
     const unread = events.filter(e => !readIds.has(e.id));
     if (unread.length === 0) return;
-
-    // Optimistic
     setReadIds(prev => {
       const next = new Set(prev);
       unread.forEach(e => next.add(e.id));
       return next;
     });
-
     try {
       await restInsert(
         'staff_activity_event_reads',
@@ -242,6 +315,8 @@ export default function AdminActivity({ onUnreadChange }: Props) {
     setSelectedEvent(ev);
     markRead(ev.id);
   };
+
+  const isFiltering = !!queryParam.trim() || filter !== 'all';
 
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
@@ -266,7 +341,7 @@ export default function AdminActivity({ onUnreadChange }: Props) {
             </button>
           )}
           <a
-            href="/admin/actividad"
+            href="/admin/actividad/historial"
             className="text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-900 flex items-center gap-1 transition-colors"
           >
             Ver historial completo →
@@ -274,13 +349,58 @@ export default function AdminActivity({ onUnreadChange }: Props) {
         </div>
       </div>
 
+      {/* Search + view toggle */}
+      <div className="flex flex-col md:flex-row md:items-center gap-3">
+        <div className="relative flex-1">
+          <IoSearchOutline size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar por persona, contenido, tipo de evento..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="w-full pl-9 pr-9 py-2.5 bg-white border border-slate-200 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30 focus:border-[#00A9CE]/40"
+          />
+          {searchInput && (
+            <button
+              onClick={() => setSearchInput('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+              aria-label="Limpiar búsqueda"
+            >
+              <IoCloseOutline size={18} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shrink-0">
+          <button
+            onClick={() => changeViewMode('list')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+              viewMode === 'list' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+            }`}
+            aria-label="Vista lista"
+          >
+            <IoListOutline size={16} />
+            Lista
+          </button>
+          <button
+            onClick={() => changeViewMode('grid')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+              viewMode === 'grid' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+            }`}
+            aria-label="Vista mosaicos"
+          >
+            <IoGridOutline size={16} />
+            Mosaicos
+          </button>
+        </div>
+      </div>
+
       {/* Filter chips */}
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {FILTERS.map(f => {
           const isActive = filter === f.id;
-          const count = f.id === 'all'
-            ? events.length
-            : events.filter(e => CATEGORY_OF[e.event_type] === f.id).length;
+          const count = unreadByCategory[f.id];
+          const muted = count === 0;
           return (
             <button
               key={f.id}
@@ -288,11 +408,21 @@ export default function AdminActivity({ onUnreadChange }: Props) {
               className={`shrink-0 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
                 isActive
                   ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
+                  : muted
+                    ? 'bg-slate-50 text-slate-400 border border-slate-100'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
               }`}
             >
               {f.label}
-              <span className={`min-w-[18px] text-center text-[10px] font-bold rounded-full px-1.5 ${isActive ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}`}>
+              <span
+                className={`min-w-[18px] text-center text-[10px] font-bold rounded-full px-1.5 ${
+                  isActive
+                    ? 'bg-white/20'
+                    : muted
+                      ? 'bg-transparent text-slate-300'
+                      : 'bg-slate-100 text-slate-500'
+                }`}
+              >
                 {count}
               </span>
             </button>
@@ -308,7 +438,17 @@ export default function AdminActivity({ onUnreadChange }: Props) {
       ) : filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center">
           <IoSparklesOutline size={32} className="mx-auto text-slate-300 mb-3" />
-          <p className="text-slate-500 text-sm">Sin actividad en esta categoría.</p>
+          <p className="text-slate-500 text-sm">
+            {isFiltering ? 'Sin resultados para esa búsqueda o filtro.' : 'Sin actividad en esta categoría.'}
+          </p>
+          {isFiltering && (
+            <button
+              onClick={() => { setSearchInput(''); setFilter('all'); }}
+              className="mt-3 text-xs font-bold uppercase tracking-wider text-[#00A9CE] hover:underline"
+            >
+              Limpiar filtros
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-8">
@@ -320,39 +460,29 @@ export default function AdminActivity({ onUnreadChange }: Props) {
                 <h3 className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400 mb-3 pl-1">
                   {label}
                 </h3>
-                <div className="space-y-2">
-                  {items.map(ev => {
-                    const isUnread = !readIds.has(ev.id);
-                    const visuals = VISUALS[ev.event_type];
-                    const { title, secondary } = composeHeadline(ev);
-                    const Icon = visuals.icon;
-                    return (
-                      <button
+                {viewMode === 'list' ? (
+                  <div className="space-y-2">
+                    {items.map(ev => (
+                      <ActivityCardList
                         key={ev.id}
-                        onClick={() => handleCardTap(ev)}
-                        className={`w-full text-left bg-white rounded-xl border border-slate-200 hover:border-[#00A9CE]/40 hover:shadow-sm transition-all flex items-start gap-4 p-4 min-h-[80px] ${
-                          isUnread ? `border-l-4 ${visuals.border}` : ''
-                        }`}
-                      >
-                        <div className={`w-11 h-11 rounded-xl ${visuals.accent} flex items-center justify-center shrink-0`}>
-                          <Icon size={22} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm leading-tight ${isUnread ? 'font-bold text-slate-900' : 'font-medium text-slate-700'}`}>
-                            {title}
-                          </p>
-                          {secondary && (
-                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{secondary}</p>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium shrink-0 flex items-center gap-1.5">
-                          {isUnread && <span className="w-2 h-2 rounded-full bg-[#00A9CE] animate-pulse" />}
-                          {timeAgo(ev.created_at)}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                        ev={ev}
+                        unread={!readIds.has(ev.id)}
+                        onTap={handleCardTap}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {items.map(ev => (
+                      <ActivityCardGrid
+                        key={ev.id}
+                        ev={ev}
+                        unread={!readIds.has(ev.id)}
+                        onTap={handleCardTap}
+                      />
+                    ))}
+                  </div>
+                )}
               </section>
             );
           })}
@@ -367,6 +497,83 @@ export default function AdminActivity({ onUnreadChange }: Props) {
         />
       )}
     </div>
+  );
+}
+
+// ─── Cards ────────────────────────────────────────────────────────────────────
+
+function ActivityCardList({
+  ev, unread, onTap,
+}: { ev: ActivityEvent; unread: boolean; onTap: (ev: ActivityEvent) => void }) {
+  const visuals = VISUALS[ev.event_type];
+  const { title, secondary } = composeHeadline(ev);
+  const Icon = visuals.icon;
+  return (
+    <button
+      onClick={() => onTap(ev)}
+      className={`w-full text-left bg-white rounded-xl border border-slate-200 hover:border-[#00A9CE]/40 hover:shadow-sm transition-all flex items-start gap-4 p-4 min-h-[80px] ${
+        unread ? `border-l-4 ${visuals.border}` : 'opacity-90'
+      }`}
+    >
+      <div className={`w-11 h-11 rounded-xl ${visuals.accent} flex items-center justify-center shrink-0 transition-opacity ${unread ? '' : 'opacity-70'}`}>
+        <Icon size={22} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm leading-tight transition-colors ${unread ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}>
+          {title}
+        </p>
+        {secondary && (
+          <p className={`text-xs mt-1 line-clamp-2 ${unread ? 'text-slate-500' : 'text-slate-400'}`}>{secondary}</p>
+        )}
+      </div>
+      <div className="text-[10px] text-slate-400 font-medium shrink-0 flex items-center gap-1.5">
+        {unread && <span className="w-2 h-2 rounded-full bg-[#00A9CE] animate-pulse" />}
+        {timeAgo(ev.created_at)}
+      </div>
+    </button>
+  );
+}
+
+function ActivityCardGrid({
+  ev, unread, onTap,
+}: { ev: ActivityEvent; unread: boolean; onTap: (ev: ActivityEvent) => void }) {
+  const visuals = VISUALS[ev.event_type];
+  const { title, secondary } = composeHeadline(ev);
+  const Icon = visuals.icon;
+  const actorName = ev.details?.actorName;
+  return (
+    <button
+      onClick={() => onTap(ev)}
+      className={`text-left bg-white rounded-2xl border border-slate-200 hover:border-[#00A9CE]/40 hover:shadow-md transition-all p-4 flex flex-col gap-3 min-h-[160px] ${
+        unread ? `border-t-4 ${visuals.border.replace('border-l-', 'border-t-')}` : 'opacity-90'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className={`w-10 h-10 rounded-xl ${visuals.accent} flex items-center justify-center shrink-0 transition-opacity ${unread ? '' : 'opacity-70'}`}>
+          <Icon size={20} />
+        </div>
+        <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5">
+          {unread && <span className="w-2 h-2 rounded-full bg-[#00A9CE] animate-pulse" />}
+          {timeAgo(ev.created_at)}
+        </div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm leading-snug line-clamp-2 ${unread ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}>
+          {title}
+        </p>
+        {secondary && (
+          <p className={`text-xs mt-1.5 line-clamp-2 ${unread ? 'text-slate-500' : 'text-slate-400'}`}>{secondary}</p>
+        )}
+      </div>
+      {actorName && (
+        <div className="flex items-center gap-2 pt-2 border-t border-slate-50">
+          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+            {String(actorName).split(' ').map((s: string) => s[0]).join('').slice(0, 2).toUpperCase()}
+          </div>
+          <span className="text-[11px] font-medium text-slate-500 truncate">{actorName}</span>
+        </div>
+      )}
+    </button>
   );
 }
 
@@ -391,7 +598,6 @@ function EventDetailModal({ event, onClose }: { event: ActivityEvent; onClose: (
         className="bg-white rounded-t-3xl md:rounded-2xl shadow-2xl w-full max-w-lg max-h-[88vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="p-6 pb-4 border-b border-slate-100">
           <div className="flex items-start gap-4">
             <div className={`w-14 h-14 rounded-2xl ${visuals.accent} flex items-center justify-center shrink-0`}>
@@ -404,19 +610,13 @@ function EventDetailModal({ event, onClose }: { event: ActivityEvent; onClose: (
                 <IoTimeOutline size={12} /> {fullDate}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-700 shrink-0 -mr-2 -mt-1"
-              aria-label="Cerrar"
-            >
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-700 shrink-0 -mr-2 -mt-1" aria-label="Cerrar">
               <IoCloseOutline size={24} />
             </button>
           </div>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* Forum body preview */}
           {(event.event_type === 'student.forum_question' || event.event_type === 'content.forum_announcement') && d.bodyPreview && (
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Mensaje</p>
@@ -424,7 +624,6 @@ function EventDetailModal({ event, onClose }: { event: ActivityEvent; onClose: (
             </div>
           )}
 
-          {/* Context grid */}
           <div className="space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Contexto</p>
             {d.courseTitle && <DetailRow label="Programa" value={d.courseTitle} />}
@@ -443,7 +642,6 @@ function EventDetailModal({ event, onClose }: { event: ActivityEvent; onClose: (
             {d.hasFeedback && <DetailRow label="Feedback" value="Sí" valueClass="text-emerald-700" />}
           </div>
 
-          {/* Actor */}
           {d.actorName && (
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Quién</p>
@@ -462,14 +660,8 @@ function EventDetailModal({ event, onClose }: { event: ActivityEvent; onClose: (
           )}
         </div>
 
-        {/* Footer */}
         <div className="p-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/40">
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg"
-          >
-            Cerrar
-          </button>
+          <button onClick={onClose} className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg">Cerrar</button>
           {link && (
             <a
               href={link.href}

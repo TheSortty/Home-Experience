@@ -3,9 +3,13 @@
 import { useState, useEffect, Suspense } from 'react'
 import React from 'react'
 import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useGSAP } from '@gsap/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/src/contexts/AuthContext'
 import dynamic from 'next/dynamic'
+
+gsap.registerPlugin(useGSAP, ScrollTrigger)
 
 // Landing Features (Lazy Loaded via Next.js Dynamic Imports)
 const Hero = dynamic(() => import('@/src/features/landing/Hero'), { ssr: true }) // Hero should stay SSR for LCP
@@ -45,37 +49,52 @@ export default function HomePage() {
     }
   }, [searchParams, router])
 
-  // GSAP scroll reveal
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              entry.target.classList.add('animate-fade-in-up')
-              entry.target.classList.remove('opacity-0')
-              observer.unobserve(entry.target)
-            }
+  // GSAP scroll reveal — replaces IntersectionObserver
+  useGSAP(() => {
+    const mm = gsap.matchMedia()
+
+    /* Reduced motion: ensure all sections are visible, no transitions */
+    mm.add('(prefers-reduced-motion: reduce)', () => {
+      document.querySelectorAll('.reveal-on-scroll').forEach((el) => {
+        ;(el as HTMLElement).style.opacity = '1'
+        ;(el as HTMLElement).style.transform = 'none'
+      })
+    })
+
+    /* Full animations ───────────────────────────────────────────────── */
+    mm.add('(prefers-reduced-motion: no-preference)', () => {
+      // Hide all sections upfront (runs as layout effect → no flash)
+      gsap.set('.reveal-on-scroll', { opacity: 0, y: 40 })
+
+      ScrollTrigger.batch('.reveal-on-scroll', {
+        onEnter(elements) {
+          gsap.to(elements, {
+            opacity: 1,
+            y: 0,
+            duration: 0.82,
+            ease: 'power2.out',
+            stagger: 0.1,
+            clearProps: 'all',
           })
         },
-        { threshold: 0.1, rootMargin: '50px' }
-      )
+        start: 'top 88%',
+        once: true,
+      })
 
-      const observeElements = () => {
-        document.querySelectorAll('.reveal-on-scroll').forEach((el) => observer.observe(el))
-      }
-
-      observeElements()
-      const timeoutId = setTimeout(observeElements, 1000)
+      // Lazy-loaded sections mount asynchronously — refresh trigger
+      // positions at two intervals to catch late arrivals
+      const t1 = setTimeout(() => ScrollTrigger.refresh(), 400)
+      const t2 = setTimeout(() => ScrollTrigger.refresh(), 1200)
 
       return () => {
-        observer.disconnect()
-        clearTimeout(timeoutId)
+        clearTimeout(t1)
+        clearTimeout(t2)
+        ScrollTrigger.getAll().forEach((st) => st.kill())
       }
     })
 
-    return () => ctx.revert()
-  }, [isSelectionModalOpen, selectedProgramId])
+    return () => mm.revert()
+  })
 
   // Body scroll lock for modals
   useEffect(() => {
@@ -89,42 +108,40 @@ export default function HomePage() {
 
   return (
     <div className="home-page-container">
-      {/* 1. HERO */}
-      <div className="reveal-on-scroll opacity-0">
-        <Hero onRegisterClick={() => setIsSelectionModalOpen(true)} />
-      </div>
+      {/* 1. HERO — above the fold; Hero animates its own elements */}
+      <Hero onRegisterClick={() => setIsSelectionModalOpen(true)} />
 
       {/* 2. VIDEO HIGHLIGHT */}
-      <div className="reveal-on-scroll opacity-0">
+      <div className="reveal-on-scroll">
         <VideoSection />
       </div>
 
       {/* 3. QUIENES SOMOS */}
-      <div className="reveal-on-scroll opacity-0">
+      <div className="reveal-on-scroll">
         <WhoWeAre onConfioClick={() => {}} />
       </div>
 
       {/* 4. COACHING */}
-      <div className="reveal-on-scroll opacity-0">
+      <div className="reveal-on-scroll">
         <Coaching />
       </div>
 
       {/* 5. PROGRAMAS */}
-      <div className="reveal-on-scroll opacity-0">
+      <div className="reveal-on-scroll">
         <Programs onLearnMore={(id) => setSelectedProgramId(id)} />
       </div>
 
       {/* 6. VIAJES & RETIROS */}
-      <div className="reveal-on-scroll opacity-0">
+      <div className="reveal-on-scroll">
         <Retreats />
       </div>
 
-      <div className="reveal-on-scroll opacity-0">
+      <div className="reveal-on-scroll">
         <MomentsSwiper />
       </div>
 
       {/* 7. TESTIMONIOS */}
-      <div className="relative reveal-on-scroll opacity-0">
+      <div className="relative reveal-on-scroll">
         <InteractivePoints />
         <div className="relative z-10 pointer-events-none">
           <div className="pointer-events-auto">
@@ -137,17 +154,17 @@ export default function HomePage() {
       </div>
 
       {/* 8. IMPACTOS */}
-      <div className="reveal-on-scroll opacity-0">
+      <div className="reveal-on-scroll">
         <Impact />
       </div>
 
       {/* 9. UBICACIÓN */}
-      <div className="reveal-on-scroll opacity-0">
+      <div className="reveal-on-scroll">
         <Location />
       </div>
 
       {/* 10. CONTACTO */}
-      <div className="reveal-on-scroll opacity-0">
+      <div className="reveal-on-scroll">
         <Contact />
       </div>
 

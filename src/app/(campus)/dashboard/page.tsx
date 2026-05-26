@@ -195,7 +195,7 @@ export default async function CampusDashboardPage({
 
       {/* STATS */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
+        <div data-anim="card" className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
             <IoBookOutline size={24} />
           </div>
@@ -206,7 +206,7 @@ export default async function CampusDashboardPage({
         </div>
 
         {viewMode === 'organizer' ? (
-          <div className="bg-amber-50 rounded-xl p-5 border border-amber-200 shadow-sm flex items-center gap-4 col-span-1 md:col-span-1">
+          <div data-anim="card" className="bg-amber-50 rounded-xl p-5 border border-amber-200 shadow-sm flex items-center gap-4 col-span-1 md:col-span-1">
             <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
               <IoEyeOutline size={24} />
             </div>
@@ -216,7 +216,7 @@ export default async function CampusDashboardPage({
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
+          <div data-anim="card" className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center">
               <IoCheckmarkCircleOutline size={24} />
             </div>
@@ -228,7 +228,7 @@ export default async function CampusDashboardPage({
         )}
 
         {viewMode === 'organizer' ? (
-          <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 col-span-1 md:col-span-1 opacity-40">
+          <div data-anim="card" className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 col-span-1 md:col-span-1 opacity-40">
             <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center">
               <IoFlameOutline size={24} />
             </div>
@@ -238,7 +238,7 @@ export default async function CampusDashboardPage({
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
+          <div data-anim="card" className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center">
               <IoFlameOutline size={24} />
             </div>
@@ -249,7 +249,7 @@ export default async function CampusDashboardPage({
           </div>
         )}
 
-        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
+        <div data-anim="card" className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-purple-50 text-purple-500 flex items-center justify-center">
             <IoTimeOutline size={24} />
           </div>
@@ -332,6 +332,7 @@ export default async function CampusDashboardPage({
                   <Link
                     key={enr.id}
                     href={href}
+                    data-anim="card"
                     className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:border-[#00A9CE]/30 hover:shadow-md transition-all"
                   >
                     <div className={`h-32 relative overflow-hidden ${coverSrc ? '' : `bg-gradient-to-r ${idx % 2 === 0 ? 'from-[#00A9CE] to-blue-600' : 'from-emerald-400 to-teal-500'}`}`}>
@@ -393,7 +394,7 @@ export default async function CampusDashboardPage({
                 const d = parseDateLocal(s.session_date);
                 const isToday = d.toDateString() === new Date().toDateString();
                 return (
-                  <div key={s.id} className="p-4 flex items-center gap-3">
+                  <div key={s.id} data-anim="card" className="p-4 flex items-center gap-3">
                     <div className={`flex flex-col items-center justify-center w-11 h-11 rounded-lg flex-shrink-0 border ${
                       isToday ? 'bg-[#00A9CE] border-[#00A9CE] text-white' : 'bg-slate-50 border-slate-200'
                     }`}>
