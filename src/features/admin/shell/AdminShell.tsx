@@ -70,6 +70,7 @@ export default function AdminShell({ children }: AdminShellProps) {
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [adminAvatar, setAdminAvatar] = useState<string | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const [pendingAdmissions, setPendingAdmissions] = useState(0);
@@ -145,6 +146,23 @@ export default function AdminShell({ children }: AdminShellProps) {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [isAdmin, refreshPendingAdmissions, refreshUnreadActivity]);
+
+  // ─── Admin avatar ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user?.id) return;
+    restSelect<{ avatar_url: string | null }>('profiles', {
+      columns: 'avatar_url',
+      filters: { user_id: `eq.${user.id}` },
+      limit: 1,
+    })
+      .then(({ data }) => {
+        const url = data?.[0]?.avatar_url ?? null;
+        setAdminAvatar(url);
+      })
+      .catch(err => {
+        console.warn('[AdminShell] avatar fetch failed', err);
+      });
+  }, [user?.id]);
 
   // ─── Profile menu close on outside click ──────────────────────────────────
   useEffect(() => {
@@ -307,11 +325,11 @@ export default function AdminShell({ children }: AdminShellProps) {
 
           <div className="flex items-center gap-2 md:gap-4 shrink-0">
             <div className="hidden sm:flex items-center gap-2">
-              <a href="/" className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors">
+              <Link href="/" className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors">
                 ← Web principal
-              </a>
+              </Link>
               <div className="w-px h-4 bg-slate-200" />
-              <a
+              <Link
                 href="/dashboard"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all"
               >
@@ -319,7 +337,7 @@ export default function AdminShell({ children }: AdminShellProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Ir al campus
-              </a>
+              </Link>
             </div>
 
             <div ref={profileMenuRef} className="relative">
@@ -335,9 +353,17 @@ export default function AdminShell({ children }: AdminShellProps) {
                     {isSuper ? 'Sysadmin' : 'Admin'}
                   </span>
                 </div>
-                <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-white text-sm font-bold shadow-sm uppercase ring-2 ring-slate-700">
-                  {(userEmail || 'Admin').substring(0, 2).toUpperCase()}
-                </div>
+                {adminAvatar ? (
+                  <img
+                    src={adminAvatar}
+                    alt={userEmail || 'Admin'}
+                    className="w-9 h-9 rounded-xl object-cover shadow-sm ring-2 ring-slate-700"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-white text-sm font-bold shadow-sm uppercase ring-2 ring-slate-700">
+                    {(userEmail || 'Admin').substring(0, 2).toUpperCase()}
+                  </div>
+                )}
                 <IoChevronDownOutline size={13} className={`text-slate-400 transition-transform duration-150 ${profileMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 

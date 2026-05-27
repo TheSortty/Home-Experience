@@ -39,7 +39,7 @@ export default async function CampusComunidadPage() {
           .from('forum_posts')
           .select(`
             id, course_id, user_id, title, body, parent_id, created_at, lesson_id,
-            profiles(first_name, last_name, role),
+            profiles(first_name, last_name, role, avatar_url),
             lessons(id, title, order_index, modules(id, title, order_index))
           `)
           .in('course_id', courseIds)
@@ -57,6 +57,7 @@ export default async function CampusComunidadPage() {
               ? `${p.profiles.first_name ?? ''} ${p.profiles.last_name ?? ''}`.trim() || 'Estudiante'
               : 'Estudiante',
             author_role: p.profiles?.role ?? null,
+            author_avatar: p.profiles?.avatar_url ?? null,
             title: p.title,
             body: p.body,
             parent_id: p.parent_id,

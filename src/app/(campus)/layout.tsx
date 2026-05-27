@@ -72,6 +72,14 @@ export default async function CampusLayout({ children }: { children: React.React
             <CampusNav role={role ?? undefined} />
           </div>
 
+          {/* Web principal — visible en desktop para todos los roles */}
+          <Link
+            href="/"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors shrink-0"
+          >
+            ← Web principal
+          </Link>
+
           {/* Profile */}
           <ProfileMenu
             firstName={firstName}

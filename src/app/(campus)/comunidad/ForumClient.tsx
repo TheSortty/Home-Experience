@@ -22,6 +22,7 @@ export type ForumPost = {
   user_id: string;
   author_name: string;
   author_role?: string | null;
+  author_avatar?: string | null;
   title: string | null;
   body: string;
   parent_id: string | null;
@@ -334,9 +335,17 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
                       onClick={() => setExpandedPost(isExpanded ? null : post.id)}
                     >
                       <div className="flex gap-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${avatarColor(post.user_id)}`}>
-                          {initials(post.author_name)}
-                        </div>
+                        {post.author_avatar ? (
+                          <img
+                            src={post.author_avatar}
+                            alt={post.author_name}
+                            className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${avatarColor(post.user_id)}`}>
+                            {initials(post.author_name)}
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           {/* Tags row */}
                           <div className="flex items-center flex-wrap gap-1.5 mb-1">
@@ -388,9 +397,17 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
                           <div className="space-y-3 mb-4">
                             {post.replies.map(reply => (
                               <div key={reply.id} className="flex gap-3">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${avatarColor(reply.user_id)}`}>
-                                  {initials(reply.author_name)}
-                                </div>
+                                {reply.author_avatar ? (
+                                  <img
+                                    src={reply.author_avatar}
+                                    alt={reply.author_name}
+                                    className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${avatarColor(reply.user_id)}`}>
+                                    {initials(reply.author_name)}
+                                  </div>
+                                )}
                                 <div className="flex-1 bg-white rounded-xl border border-slate-200 p-3">
                                   <div className="flex items-center flex-wrap gap-1.5 mb-1">
                                     <span className="text-xs font-bold text-slate-700">{reply.author_name}</span>

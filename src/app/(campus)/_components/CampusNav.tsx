@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   IoHomeOutline, IoBookOutline, IoCalendarOutline,
   IoPeopleOutline, IoMenuOutline, IoCloseOutline,
-  IoCheckmarkDoneOutline,
+  IoCheckmarkDoneOutline, IoGlobeOutline,
 } from 'react-icons/io5';
 import { isAdminRole } from '@/src/services/roleService';
 
@@ -100,6 +100,17 @@ export default function CampusNav({ role }: Props) {
                   <span>{label}</span>
                 </Link>
               ))}
+
+              {/* Separador + Web principal */}
+              <div className="pt-3 border-t border-slate-100 mt-3">
+                <Link
+                  href="/"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors"
+                >
+                  <IoGlobeOutline size={20} />
+                  <span>Web principal</span>
+                </Link>
+              </div>
             </nav>
           </aside>
           <div
