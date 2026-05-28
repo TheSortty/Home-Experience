@@ -3,24 +3,8 @@ import { normalizeImageUrl } from '@/src/services/imageUrl';
 import { isAdminRole } from '@/src/services/roleService';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import {
-  IoArrowBackOutline,
-  IoCheckmarkCircle,
-  IoPlayCircleOutline,
-  IoDocumentTextOutline,
-  IoLockClosedOutline,
-  IoEllipseOutline,
-  IoEyeOutline,
-} from 'react-icons/io5';
-
-function formatDuration(seconds: number) {
-  if (!seconds) return '';
-  const mins = Math.floor(seconds / 60);
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}h ${m}min` : `${h}h`;
-}
+import { IoArrowBackOutline, IoDocumentTextOutline, IoEyeOutline } from 'react-icons/io5';
+import CursoContent, { type ModuleNode, type ResourceWithContext } from './CursoContent';
 
 export default async function CursoDetallePage({
   params,
@@ -86,7 +70,7 @@ export default async function CursoDetallePage({
     .eq('is_published', true)
     .order('order_index', { ascending: true });
 
-  type Lesson = {
+  type RawLesson = {
     id: string;
     title: string;
     description: string | null;
@@ -96,26 +80,28 @@ export default async function CursoDetallePage({
     is_published: boolean;
   };
 
-  type Module = {
-    id: string;
-    title: string;
-    order_index: number;
-    module_type: string;
-    lessons: Lesson[];
-  };
-
-  const allModules: Module[] = (rawModules || []).map((m: any) => ({
-    ...m,
+  const allModules: ModuleNode[] = (rawModules || []).map((m: any) => ({
+    id: m.id,
+    title: m.title,
+    order_index: m.order_index,
     module_type: m.module_type ?? 'module',
     lessons: [...(m.lessons || [])]
-      .filter((l: Lesson) => l.is_published)
-      .sort((a: Lesson, b: Lesson) => a.order_index - b.order_index),
+      .filter((l: RawLesson) => l.is_published)
+      .sort((a: RawLesson, b: RawLesson) => a.order_index - b.order_index)
+      .map((l: RawLesson) => ({
+        id: l.id,
+        title: l.title,
+        description: l.description,
+        video_url: l.video_url,
+        duration_seconds: l.duration_seconds,
+        order_index: l.order_index,
+      })),
   }));
 
-  const modules = allModules.filter(m => m.module_type !== 'workshop');
-  const workshopModules = allModules.filter(m => m.module_type === 'workshop');
+  const modules = allModules.filter((m) => m.module_type !== 'workshop');
+  const workshopModules = allModules.filter((m) => m.module_type === 'workshop');
 
-  // Fetch lesson_progress (skip for organizer — they have none and it would show 0%)
+  // Fetch lesson_progress (skip for organizer)
   const allLessonIds = allModules.flatMap((m) => m.lessons.map((l) => l.id));
   const completedSet = new Set<string>();
 
@@ -148,19 +134,53 @@ export default async function CursoDetallePage({
   // Organizer: link to first lesson for easy navigation
   const firstLessonId = allModules[0]?.lessons[0]?.id ?? null;
 
-  // Fetch lesson_resources for all lessons (sidebar material)
-  const { data: resources } = await supabase
-    .from('lesson_resources')
-    .select('id, lesson_id, title, file_url, type')
-    .in('lesson_id', allLessonIds.length > 0 ? allLessonIds : ['__none__']);
+  // Fetch lesson_resources with creation order to power the "Archivos" tab.
+  const { data: resources } = allLessonIds.length > 0
+    ? await supabase
+        .from('lesson_resources')
+        .select('id, lesson_id, title, file_url, type, created_at')
+        .in('lesson_id', allLessonIds)
+        .order('created_at', { ascending: true })
+    : { data: [] };
 
-  const resourcesByLesson: Record<string, { id: string; title: string; file_url: string; type: string }[]> = {};
-  (resources || []).forEach((r: any) => {
-    if (!resourcesByLesson[r.lesson_id]) resourcesByLesson[r.lesson_id] = [];
-    resourcesByLesson[r.lesson_id].push(r);
-  });
+  // Build lesson → module index map for grouping/context.
+  const lessonIndex = new Map<string, { lessonTitle: string; lessonOrder: number; moduleId: string; moduleTitle: string; moduleOrder: number }>();
+  for (const m of allModules) {
+    for (const l of m.lessons) {
+      lessonIndex.set(l.id, {
+        lessonTitle: l.title,
+        lessonOrder: l.order_index,
+        moduleId: m.id,
+        moduleTitle: m.title,
+        moduleOrder: m.order_index,
+      });
+    }
+  }
 
-  const courseResources = Object.values(resourcesByLesson).flat();
+  const resourcesWithContext: ResourceWithContext[] = (resources || [])
+    .map((r: any) => {
+      const ctx = lessonIndex.get(r.lesson_id);
+      if (!ctx) return null;
+      return {
+        id: r.id,
+        title: r.title,
+        file_url: r.file_url,
+        type: r.type ?? 'link',
+        createdAt: r.created_at,
+        lessonId: r.lesson_id,
+        lessonTitle: ctx.lessonTitle,
+        lessonOrder: ctx.lessonOrder,
+        moduleId: ctx.moduleId,
+        moduleTitle: ctx.moduleTitle,
+        moduleOrder: ctx.moduleOrder,
+      };
+    })
+    .filter((r): r is ResourceWithContext => r !== null)
+    .sort((a, b) => {
+      if (a.moduleOrder !== b.moduleOrder) return a.moduleOrder - b.moduleOrder;
+      if (a.lessonOrder !== b.lessonOrder) return a.lessonOrder - b.lessonOrder;
+      return a.createdAt.localeCompare(b.createdAt);
+    });
 
   return (
     <div className="space-y-8 pb-12">
@@ -282,289 +302,15 @@ export default async function CursoDetallePage({
           <p className="text-sm text-slate-500">Los temas de este programa estarán disponibles pronto.</p>
         </div>
       ) : (
-        /* CONTENT GRID */
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-4">
-
-          {/* MODULE LIST — 2 cols */}
-          <div className="lg:col-span-2 space-y-8">
-
-            {/* Regular modules */}
-            {modules.length > 0 && (
-              <div className="space-y-4">
-                <h2 className="text-2xl font-bold text-slate-900">Contenido del Programa</h2>
-                <div className="space-y-4">
-            {modules.map((mod, modIdx) => {
-                const modCompleted = mod.lessons.filter((l) => completedSet.has(l.id)).length;
-                const modTotal = mod.lessons.length;
-                const isCurrentModule = !isOrganizer &&
-                  modCompleted < modTotal &&
-                  (modIdx === 0 || modules[modIdx - 1].lessons.every((l) => completedSet.has(l.id)));
-
-                return (
-                  <div
-                    key={mod.id}
-                    className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
-                      isCurrentModule
-                        ? 'border-l-4 border-l-[#00A9CE] border-slate-200'
-                        : 'border-slate-200'
-                    }`}
-                  >
-                    <div className={`p-5 border-b flex justify-between items-center ${
-                      isCurrentModule ? 'bg-white border-slate-100' : 'bg-slate-50 border-slate-200'
-                    }`}>
-                      <div>
-                        <p className={`text-xs font-bold uppercase tracking-widest mb-1 ${
-                          isCurrentModule ? 'text-[#00A9CE]' : 'text-slate-500'
-                        }`}>
-                          Módulo {mod.order_index}
-                          {isCurrentModule && ' (Actual)'}
-                        </p>
-                        <h3 className="text-lg font-bold text-slate-900">{mod.title}</h3>
-                      </div>
-                      {isOrganizer ? (
-                        <div className="text-xs font-bold text-amber-600">{modTotal} temas</div>
-                      ) : modCompleted === modTotal && modTotal > 0 ? (
-                        <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
-                          <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
-                        </div>
-                      ) : (
-                        <div className={`font-bold text-sm ${isCurrentModule ? 'text-[#00A9CE]' : 'text-slate-500'}`}>
-                          {modCompleted}/{modTotal}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="divide-y divide-slate-100">
-                      {mod.lessons.map((lesson) => {
-                        const isDone = !isOrganizer && completedSet.has(lesson.id);
-                        const isNext = !isOrganizer && lesson.id === nextLessonId;
-
-                        return (
-                          <Link
-                            key={lesson.id}
-                            href={`/cursos/${cursoId}/${lesson.id}`}
-                            className={`flex items-center justify-between p-4 transition-colors group ${
-                              isNext
-                                ? 'bg-[#00A9CE]/5 hover:bg-[#00A9CE]/10'
-                                : 'hover:bg-slate-50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-4">
-                              {isDone ? (
-                                <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
-                              ) : isNext ? (
-                                <div className="w-6 h-6 rounded-full border-2 border-[#00A9CE] flex items-center justify-center shrink-0">
-                                  <div className="w-2 h-2 bg-[#00A9CE] rounded-full" />
-                                </div>
-                              ) : (
-                                <IoEllipseOutline size={24} className={isOrganizer ? 'text-slate-400 shrink-0' : 'text-slate-300 shrink-0'} />
-                              )}
-                              <div>
-                                <p className={`text-sm font-bold transition-colors ${
-                                  isNext
-                                    ? 'text-[#00A9CE]'
-                                    : isDone
-                                    ? 'text-slate-700 group-hover:text-[#00A9CE]'
-                                    : 'text-slate-900 group-hover:text-[#00A9CE]'
-                                }`}>
-                                  {lesson.order_index}. {lesson.title}
-                                </p>
-                                <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                                  {lesson.video_url ? (
-                                    <>
-                                      <IoPlayCircleOutline className="inline" />
-                                      Video
-                                      {lesson.duration_seconds > 0 && ` · ${formatDuration(lesson.duration_seconds)}`}
-                                    </>
-                                  ) : (
-                                    <>
-                                      <IoDocumentTextOutline className="inline" />
-                                      Lectura
-                                    </>
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                            {isNext && (
-                              <span className="text-xs font-bold bg-white text-[#00A9CE] px-2 py-1 rounded shadow-sm border border-[#00A9CE]/20 shrink-0">
-                                Continuar
-                              </span>
-                            )}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-                </div>
-              </div>
-            )}
-
-            {/* Workshops section */}
-            {workshopModules.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-2xl font-bold text-slate-900">Talleres</h2>
-                  <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
-                    {workshopModules.length} taller{workshopModules.length !== 1 ? 'es' : ''}
-                  </span>
-                </div>
-                <p className="text-sm text-slate-500 -mt-1">Módulos prácticos que complementan el programa.</p>
-                <div className="space-y-4">
-                  {workshopModules.map((mod) => {
-                    const modCompleted = !isOrganizer ? mod.lessons.filter((l) => completedSet.has(l.id)).length : 0;
-                    const modTotal = mod.lessons.length;
-                    const allDone = !isOrganizer && modCompleted === modTotal && modTotal > 0;
-                    return (
-                      <div
-                        key={mod.id}
-                        className="bg-white rounded-2xl border border-l-4 border-amber-200 border-l-amber-400 shadow-sm overflow-hidden"
-                      >
-                        <div className="p-5 border-b border-amber-100 bg-amber-50/40 flex justify-between items-center">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-widest mb-1 text-amber-600">
-                              🎯 Taller
-                            </p>
-                            <h3 className="text-lg font-bold text-slate-900">{mod.title}</h3>
-                          </div>
-                          {isOrganizer ? (
-                            <div className="text-xs font-bold text-amber-600">{modTotal} temas</div>
-                          ) : allDone ? (
-                            <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
-                              <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
-                            </div>
-                          ) : (
-                            <div className="font-bold text-sm text-amber-600">{modCompleted}/{modTotal}</div>
-                          )}
-                        </div>
-                        <div className="divide-y divide-amber-50">
-                          {mod.lessons.map((lesson) => {
-                            const isDone = !isOrganizer && completedSet.has(lesson.id);
-                            const isNext = !isOrganizer && lesson.id === nextLessonId;
-                            return (
-                              <Link
-                                key={lesson.id}
-                                href={`/cursos/${cursoId}/${lesson.id}`}
-                                className={`flex items-center justify-between p-4 transition-colors group ${
-                                  isNext ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50'
-                                }`}
-                              >
-                                <div className="flex items-center gap-4">
-                                  {isDone ? (
-                                    <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
-                                  ) : isNext ? (
-                                    <div className="w-6 h-6 rounded-full border-2 border-amber-400 flex items-center justify-center shrink-0">
-                                      <div className="w-2 h-2 bg-amber-400 rounded-full" />
-                                    </div>
-                                  ) : (
-                                    <IoEllipseOutline size={24} className="text-amber-200 shrink-0" />
-                                  )}
-                                  <div>
-                                    <p className={`text-sm font-bold transition-colors ${
-                                      isNext ? 'text-amber-600' : isDone ? 'text-slate-700 group-hover:text-amber-600' : 'text-slate-900 group-hover:text-amber-600'
-                                    }`}>
-                                      {lesson.order_index}. {lesson.title}
-                                    </p>
-                                    <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                                      {lesson.video_url ? (
-                                        <><IoPlayCircleOutline className="inline" /> Video{lesson.duration_seconds > 0 && ` · ${formatDuration(lesson.duration_seconds)}`}</>
-                                      ) : (
-                                        <><IoDocumentTextOutline className="inline" /> Lectura</>
-                                      )}
-                                    </p>
-                                  </div>
-                                </div>
-                                {isNext && (
-                                  <span className="text-xs font-bold bg-white text-amber-600 px-2 py-1 rounded shadow-sm border border-amber-200 shrink-0">
-                                    Continuar
-                                  </span>
-                                )}
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* SIDEBAR — 1 col */}
-          <div className="space-y-6">
-            {courseResources.length > 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                  <IoDocumentTextOutline className="text-[#00A9CE] text-xl" />
-                  Material del Curso
-                </h3>
-                <ul className="space-y-3">
-                  {courseResources.map((r) => (
-                    <li key={r.id}>
-                      <a
-                        href={r.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-start gap-3 group"
-                      >
-                        <div className={`p-2 rounded-lg transition-colors ${
-                          r.type === 'pdf'
-                            ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white'
-                            : 'bg-blue-50 text-blue-500 group-hover:bg-blue-500 group-hover:text-white'
-                        }`}>
-                          <IoDocumentTextOutline size={18} />
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-slate-700 group-hover:text-[#00A9CE] transition-colors">
-                            {r.title}
-                          </p>
-                          <p className="text-xs text-slate-500 capitalize">{r.type}</p>
-                        </div>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Progress card */}
-            {isOrganizer ? (
-              <div className="bg-amber-50 rounded-2xl border border-amber-200 p-6">
-                <h3 className="font-bold text-amber-800 mb-2 flex items-center gap-2">
-                  <IoEyeOutline size={16} /> Vista organizador
-                </h3>
-                <p className="text-sm text-amber-700 leading-relaxed">
-                  Estás explorando este programa como organizador. El progreso de los alumnos no se modifica.
-                </p>
-                <a
-                  href={`/admin/lms/actividad?course=${cursoId}`}
-                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:underline"
-                >
-                  Ver actividad de alumnos →
-                </a>
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h3 className="font-bold text-slate-900 mb-4">Tu Progreso</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm font-medium text-slate-600">
-                    <span>Temas completados</span>
-                    <span className="font-bold">{completedCount}/{totalLessons}</span>
-                  </div>
-                  <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                  <p className="text-right text-xs text-slate-400 font-medium">{progressPercent}% completado</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <CursoContent
+          cursoId={cursoId}
+          modules={modules}
+          workshopModules={workshopModules}
+          resources={resourcesWithContext}
+          completedLessonIds={Array.from(completedSet)}
+          nextLessonId={nextLessonId}
+          isOrganizer={isOrganizer}
+        />
       )}
     </div>
   );

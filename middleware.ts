@@ -140,15 +140,16 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   }
 
   // Step 4: Final Response & Global Redirects
-  // If the user is logged in and tries to access the landing page or login,
-  // we redirect them to their respective dashboard based on their real-time role.
-  if (user && (pathname === '/' || isLoginRoute)) {
+  // If a logged-in user lands on /auth/login (e.g. via bookmark), bounce them
+  // to their dashboard. We DO NOT redirect from '/' — logged-in users must be
+  // able to navigate back to the landing page from campus/admin.
+  if (user && isLoginRoute) {
     const { data: role } = await supabase.rpc('get_user_role')
     const isAdminRole = role === 'admin' || role === 'sysadmin'
-    
+
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = isAdminRole ? '/admin/dashboard' : '/dashboard'
-    
+
     const redirectResponse = NextResponse.redirect(redirectUrl)
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))

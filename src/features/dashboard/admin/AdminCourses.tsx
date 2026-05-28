@@ -13,6 +13,7 @@ import {
   IoArrowBackOutline, IoBookOutline, IoCloseOutline, IoCheckmarkOutline,
   IoVideocamOutline, IoDocumentTextOutline, IoReorderFourOutline,
   IoCalendarOutline, IoTimeOutline, IoLinkOutline,
+  IoFolderOpenOutline, IoMusicalNotesOutline, IoArrowForwardOutline,
 } from 'react-icons/io5';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ type LessonResource = {
   title: string;
   file_url: string;
   type: string;
+  created_at?: string;
 };
 
 type LessonVideoRow = {
@@ -887,6 +889,282 @@ function AdminCourseCalendar({
   );
 }
 
+// ─── Admin Course Resources (Archivos institucionales) ───────────────────────
+
+type ResourceGroup = {
+  moduleId: string;
+  moduleTitle: string;
+  moduleOrder: number;
+  moduleType: string;
+  items: { r: LessonResource; lessonTitle: string; lessonOrder: number; lessonPublished: boolean }[];
+};
+
+const TYPE_VISUAL_ADMIN: Record<string, { bg: string; text: string; border: string; Icon: typeof IoDocumentTextOutline; label: string }> = {
+  pdf:   { bg: 'bg-rose-50',   text: 'text-rose-600',   border: 'border-rose-200',   Icon: IoDocumentTextOutline,  label: 'PDF'   },
+  audio: { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200', Icon: IoMusicalNotesOutline,  label: 'Audio' },
+  link:  { bg: 'bg-sky-50',    text: 'text-sky-600',    border: 'border-sky-200',    Icon: IoLinkOutline,          label: 'Link'  },
+};
+
+function resolveTypeAdmin(r: LessonResource) {
+  const explicit = r.type?.toLowerCase();
+  if (explicit && TYPE_VISUAL_ADMIN[explicit]) return TYPE_VISUAL_ADMIN[explicit];
+  const url = r.file_url.toLowerCase();
+  if (/\.(pdf)(\?|$)/.test(url)) return TYPE_VISUAL_ADMIN.pdf;
+  if (/\.(mp3|wav|m4a|ogg)(\?|$)/.test(url)) return TYPE_VISUAL_ADMIN.audio;
+  return TYPE_VISUAL_ADMIN.link;
+}
+
+function AdminCourseResources({
+  groups, total, hasLessons, onAdd, onDelete,
+}: {
+  groups: ResourceGroup[];
+  total: number;
+  hasLessons: boolean;
+  onAdd: () => void;
+  onDelete: (id: string) => void;
+}) {
+  if (!hasLessons) {
+    return (
+      <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-10 text-center text-slate-500">
+        <IoFolderOpenOutline size={40} className="mx-auto text-slate-300 mb-3" />
+        <p className="font-bold text-slate-700">Necesitás temas para subir materiales.</p>
+        <p className="text-sm mt-1">Creá al menos un módulo con un tema y volvé acá para asociar archivos.</p>
+      </div>
+    );
+  }
+
+  if (total === 0) {
+    return (
+      <div className="bg-gradient-to-br from-emerald-50 via-white to-white border-2 border-dashed border-emerald-200 rounded-2xl p-10 text-center">
+        <IoFolderOpenOutline size={40} className="mx-auto text-emerald-400 mb-3" />
+        <p className="font-bold text-slate-700 mb-1">Sin archivos institucionales todavía</p>
+        <p className="text-sm text-slate-500 max-w-md mx-auto mb-4">
+          Subí PDFs, audios o enlaces al curso. Los alumnos los verán como una biblioteca ordenada por módulo.
+        </p>
+        <button
+          onClick={onAdd}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
+        >
+          <IoAddOutline size={14} /> Agregar el primer material
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between bg-emerald-50/50 border border-emerald-100 rounded-xl p-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+            <IoFolderOpenOutline size={20} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-900">{total} {total === 1 ? 'material' : 'materiales'} en el programa</p>
+            <p className="text-xs text-slate-500">Ordenados por módulo, después por tema, y dentro del tema por fecha de subida.</p>
+          </div>
+        </div>
+      </div>
+
+      {groups.map((g) => {
+        const isWorkshop = g.moduleType === 'workshop';
+        const titleHasModuloPrefix = /^m[oó]dulo\b/i.test(g.moduleTitle.trim());
+        const showAutoLabel = isWorkshop || !titleHasModuloPrefix;
+        return (
+          <section key={g.moduleId} className="space-y-3">
+            <header className="flex items-baseline justify-between gap-4 pb-2 border-b border-slate-100">
+              <div>
+                {showAutoLabel && (
+                  <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${isWorkshop ? 'text-amber-500' : 'text-slate-400'}`}>
+                    {isWorkshop ? '🎯 Taller' : `Módulo ${g.moduleOrder}`}
+                  </p>
+                )}
+                <h4 className="text-base font-bold text-slate-900">{g.moduleTitle}</h4>
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                {g.items.length} {g.items.length === 1 ? 'archivo' : 'archivos'}
+              </span>
+            </header>
+            <ul className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {g.items.map(({ r, lessonTitle, lessonOrder, lessonPublished }, i) => {
+                const visual = resolveTypeAdmin(r);
+                return (
+                  <li key={r.id}>
+                    <div className="group flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-2xl hover:border-emerald-200 transition-colors">
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border ${visual.bg} ${visual.text} ${visual.border}`}>
+                        <visual.Icon size={20} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${visual.bg} ${visual.text} ${visual.border}`}>
+                            {visual.label}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-400 tabular-nums">
+                            #{String(i + 1).padStart(2, '0')}
+                          </span>
+                          {!lessonPublished && (
+                            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                              Tema oculto
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm font-bold text-slate-900 truncate">{r.title}</p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          Tema {lessonOrder}: {lessonTitle}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <a
+                          href={r.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-slate-400 hover:text-emerald-600 rounded-md transition-colors"
+                          title="Abrir"
+                        >
+                          <IoArrowForwardOutline size={16} />
+                        </a>
+                        <button
+                          onClick={() => onDelete(r.id)}
+                          className="p-2 text-slate-400 hover:text-red-500 rounded-md transition-colors"
+                          title="Eliminar"
+                        >
+                          <IoTrashOutline size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Add Material Modal ──────────────────────────────────────────────────────
+
+function AddMaterialModal({
+  lessonOptions, onClose, onSaved,
+}: {
+  lessonOptions: { id: string; label: string }[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [lessonId, setLessonId] = useState(lessonOptions[0]?.id ?? '');
+  const [title, setTitle] = useState('');
+  const [url, setUrl] = useState('');
+  const [type, setType] = useState<'link' | 'pdf' | 'audio'>('link');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!lessonId || !title.trim() || !url.trim()) return;
+    setSaving(true);
+    try {
+      await restInsert('lesson_resources', {
+        lesson_id: lessonId,
+        title: title.trim(),
+        file_url: url.trim(),
+        type,
+      }, { returning: 'minimal' });
+
+      // Bandeja event
+      const actor = await getMyActorInfo();
+      if (actor) {
+        await logEvent({
+          type: 'content.material_published',
+          actorProfileId: actor.profileId,
+          actorRole: actor.role,
+          targetKind: 'lesson_resource',
+          details: {
+            actorName: actor.name,
+            materialTitle: title.trim(),
+            materialType: type,
+            lessonId,
+          },
+        });
+      }
+
+      toast.success('Material agregado.');
+      onSaved();
+    } catch (err: any) {
+      toast.error('Error: ' + (err.message || 'No se pudo guardar'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+        <div className="flex items-center justify-between p-5 border-b border-slate-200">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+              <IoFolderOpenOutline size={16} />
+            </div>
+            <h2 className="font-bold text-slate-900">Nuevo material</h2>
+          </div>
+          <button onClick={onClose}><IoCloseOutline size={22} className="text-slate-400" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className={labelCls}>Tema al que pertenece *</label>
+            <select className={inputCls} value={lessonId} onChange={(e) => setLessonId(e.target.value)}>
+              {lessonOptions.map(opt => (
+                <option key={opt.id} value={opt.id}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Título *</label>
+            <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: Guía de lectura - Capítulo 1" />
+          </div>
+          <div>
+            <label className={labelCls}>URL del material *</label>
+            <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://drive.google.com/..." />
+          </div>
+          <div>
+            <label className={labelCls}>Tipo</label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: 'link' as const, label: 'Link', Icon: IoLinkOutline },
+                { value: 'pdf'  as const, label: 'PDF',  Icon: IoDocumentTextOutline },
+                { value: 'audio' as const, label: 'Audio', Icon: IoMusicalNotesOutline },
+              ]).map(opt => {
+                const isActive = type === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setType(opt.value)}
+                    className={`flex items-center justify-center gap-2 py-2.5 text-xs font-bold uppercase tracking-wider rounded-lg border transition-all ${
+                      isActive
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    <opt.Icon size={14} /> {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 p-5 border-t border-slate-100">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Cancelar</button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !lessonId || !title.trim() || !url.trim()}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg disabled:opacity-50 hover:bg-emerald-700 transition-colors"
+          >
+            {saving ? 'Guardando...' : 'Guardar material'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdminCourses() {
@@ -906,13 +1184,15 @@ export default function AdminCourses() {
   const [moduleModal, setModuleModal] = useState<{ open: boolean; mod: Module | null; courseId: string; moduleType?: string } | null>(null);
   const [lessonModal, setLessonModal] = useState<{ open: boolean; lesson: Lesson | null; moduleId: string } | null>(null);
   const [courseSessions, setCourseSessions] = useState<CourseSession[]>([]);
+  const [allResources, setAllResources] = useState<LessonResource[]>([]);
   const [newSessionDate, setNewSessionDate] = useState('');
   const [newSessionTime, setNewSessionTime] = useState('');
   const [newSessionLabel, setNewSessionLabel] = useState('');
   const [newSessionLocation, setNewSessionLocation] = useState('');
   const [newSessionMandatory, setNewSessionMandatory] = useState(true);
   const [savingSession, setSavingSession] = useState(false);
-  const [courseTab, setCourseTab] = useState<'modules' | 'workshop' | 'calendar'>('modules');
+  const [courseTab, setCourseTab] = useState<'modules' | 'workshop' | 'archivos' | 'calendar'>('modules');
+  const [addMaterialOpen, setAddMaterialOpen] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
   const fetchData = useCallback(async (_isBackgroundRefresh = false) => {
@@ -926,6 +1206,7 @@ export default function AdminCourses() {
         restSelect<Lesson>('lessons', { order: 'order_index.asc' }),
         restSelect<Cycle>('cycles', { columns: 'id,name,course_id', order: 'name.asc' }),
         restSelect<CourseSession>('course_sessions', { order: 'session_date.asc' }),
+        restSelect<LessonResource>('lesson_resources', { order: 'created_at.asc' }),
       ]);
 
       const get = (res: PromiseSettledResult<{ data: any[] }>) => res.status === 'fulfilled' ? res.value.data : null;
@@ -935,12 +1216,14 @@ export default function AdminCourses() {
       const lessonsData = get(results[2]);
       const cyclesData = get(results[3]);
       const sessionsData = get(results[4]);
+      const resourcesData = get(results[5]);
 
       if (coursesData) setCourses(coursesData as Course[]);
       if (modulesData) setModules(modulesData as Module[]);
       if (lessonsData) setLessons(lessonsData as Lesson[]);
       if (cyclesData) setAllCycles(cyclesData as Cycle[]);
       if (sessionsData) setCourseSessions(sessionsData as CourseSession[]);
+      if (resourcesData) setAllResources(resourcesData as LessonResource[]);
 
       hasLoadedOnceRef.current = true;
     } catch (error: any) {
@@ -966,6 +1249,7 @@ export default function AdminCourses() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lessons' }, () => fetchData(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cycles' }, () => fetchData(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'course_sessions' }, () => fetchData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lesson_resources' }, () => fetchData(true))
       .subscribe();
 
     const handleVisibility = () => {
@@ -1115,12 +1399,80 @@ export default function AdminCourses() {
     }
   };
 
+  const deleteResource = async (resourceId: string) => {
+    if (!confirm('¿Eliminar este material?')) return;
+    try {
+      await restDelete('lesson_resources', { id: `eq.${resourceId}` });
+      setAllResources(prev => prev.filter(r => r.id !== resourceId));
+      toast.success('Material eliminado');
+    } catch (err: any) {
+      toast.error('Error al eliminar material: ' + err.message);
+    }
+  };
+
   const linkedCycles = selectedCourse ? allCycles.filter(c => c.course_id === selectedCourse.id) : [];
   const unlinkedCycles = selectedCourse ? allCycles.filter(c => !c.course_id || c.course_id !== selectedCourse.id) : [];
   const courseSessionsForSelected = selectedCourse
     ? courseSessions
         .filter(s => s.course_id === selectedCourse.id)
         .sort((a, b) => a.session_date.localeCompare(b.session_date))
+    : [];
+
+  // ── Resources for the selected course, grouped by module then lesson ──────
+  const resourceGroupsForSelected = (() => {
+    if (!selectedCourse) return [];
+    const courseModules = modules
+      .filter(m => m.course_id === selectedCourse.id)
+      .sort((a, b) => a.order_index - b.order_index);
+    const lessonIndex = new Map<string, { lessonTitle: string; lessonOrder: number; lessonPublished: boolean; moduleId: string; moduleTitle: string; moduleOrder: number; moduleType: string }>();
+    for (const m of courseModules) {
+      const ml = lessons.filter(l => l.module_id === m.id).sort((a, b) => a.order_index - b.order_index);
+      for (const l of ml) {
+        lessonIndex.set(l.id, {
+          lessonTitle: l.title,
+          lessonOrder: l.order_index,
+          lessonPublished: l.is_published,
+          moduleId: m.id,
+          moduleTitle: m.title,
+          moduleOrder: m.order_index,
+          moduleType: m.module_type,
+        });
+      }
+    }
+    const ordered = allResources
+      .map(r => ({ r, ctx: lessonIndex.get(r.lesson_id) }))
+      .filter((x): x is { r: LessonResource; ctx: NonNullable<ReturnType<typeof lessonIndex.get>> } => !!x.ctx)
+      .sort((a, b) => {
+        if (a.ctx.moduleOrder !== b.ctx.moduleOrder) return a.ctx.moduleOrder - b.ctx.moduleOrder;
+        if (a.ctx.lessonOrder !== b.ctx.lessonOrder) return a.ctx.lessonOrder - b.ctx.lessonOrder;
+        return (a.r.created_at ?? '').localeCompare(b.r.created_at ?? '');
+      });
+
+    const groups = new Map<string, { moduleId: string; moduleTitle: string; moduleOrder: number; moduleType: string; items: { r: LessonResource; lessonTitle: string; lessonOrder: number; lessonPublished: boolean }[] }>();
+    for (const { r, ctx } of ordered) {
+      if (!groups.has(ctx.moduleId)) {
+        groups.set(ctx.moduleId, { moduleId: ctx.moduleId, moduleTitle: ctx.moduleTitle, moduleOrder: ctx.moduleOrder, moduleType: ctx.moduleType, items: [] });
+      }
+      groups.get(ctx.moduleId)!.items.push({ r, lessonTitle: ctx.lessonTitle, lessonOrder: ctx.lessonOrder, lessonPublished: ctx.lessonPublished });
+    }
+    return Array.from(groups.values()).sort((a, b) => a.moduleOrder - b.moduleOrder);
+  })();
+
+  const totalResourcesForSelected = resourceGroupsForSelected.reduce((s, g) => s + g.items.length, 0);
+
+  const lessonsForSelectedCourse = selectedCourse
+    ? modules
+        .filter(m => m.course_id === selectedCourse.id)
+        .sort((a, b) => a.order_index - b.order_index)
+        .flatMap(m => {
+          const moduleLabel = m.module_type === 'workshop'
+            ? `🎯 ${m.title}`
+            : `Módulo ${m.order_index} · ${m.title}`;
+          return lessons
+            .filter(l => l.module_id === m.id)
+            .sort((a, b) => a.order_index - b.order_index)
+            .map(l => ({ id: l.id, label: `${moduleLabel} → ${l.order_index}. ${l.title}` }));
+        })
     : [];
 
   // ── Courses List View ────────────────────────────────────────────────────────
@@ -1235,7 +1587,7 @@ export default function AdminCourses() {
         <div className="xl:col-span-2 space-y-4">
           {/* Tabs */}
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex bg-slate-100 p-0.5 rounded-xl gap-0.5">
+            <div className="flex bg-slate-100 p-0.5 rounded-xl gap-0.5 flex-wrap">
               <button
                 onClick={() => setCourseTab('modules')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'modules' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
@@ -1250,6 +1602,17 @@ export default function AdminCourses() {
                 {modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'workshop').length > 0 && (
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${courseTab === 'workshop' ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-500'}`}>
                     {modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'workshop').length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setCourseTab('archivos')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'archivos' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-emerald-600'}`}
+              >
+                <span className="text-base leading-none">📁</span> Archivos institucionales
+                {totalResourcesForSelected > 0 && (
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${courseTab === 'archivos' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>
+                    {totalResourcesForSelected}
                   </span>
                 )}
               </button>
@@ -1281,6 +1644,14 @@ export default function AdminCourses() {
                 <IoAddOutline size={16} /> Taller
               </button>
             )}
+            {courseTab === 'archivos' && lessonsForSelectedCourse.length > 0 && (
+              <button
+                onClick={() => setAddMaterialOpen(true)}
+                className="flex items-center gap-1.5 text-sm font-bold text-emerald-600 hover:underline"
+              >
+                <IoAddOutline size={16} /> Material
+              </button>
+            )}
           </div>
 
           {courseTab === 'calendar' && (
@@ -1292,6 +1663,16 @@ export default function AdminCourses() {
               setNewDate={setNewSessionDate} setNewTime={setNewSessionTime} setNewLabel={setNewSessionLabel}
               setNewLocation={setNewSessionLocation} setNewMandatory={setNewSessionMandatory}
               onAdd={addCourseSession}
+            />
+          )}
+
+          {courseTab === 'archivos' && (
+            <AdminCourseResources
+              groups={resourceGroupsForSelected}
+              total={totalResourcesForSelected}
+              hasLessons={lessonsForSelectedCourse.length > 0}
+              onAdd={() => setAddMaterialOpen(true)}
+              onDelete={deleteResource}
             />
           )}
 
@@ -1472,6 +1853,13 @@ export default function AdminCourses() {
           nextOrder={lessons.filter(l => l.module_id === lessonModal.moduleId).length + 1}
           onClose={() => setLessonModal(null)}
           onSaved={() => { setLessonModal(null); fetchData(true); }}
+        />
+      )}
+      {addMaterialOpen && selectedCourse && (
+        <AddMaterialModal
+          lessonOptions={lessonsForSelectedCourse}
+          onClose={() => setAddMaterialOpen(false)}
+          onSaved={() => { setAddMaterialOpen(false); fetchData(true); }}
         />
       )}
     </>
