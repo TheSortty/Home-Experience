@@ -66,7 +66,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
     try {
       const { data } = await restSelect<any>('profiles', {
         columns:
-          'id,user_id,first_name,last_name,email,phone,is_deleted,' +
+          'id,user_id,first_name,last_name,email,phone,avatar_url,is_deleted,' +
           'enrollments(id,status,payment_status,cycle:cycles(id,name,type,course_id,start_date,course:courses(id,title)),attendance(id,status),payments(amount,method,status,paid_at))',
         filters: {
           role: 'eq.student',
@@ -157,6 +157,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
           name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email || 'Sin nombre',
           email: p.email || '',
           phone: p.phone || submissionsMap[p.email]?.phone || '-',
+          avatarUrl: p.avatar_url || null,
           programs,
           programHistory,
           formData: submissionsMap[p.email] || {},
@@ -404,6 +405,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
               onSelect={(s) => setSelectedStudent(studentForModal(s))}
               onInvite={openInvite}
               onAssign={(s) => setStudentToAssign(s)}
+              initials={initials}
             />
           ) : (
             <GridView
@@ -508,12 +510,13 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
 // ─── Sub-views ────────────────────────────────────────────────────────────────
 
 function TableView({
-  students, onSelect, onInvite, onAssign,
+  students, onSelect, onInvite, onAssign, initials,
 }: {
   students: PersonaStudent[];
   onSelect: (s: PersonaStudent) => void;
   onInvite: (s: PersonaStudent) => void;
   onAssign: (s: PersonaStudent) => void;
+  initials: (s: PersonaStudent) => string;
 }) {
   if (students.length === 0) {
     return (
@@ -543,9 +546,18 @@ function TableView({
               onClick={() => onSelect(s)}
             >
               <td>
-                <div className="font-bold text-slate-800">{s.name}</div>
-                <div className="flex items-center gap-2 mt-0.5 group/copy">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{s.email}</div>
+                <div className="flex items-center gap-3">
+                  {s.avatarUrl ? (
+                    <img src={s.avatarUrl} alt={s.name} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-600 to-slate-800 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {initials(s)}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-800">{s.name}</div>
+                    <div className="flex items-center gap-2 mt-0.5 group/copy">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{s.email}</div>
                   <button
                     onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(s.email); toast.success('Email copiado'); }}
                     className="opacity-0 group-hover/copy:opacity-100 p-1 hover:bg-slate-100 rounded-sm transition-all"
@@ -555,6 +567,8 @@ function TableView({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
                     </svg>
                   </button>
+                </div>
+                  </div>
                 </div>
               </td>
               <td>
@@ -627,9 +641,13 @@ function GridView({
             className={`text-left bg-white rounded-2xl border ${hasConflict ? 'border-rose-200' : 'border-slate-200'} hover:border-[#00A9CE]/40 hover:shadow-md transition-all p-4 flex flex-col gap-3`}
           >
             <div className="flex items-start gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-white font-bold flex items-center justify-center shrink-0 text-sm">
-                {initials(s)}
-              </div>
+              {s.avatarUrl ? (
+                <img src={s.avatarUrl} alt={s.name} className="w-12 h-12 rounded-xl object-cover shrink-0" />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-white font-bold flex items-center justify-center shrink-0 text-sm">
+                  {initials(s)}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-slate-900 truncate">{s.name}</p>
                 <p className="text-[10px] font-medium text-slate-400 truncate uppercase tracking-wide">{s.email}</p>

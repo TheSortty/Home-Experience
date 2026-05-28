@@ -43,6 +43,7 @@ export interface PersonaStudent {
   name: string;
   email: string;
   phone: string;
+  avatarUrl: string | null;
   programs: ProgramChipData[];
   programHistory: any[]; // legacy shape for StudentDetailModal
   formData: any;
@@ -58,5 +59,6 @@ export interface PersonaCoach {
   name: string;
   email: string;
   phone: string;
+  avatarUrl: string | null;
   assignedStudentCount: number;
 }

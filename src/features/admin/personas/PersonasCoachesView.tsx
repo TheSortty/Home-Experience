@@ -27,6 +27,7 @@ interface ProfileLite {
   email: string | null;
   phone?: string | null;
   role: string;
+  avatar_url?: string | null;
 }
 
 interface AssignmentRow {
@@ -72,7 +73,7 @@ export default function PersonasCoachesView({ viewMode, searchTerm }: Props) {
     try {
       const [coachesRes, assignmentsRes] = await Promise.all([
         restSelect<ProfileLite>('profiles', {
-          columns: 'id,user_id,first_name,last_name,email,phone,role',
+          columns: 'id,user_id,first_name,last_name,email,phone,role,avatar_url',
           filters: { role: 'eq.coach', is_deleted: 'eq.false' },
           order: 'first_name.asc',
         }),
@@ -95,6 +96,7 @@ export default function PersonasCoachesView({ viewMode, searchTerm }: Props) {
         name: fullName(p),
         email: p.email || '',
         phone: p.phone || '',
+        avatarUrl: p.avatar_url || null,
         assignedStudentCount: (grouped[p.id] || []).length,
       })));
     } catch (err) {
@@ -188,9 +190,13 @@ export default function PersonasCoachesView({ viewMode, searchTerm }: Props) {
                   <tr key={c.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setSelectedCoach(c)}>
                     <td>
                       <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${avatarColor(c.id)} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
-                          {initialsOf(c)}
-                        </div>
+                        {c.avatarUrl ? (
+                          <img src={c.avatarUrl} alt={c.name} className="w-9 h-9 rounded-xl object-cover shrink-0" />
+                        ) : (
+                          <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${avatarColor(c.id)} text-white text-xs font-bold flex items-center justify-center shrink-0`}>
+                            {initialsOf(c)}
+                          </div>
+                        )}
                         <div>
                           <div className="font-bold text-slate-800">{c.name}</div>
                           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{c.email}</div>
@@ -230,9 +236,13 @@ export default function PersonasCoachesView({ viewMode, searchTerm }: Props) {
                   className="bg-white rounded-2xl border border-slate-200 hover:border-[#00A9CE]/40 hover:shadow-md transition-all p-4 flex flex-col gap-3 cursor-pointer"
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${avatarColor(c.id)} text-white text-sm font-bold flex items-center justify-center shrink-0`}>
-                      {initialsOf(c)}
-                    </div>
+                    {c.avatarUrl ? (
+                      <img src={c.avatarUrl} alt={c.name} className="w-12 h-12 rounded-xl object-cover shrink-0" />
+                    ) : (
+                      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${avatarColor(c.id)} text-white text-sm font-bold flex items-center justify-center shrink-0`}>
+                        {initialsOf(c)}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-900 truncate">{c.name}</p>
                       <p className="text-[10px] font-medium text-slate-400 truncate uppercase tracking-wide">{c.email}</p>
@@ -293,7 +303,7 @@ function PromoteCoachModal({ onClose, onPromoted }: { onClose: () => void; onPro
       try {
         const safe = q.replace(/[%,]/g, '');
         const { data } = await restSelect<ProfileLite>('profiles', {
-          columns: 'id,user_id,first_name,last_name,email,role',
+          columns: 'id,user_id,first_name,last_name,email,role,avatar_url',
           filters: {
             is_deleted: 'eq.false',
             or: `(first_name.ilike.*${safe}*,last_name.ilike.*${safe}*,email.ilike.*${safe}*)`,
@@ -364,9 +374,13 @@ function PromoteCoachModal({ onClose, onPromoted }: { onClose: () => void; onPro
                     disabled={promoting === p.id}
                     className="w-full flex items-center gap-3 p-3 rounded-md bg-slate-50 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-colors disabled:opacity-50"
                   >
-                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${avatarColor(p.id)} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}>
-                      {initialsOf({ firstName: p.first_name ?? '', lastName: p.last_name ?? '', email: p.email ?? '' })}
-                    </div>
+                    {p.avatar_url ? (
+                      <img src={p.avatar_url} alt={fullName(p)} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                    ) : (
+                      <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${avatarColor(p.id)} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}>
+                        {initialsOf({ firstName: p.first_name ?? '', lastName: p.last_name ?? '', email: p.email ?? '' })}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0 text-left">
                       <p className="text-sm font-bold text-slate-800 truncate">{fullName(p)}</p>
                       <p className="text-[10px] text-slate-500 truncate">{p.email}</p>
@@ -410,12 +424,12 @@ function CoachDetailModal({
         const [assignedStudentsRes, allRes] = await Promise.all([
           assignedIds.length > 0
             ? restSelect<ProfileLite>('profiles', {
-                columns: 'id,user_id,first_name,last_name,email,role',
+                columns: 'id,user_id,first_name,last_name,email,role,avatar_url',
                 filters: { id: `in.(${assignedIds.join(',')})` },
               })
             : Promise.resolve({ data: [], count: null }),
           restSelect<ProfileLite>('profiles', {
-            columns: 'id,user_id,first_name,last_name,email,role',
+            columns: 'id,user_id,first_name,last_name,email,role,avatar_url',
             filters: { role: 'eq.student', is_deleted: 'eq.false' },
             order: 'first_name.asc',
             limit: 500,
@@ -469,9 +483,13 @@ function CoachDetailModal({
     <div className="full-screen-modal-overlay z-[80]" onClick={onClose}>
       <div className="formal-modal max-w-2xl w-full max-h-[88vh] flex flex-col animate-scale-in" onClick={e => e.stopPropagation()}>
         <div className="p-6 border-b border-slate-100 flex items-start gap-4">
-          <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${avatarColor(coach.id)} text-white text-base font-bold flex items-center justify-center shrink-0`}>
-            {initialsOf(coach)}
-          </div>
+          {coach.avatarUrl ? (
+            <img src={coach.avatarUrl} alt={coach.name} className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+          ) : (
+            <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${avatarColor(coach.id)} text-white text-base font-bold flex items-center justify-center shrink-0`}>
+              {initialsOf(coach)}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <h3 className="text-lg font-bold text-slate-900 truncate">{coach.name}</h3>
             <p className="text-sm text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
@@ -508,9 +526,13 @@ function CoachDetailModal({
                 if (!assignment) return null;
                 return (
                   <li key={s.id} className="flex items-center gap-3 bg-slate-50 rounded-lg p-3 border border-slate-100">
-                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${avatarColor(s.id)} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}>
-                      {initialsOf({ firstName: s.first_name ?? '', lastName: s.last_name ?? '', email: s.email ?? '' })}
-                    </div>
+                    {s.avatar_url ? (
+                      <img src={s.avatar_url} alt={fullName(s)} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                    ) : (
+                      <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${avatarColor(s.id)} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}>
+                        {initialsOf({ firstName: s.first_name ?? '', lastName: s.last_name ?? '', email: s.email ?? '' })}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-800 truncate">{fullName(s)}</p>
                       <p className="text-[10px] text-slate-500 truncate">{s.email}</p>
@@ -594,9 +616,13 @@ function CandidatesList({ candidates, onPick }: { candidates: ProfileLite[]; onP
                   onClick={() => onPick(p)}
                   className="w-full flex items-center gap-3 p-2.5 rounded-md bg-slate-50 hover:bg-blue-50 transition-colors text-left"
                 >
-                  <div className={`w-7 h-7 rounded-md bg-gradient-to-br ${avatarColor(p.id)} text-white text-[9px] font-bold flex items-center justify-center shrink-0`}>
-                    {initialsOf({ firstName: p.first_name ?? '', lastName: p.last_name ?? '', email: p.email ?? '' })}
-                  </div>
+                  {p.avatar_url ? (
+                    <img src={p.avatar_url} alt={fullName(p)} className="w-7 h-7 rounded-md object-cover shrink-0" />
+                  ) : (
+                    <div className={`w-7 h-7 rounded-md bg-gradient-to-br ${avatarColor(p.id)} text-white text-[9px] font-bold flex items-center justify-center shrink-0`}>
+                      {initialsOf({ firstName: p.first_name ?? '', lastName: p.last_name ?? '', email: p.email ?? '' })}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-slate-800 truncate">{fullName(p)}</p>
                     <p className="text-[10px] text-slate-500 truncate">{p.email}</p>
