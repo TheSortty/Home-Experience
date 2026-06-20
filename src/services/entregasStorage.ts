@@ -13,7 +13,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 // ── Upload constraints ─────────────────────────────────────────────────────────
 
-export const MAX_FILE_BYTES = 3 * 1024 * 1024;        // 3 MB per file
+export const MAX_FILE_BYTES = 5 * 1024 * 1024;        // 5 MB per file
 export const MAX_FILES_PER_SUBMISSION = 8;
 
 /** Accepted document types for deliveries (PDF / Word + common doc + image formats). */

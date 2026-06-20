@@ -103,7 +103,7 @@ function DueDateBanner({ data }: { data: SubmissionTabData }) {
 // ─── File upload zone (multi-file, single delivery) ───────────────────────────
 
 const MAX_FILES = 8;
-const MAX_MB = 3;
+const MAX_MB = 5;
 const ACCEPT = '.pdf,.doc,.docx,.odt,.rtf,.txt,.md,.csv,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.tif,.tiff';
 
 function fmtSize(bytes: number) {
