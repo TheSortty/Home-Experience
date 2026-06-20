@@ -50,10 +50,22 @@ export interface LogEventArgs {
 }
 
 /**
+ * The top-tier "god" admin (sysadmin / super_admin — e.g. thesortty@gmail.com,
+ * "ElPoderosoAdmin") does maintenance/testing all over the campus. Their actions
+ * must NOT pollute the staff bandeja. Both loggers short-circuit for these roles.
+ */
+const SUPPRESSED_ACTOR_ROLES = new Set(['sysadmin', 'super_admin']);
+
+function isSuppressedActor(role?: string | null): boolean {
+  return !!role && SUPPRESSED_ACTOR_ROLES.has(role);
+}
+
+/**
  * Browser-side logger. Uses the REST helper so we don't get caught by the
  * Supabase JS hang in admin sessions.
  */
 export async function logEvent(args: LogEventArgs): Promise<void> {
+  if (isSuppressedActor(args.actorRole)) return;
   try {
     await restInsert(
       'staff_activity_events',
@@ -82,6 +94,7 @@ export async function logEventServer(
   supabase: SupabaseClient<any, 'public', any>,
   args: LogEventArgs,
 ): Promise<void> {
+  if (isSuppressedActor(args.actorRole)) return;
   try {
     const { error } = await supabase.from('staff_activity_events').insert({
       event_type: args.type,

@@ -2,6 +2,15 @@
 const nextConfig = {
   allowedDevOrigins: ['192.168.0.85'],
 
+  // Server Actions (incl. uploads de entregas a R2) traen un límite de body de
+  // 1 MB por defecto → un archivo grande devuelve 403 / "unexpected response".
+  // Lo subimos para cubrir el máximo de una entrega: 8 archivos × 5 MB = 40 MB.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
+  },
+
   images: {
     remotePatterns: [
       {
