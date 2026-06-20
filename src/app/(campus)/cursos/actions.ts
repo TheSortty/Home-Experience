@@ -139,6 +139,30 @@ export async function postLessonComment(
   return { success: true, id: data.id, created_at: data.created_at };
 }
 
+// ── forum post: moderación (borrar) ─────────────────────────────────────────────
+// Solo admin / organizadores (NO coaches) pueden borrar cualquier post del foro.
+// La policy RLS `is_staff()` de forum_posts ya lo refuerza en la DB; borrar un
+// post raíz cascadea sus respuestas (parent_id ON DELETE CASCADE).
+export async function deleteForumPost(
+  postId: string,
+  ctx?: { courseId?: string; lessonId?: string }
+) {
+  const actor = await getActor();
+  if (!actor || !isAdminRole(actor.role)) {
+    return { error: 'No tenés permisos para borrar posts del foro' };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from('forum_posts').delete().eq('id', postId);
+  if (error) return { error: error.message };
+
+  if (ctx?.courseId && ctx?.lessonId) {
+    revalidatePath(`/cursos/${ctx.courseId}/${ctx.lessonId}`);
+  }
+  revalidatePath('/comunidad');
+  return { success: true };
+}
+
 // ── tracking: lesson entered ──────────────────────────────────────────────────
 
 export async function trackLessonEnter(lessonId: string) {

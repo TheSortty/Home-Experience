@@ -6,7 +6,7 @@ import {
   IoPeopleOutline, IoDocumentTextOutline, IoSettingsOutline,
   IoCheckmarkCircle, IoEllipseOutline,
 } from 'react-icons/io5';
-import { isAdminRole } from '@/src/services/roleService';
+import { isAdminRole, isReviewerRole } from '@/src/services/roleService';
 
 export default async function AdminLmsPage() {
   const supabase = await createClient();
@@ -15,7 +15,11 @@ export default async function AdminLmsPage() {
 
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('user_id', user.id).single();
-  if (!isAdminRole(profile?.role ?? '')) redirect('/dashboard');
+  // Coaches reach this page from the "Entregas" nav link. They get a trimmed
+  // view (solo "Ver entregas"); the lesson config / actividad de alumnos son
+  // admin-only y se ocultan más abajo.
+  if (!isReviewerRole(profile?.role ?? '')) redirect('/dashboard');
+  const isAdmin = isAdminRole(profile?.role ?? '');
 
   const { data: courses } = await supabase
     .from('courses')
@@ -46,14 +50,16 @@ export default async function AdminLmsPage() {
             <p className="text-xs text-slate-400 hidden sm:block">Cursos, clases y entregas</p>
           </div>
 
-          <Link
-            href="/admin/lms/actividad"
-            className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-colors shrink-0"
-          >
-            <IoPeopleOutline size={14} />
-            <span className="hidden sm:inline">Actividad de alumnos</span>
-            <span className="sm:hidden">Actividad</span>
-          </Link>
+          {isAdmin && (
+            <Link
+              href="/admin/lms/actividad"
+              className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-colors shrink-0"
+            >
+              <IoPeopleOutline size={14} />
+              <span className="hidden sm:inline">Actividad de alumnos</span>
+              <span className="sm:hidden">Actividad</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -113,13 +119,15 @@ export default async function AdminLmsPage() {
 
                 {/* Actions footer */}
                 <div className="px-5 pb-4 flex items-center gap-2 flex-wrap">
-                  <Link
-                    href={`/admin/lms/${course.id}`}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-colors"
-                  >
-                    <IoSettingsOutline size={13} />
-                    Configurar clases
-                  </Link>
+                  {isAdmin && (
+                    <Link
+                      href={`/admin/lms/${course.id}`}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-700 transition-colors"
+                    >
+                      <IoSettingsOutline size={13} />
+                      Configurar clases
+                    </Link>
+                  )}
                   <Link
                     href={`/admin/lms/${course.id}/entregas`}
                     className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:border-[#00A9CE] hover:text-[#00A9CE] transition-all"
@@ -127,14 +135,16 @@ export default async function AdminLmsPage() {
                     <IoDocumentTextOutline size={13} />
                     Ver entregas
                   </Link>
-                  <Link
-                    href={`/admin/lms/actividad?course=${course.id}`}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-500 text-xs font-bold rounded-xl hover:border-slate-300 hover:text-slate-700 transition-colors ml-auto"
-                  >
-                    <IoPeopleOutline size={13} />
-                    Actividad
-                    <IoChevronForwardOutline size={11} />
-                  </Link>
+                  {isAdmin && (
+                    <Link
+                      href={`/admin/lms/actividad?course=${course.id}`}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-500 text-xs font-bold rounded-xl hover:border-slate-300 hover:text-slate-700 transition-colors ml-auto"
+                    >
+                      <IoPeopleOutline size={13} />
+                      Actividad
+                      <IoChevronForwardOutline size={11} />
+                    </Link>
+                  )}
                 </div>
               </div>
             ))}

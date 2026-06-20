@@ -10,8 +10,10 @@ import {
   IoPersonCircleOutline,
   IoAddOutline,
   IoLayersOutline,
+  IoTrashOutline,
 } from 'react-icons/io5';
 import { supabase } from '@/src/services/supabaseClient';
+import { restDelete } from '@/src/services/supabaseRest';
 import { logEvent } from '@/src/services/activityEvents';
 import { colorForProgram } from '../_lib/programColor';
 import RoleBadge from '../_components/RoleBadge';
@@ -123,6 +125,39 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
   const [newCourse, setNewCourse] = useState(courses[0]?.id ?? '');
   const [isPending, startTransition] = useTransition();
   const replyRef = useRef<HTMLTextAreaElement>(null);
+
+  // Solo admin / organizadores (NO coaches) pueden moderar/borrar cualquier post.
+  // Coincide con la policy RLS `is_staff()` de forum_posts (admin/sysadmin/super_admin).
+  const isStaff =
+    actorRole === 'admin' || actorRole === 'sysadmin' || actorRole === 'super_admin';
+
+  // Borrar un post raíz (cascade borra sus respuestas en la DB) o una respuesta.
+  // Usa REST para no toparse con el cuelgue del cliente JS en sesiones admin.
+  const handleDeletePost = (postId: string, isReply: boolean, parentId?: string) => {
+    if (!isStaff) return;
+    const msg = isReply
+      ? '¿Borrar esta respuesta? No se puede deshacer.'
+      : '¿Borrar esta conversación y todas sus respuestas? No se puede deshacer.';
+    if (!window.confirm(msg)) return;
+    startTransition(async () => {
+      try {
+        await restDelete('forum_posts', { id: `eq.${postId}` });
+        setPosts(prev => {
+          if (isReply && parentId) {
+            return prev.map(p =>
+              p.id === parentId
+                ? { ...p, replies: p.replies.filter(r => r.id !== postId) }
+                : p
+            );
+          }
+          return prev.filter(p => p.id !== postId);
+        });
+      } catch (err) {
+        console.error('[forum] delete failed', err);
+        window.alert('No se pudo borrar el post. Intentá de nuevo.');
+      }
+    });
+  };
 
   // Build root posts and per-program counts
   const rootPosts = useMemo(() => posts.filter(p => p.parent_id === null), [posts]);
@@ -381,6 +416,16 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
                               <IoChatbubbleEllipsesOutline size={14} />
                               {post.replies.length} {post.replies.length === 1 ? 'respuesta' : 'respuestas'}
                             </span>
+                            {isStaff && (
+                              <button
+                                onClick={e => { e.stopPropagation(); handleDeletePost(post.id, false); }}
+                                disabled={isPending}
+                                title="Borrar conversación"
+                                className="ml-auto flex items-center gap-1 text-rose-500 hover:text-rose-600 disabled:opacity-50"
+                              >
+                                <IoTrashOutline size={14} /> Borrar
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -413,6 +458,16 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
                                     <span className="text-xs font-bold text-slate-700">{reply.author_name}</span>
                                     <RoleBadge role={reply.author_role} size="xs" />
                                     <span className="text-xs text-slate-400">{timeAgo(reply.created_at)}</span>
+                                    {isStaff && (
+                                      <button
+                                        onClick={e => { e.stopPropagation(); handleDeletePost(reply.id, true, post.id); }}
+                                        disabled={isPending}
+                                        title="Borrar respuesta"
+                                        className="ml-auto flex items-center gap-1 text-xs text-rose-500 hover:text-rose-600 disabled:opacity-50"
+                                      >
+                                        <IoTrashOutline size={13} />
+                                      </button>
+                                    )}
                                   </div>
                                   <p className="text-sm text-slate-700 whitespace-pre-line">{reply.body}</p>
                                 </div>

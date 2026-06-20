@@ -8,8 +8,10 @@ import {
   IoChevronUpOutline,
   IoAddOutline,
   IoCloseOutline,
+  IoTrashOutline,
 } from 'react-icons/io5';
-import { postLessonComment } from '../../actions';
+import { postLessonComment, deleteForumPost } from '../../actions';
+import { isAdminRole } from '@/src/services/roleService';
 import RoleBadge from '@/src/app/(campus)/_components/RoleBadge';
 
 export interface LessonPost {
@@ -81,6 +83,36 @@ export default function LessonForum({
   const [replyBody, setReplyBody] = useState('');
   const [isPending, startTransition] = useTransition();
   const replyRef = useRef<HTMLTextAreaElement>(null);
+
+  // Solo admin / organizadores (NO coaches) pueden borrar cualquier post.
+  const isStaff = isAdminRole(currentUserRole ?? '');
+
+  const handleDelete = (postId: string, isReply: boolean, parentId?: string) => {
+    if (!isStaff) return;
+    const msg = isReply
+      ? '¿Borrar esta respuesta? No se puede deshacer.'
+      : '¿Borrar esta conversación y todas sus respuestas? No se puede deshacer.';
+    if (!window.confirm(msg)) return;
+
+    // Optimista: sacamos el post/respuesta de la lista al instante.
+    const snapshot = posts;
+    setPosts((prev) => {
+      if (isReply && parentId) {
+        return prev.map((p) =>
+          p.id === parentId ? { ...p, replies: p.replies.filter((r) => r.id !== postId) } : p
+        );
+      }
+      return prev.filter((p) => p.id !== postId);
+    });
+
+    startTransition(async () => {
+      const result = await deleteForumPost(postId, { courseId, lessonId });
+      if (result?.error) {
+        setPosts(snapshot); // rollback
+        window.alert(result.error);
+      }
+    });
+  };
 
   const submitNewPost = () => {
     const body = newBody.trim();
@@ -274,6 +306,15 @@ export default function LessonForum({
                         >
                           Responder
                         </button>
+                        {isStaff && (
+                          <button
+                            onClick={() => handleDelete(post.id, false)}
+                            disabled={isPending}
+                            className="ml-auto font-bold text-rose-500 hover:text-rose-600 flex items-center gap-1 disabled:opacity-50"
+                          >
+                            <IoTrashOutline size={13} /> Borrar
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -297,6 +338,16 @@ export default function LessonForum({
                             <RoleBadge role={reply.author_role} size="xs" />
                             <span className="text-slate-400">·</span>
                             <span className="text-slate-400">{timeAgo(reply.created_at)}</span>
+                            {isStaff && (
+                              <button
+                                onClick={() => handleDelete(reply.id, true, post.id)}
+                                disabled={isPending}
+                                title="Borrar respuesta"
+                                className="ml-auto text-rose-500 hover:text-rose-600 disabled:opacity-50"
+                              >
+                                <IoTrashOutline size={12} />
+                              </button>
+                            )}
                           </div>
                           <p className="text-sm text-slate-700 whitespace-pre-line">{reply.body}</p>
                         </div>
