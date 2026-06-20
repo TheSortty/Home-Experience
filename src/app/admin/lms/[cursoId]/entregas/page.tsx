@@ -64,6 +64,34 @@ export default async function EntregasPage({
     assignedStudentIds = new Set((assignments || []).map((a: any) => a.student_profile_id));
   }
 
+  // ── Pending count per lesson (for the sidebar badges) ─────────────────────
+  // Without this, a coach landing on the first lesson can't tell which other
+  // lessons have submissions waiting — they'd have to click through each one.
+  const pendingByLesson: Record<string, number> = {};
+  {
+    const lessonIds = lessonList.map((l: any) => l.id);
+    if (lessonIds.length > 0) {
+      const { data: allSubs } = await supabase
+        .from('submissions')
+        .select('user_id, lesson_id, version, status')
+        .in('lesson_id', lessonIds);
+
+      // Keep only the latest version per (student, lesson) — that row's status
+      // is what determines whether the delivery is still pending.
+      const latestByKey: Record<string, any> = {};
+      for (const s of allSubs || []) {
+        const key = `${s.lesson_id}::${s.user_id}`;
+        if (!latestByKey[key] || s.version > latestByKey[key].version) latestByKey[key] = s;
+      }
+      const countTeam = team === 'mine';
+      for (const s of Object.values(latestByKey) as any[]) {
+        if (s.status !== 'pending_review') continue;
+        if (countTeam && !assignedStudentIds.has(s.user_id)) continue;
+        pendingByLesson[s.lesson_id] = (pendingByLesson[s.lesson_id] ?? 0) + 1;
+      }
+    }
+  }
+
   // ── Submissions for active lesson ─────────────────────────────────────────
 
   let submissions: any[] = [];
@@ -83,10 +111,14 @@ export default async function EntregasPage({
     const { data: subs } = await supabase
       .from('submissions')
       .select(`
-        id, file_name, storage_path, submission_url, submitted_at, is_late, version, status, user_id,
-        profiles (id, first_name, last_name, email),
+        id, file_name, storage_path, submission_url, submitted_at, is_late, version, status, user_id, allow_additional,
+        profiles!user_id (id, first_name, last_name, email),
+        submission_files (
+          id, submission_id, storage_key, file_name, content_type, size_bytes, created_at, is_additional, is_late
+        ),
         submission_reviews (
-          id, feedback_text, revised_file_name, revised_storage_path, reviewed_at
+          id, feedback_text, revised_file_name, revised_storage_path, reviewed_at,
+          submission_review_files ( id, storage_key, file_name, content_type )
         )
       `)
       .eq('lesson_id', activeLessonId)
@@ -127,7 +159,10 @@ export default async function EntregasPage({
     : teamFiltered.filter(s => s.status === statusFilter);
 
   const myTeamCount = submissions.filter(s => assignedStudentIds.has(s.profiles?.id)).length;
-  const pendingCount = countByStatus.pending_review;
+
+  // Global pending summary across every lesson of this course.
+  const totalPending = Object.values(pendingByLesson).reduce((a, b) => a + b, 0);
+  const firstPendingLessonId = lessonList.find((l: any) => (pendingByLesson[l.id] ?? 0) > 0)?.id;
 
   const backHref = isAdmin ? `/admin/lms/${cursoId}` : `/admin/lms`;
 
@@ -179,6 +214,30 @@ export default async function EntregasPage({
 
       <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-6">
 
+        {/* Global pending summary */}
+        {totalPending > 0 && (
+          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3.5">
+            <span className="flex items-center justify-center w-9 h-9 rounded-full bg-amber-400 text-white font-black text-sm shrink-0">
+              {totalPending}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-amber-900 leading-tight">
+                {totalPending} entrega{totalPending !== 1 ? 's' : ''} esperando devolución
+                {team === 'mine' ? ' en tu equipo' : ''}
+              </p>
+              <p className="text-xs text-amber-700">En todas las clases de este curso.</p>
+            </div>
+            {firstPendingLessonId && firstPendingLessonId !== activeLessonId && (
+              <Link
+                href={`?lesson=${firstPendingLessonId}&team=${team}&status=pending_review`}
+                className="shrink-0 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-colors"
+              >
+                Ir a la primera →
+              </Link>
+            )}
+          </div>
+        )}
+
         {lessonList.length === 0 ? (
           <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-14 text-center space-y-3">
             <IoDocumentTextOutline size={36} className="mx-auto text-slate-300" />
@@ -201,7 +260,7 @@ export default async function EntregasPage({
               <div className="flex gap-2 w-max">
                 {lessonList.map((l: any) => {
                   const isActive = l.id === activeLessonId;
-                  const pending = isActive ? pendingCount : 0;
+                  const pending = pendingByLesson[l.id] ?? 0;
                   return (
                     <Link
                       key={l.id}
@@ -232,7 +291,7 @@ export default async function EntregasPage({
               <div className="p-2 space-y-0.5">
                 {lessonList.map((l: any) => {
                   const isActive = l.id === activeLessonId;
-                  const pending = isActive ? pendingCount : 0;
+                  const pending = pendingByLesson[l.id] ?? 0;
                   return (
                     <Link
                       key={l.id}
@@ -351,12 +410,17 @@ export default async function EntregasPage({
                           version: sub.version,
                           status: sub.status ?? 'pending_review',
                           user_id: sub.user_id,
+                          allow_additional: sub.allow_additional ?? false,
+                          files: (sub.submission_files ?? []).slice().sort(
+                            (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                          ),
                         }}
                         latestReview={latestReview}
                         courseId={cursoId}
                         lessonId={activeLessonId!}
                         reviewerProfileId={profile?.id ?? ''}
                         isMyTeam={assignedStudentIds.has(studentProfileId)}
+                        isAdmin={isAdmin}
                       />
                     );
                   })

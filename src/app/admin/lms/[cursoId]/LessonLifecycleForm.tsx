@@ -14,6 +14,7 @@ interface Props {
     unlocked_at: string | null;
     due_days_after_unlock: number | null;
     requires_submission: boolean;
+    block_after_due: boolean;
   };
   courseId: string;
 }
@@ -135,6 +136,23 @@ export default function LessonLifecycleForm({ lesson, courseId }: Props) {
               />
               <label htmlFor={`req-${lesson.id}`} className="text-sm font-medium text-slate-700">
                 Requiere entrega del alumno
+              </label>
+            </div>
+
+            <div className="flex items-start gap-3 sm:col-span-2">
+              <input
+                type="checkbox"
+                name="block_after_due"
+                id={`block-${lesson.id}`}
+                value="1"
+                defaultChecked={lesson.block_after_due}
+                className="w-4 h-4 accent-red-500 mt-0.5"
+              />
+              <label htmlFor={`block-${lesson.id}`} className="text-sm font-medium text-slate-700">
+                Bloquear entregas pasado el plazo
+                <span className="block text-xs text-slate-400 font-normal mt-0.5">
+                  Si está activo, el alumno no puede entregar después de la fecha límite. Si no, se acepta igual pero marcada como “entrega tardía”.
+                </span>
               </label>
             </div>
           </div>

@@ -37,7 +37,7 @@ export default async function AdminCursoPage({
       id, title, order_index,
       lessons (
         id, title, order_index, is_published,
-        status, unlock_at, unlocked_at, due_days_after_unlock, requires_submission
+        status, unlock_at, unlocked_at, due_days_after_unlock, requires_submission, block_after_due
       )
     `)
     .eq('course_id', cursoId)
@@ -53,6 +53,7 @@ export default async function AdminCursoPage({
     unlocked_at: string | null;
     due_days_after_unlock: number | null;
     requires_submission: boolean;
+    block_after_due: boolean;
   };
 
   const modules = (rawModules || []).map((m: any) => ({

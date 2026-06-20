@@ -4,9 +4,13 @@ import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { logEventServer } from '@/src/services/activityEvents';
 import { isAdminRole, isReviewerRole } from '@/src/services/roleService';
+import {
+  buildSubmissionKey, putEntregaObject, deleteEntregaObjects,
+  isAllowedFile, MAX_FILE_BYTES, MAX_FILES_PER_SUBMISSION,
+} from '@/src/services/entregasStorage';
 import type {
   SubmissionThread, SubmissionStatus, Submission,
-  SubmissionReview, ChatMessage, ThreadItem,
+  SubmissionReview, ChatMessage, ThreadItem, SubmissionFile, SubmissionReviewFile,
 } from '@/src/types/submissions';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -239,7 +243,7 @@ export async function trackResourceOpen(resourceId: string) {
   });
 }
 
-// ── submission: upload file ───────────────────────────────────────────────────
+// ── submission: upload one or more files → Cloudflare R2 ──────────────────────
 
 export async function submitLesson(formData: FormData) {
   const supabase = await createClient();
@@ -255,21 +259,39 @@ export async function submitLesson(formData: FormData) {
 
   const lessonId = formData.get('lessonId') as string;
   const courseId = formData.get('courseId') as string;
-  const submissionUrl = (formData.get('submission_url') as string | null)?.trim();
+  if (!lessonId || !courseId) return { error: 'Faltan datos de la clase' };
 
-  if (!lessonId || !submissionUrl) return { error: 'El link de tu trabajo es requerido' };
-
-  try { new URL(submissionUrl); } catch {
-    return { error: 'El link no es válido. Asegurate de incluir https://' };
+  // Collect attached files (one delivery, many files).
+  const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) return { error: 'Adjuntá al menos un archivo' };
+  if (files.length > MAX_FILES_PER_SUBMISSION) {
+    return { error: `Máximo ${MAX_FILES_PER_SUBMISSION} archivos por entrega` };
+  }
+  for (const f of files) {
+    if (f.size > MAX_FILE_BYTES) {
+      return { error: `"${f.name}" supera los ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB permitidos` };
+    }
+    if (!isAllowedFile(f.name)) {
+      return { error: `"${f.name}" tiene un formato no permitido (PDF, Word, imágenes, etc.)` };
+    }
   }
 
   const { data: lesson } = await supabase
     .from('lessons')
-    .select('status, unlocked_at, due_days_after_unlock')
+    .select('status, unlocked_at, due_days_after_unlock, block_after_due')
     .eq('id', lessonId)
     .single();
 
   if (!lesson || lesson.status !== 'unlocked') return { error: 'Esta clase no acepta entregas en este momento' };
+
+  const pastDue = !!(
+    lesson.unlocked_at &&
+    lesson.due_days_after_unlock &&
+    Date.now() > new Date(lesson.unlocked_at).getTime() + lesson.due_days_after_unlock * 86400000
+  );
+  if (pastDue && lesson.block_after_due) {
+    return { error: 'El plazo de entrega de esta clase venció y ya no acepta entregas.' };
+  }
 
   // ── Strict-round check ────────────────────────────────────────────────────────
   const { data: latestSub } = await supabase
@@ -288,36 +310,56 @@ export async function submitLesson(formData: FormData) {
     return { error: '¡Esta entrega ya fue aprobada! El hilo está cerrado.' };
   }
 
-  const isLate = !!(
-    lesson.unlocked_at &&
-    lesson.due_days_after_unlock &&
-    Date.now() > new Date(lesson.unlocked_at).getTime() + lesson.due_days_after_unlock * 86400000
-  );
+  const isLate = pastDue;
 
-  const { data: prevVersions } = await supabase
-    .from('submissions')
-    .select('version')
-    .eq('user_id', profile.id)
-    .eq('lesson_id', lessonId)
-    .order('version', { ascending: false })
-    .limit(1);
+  const nextVersion = (latestSub?.version ?? 0) + 1;
 
-  const nextVersion = (prevVersions?.[0]?.version ?? 0) + 1;
-
+  // ── 1. Create the delivery envelope row ────────────────────────────────────────
+  const summaryName = files.length === 1 ? files[0].name : `${files.length} archivos`;
   const { data: inserted, error: dbError } = await supabase
     .from('submissions')
     .insert({
       user_id: profile.id,
       lesson_id: lessonId,
-      submission_url: submissionUrl,
-      file_name: submissionUrl,
+      file_name: summaryName,
       is_late: isLate,
       version: nextVersion,
     })
     .select('id')
     .single();
 
-  if (dbError) return { error: dbError.message };
+  if (dbError || !inserted) return { error: dbError?.message ?? 'No se pudo crear la entrega' };
+
+  // ── 2. Upload each file to R2 + record it ──────────────────────────────────────
+  const uploadedKeys: string[] = [];
+  try {
+    for (const file of files) {
+      const fileId = crypto.randomUUID();
+      const key = buildSubmissionKey({
+        courseId, lessonId, studentProfileId: profile.id,
+        version: nextVersion, fileId, fileName: file.name,
+      });
+      await putEntregaObject(key, await file.arrayBuffer(), file.type);
+      uploadedKeys.push(key);
+
+      const { error: fileErr } = await supabase
+        .from('submission_files')
+        .insert({
+          submission_id: inserted.id,
+          storage_key: key,
+          file_name: file.name,
+          content_type: file.type || null,
+          size_bytes: file.size,
+        });
+      if (fileErr) throw new Error(fileErr.message);
+    }
+  } catch (err) {
+    // Roll back: remove uploaded objects and the envelope row.
+    await deleteEntregaObjects(uploadedKeys);
+    await supabase.from('submissions').delete().eq('id', inserted.id);
+    console.error('[entregas] upload failed:', err);
+    return { error: 'No se pudo subir la entrega. Probá de nuevo en unos segundos.' };
+  }
 
   const { data: lessonInfo } = await supabase
     .from('lessons')
@@ -325,7 +367,7 @@ export async function submitLesson(formData: FormData) {
     .eq('id', lessonId)
     .maybeSingle();
   const actor = await getActor();
-  if (actor && inserted?.id) {
+  if (actor) {
     await logEventServer(supabase, {
       type: 'student.work_submitted',
       actorProfileId: actor.profileId,
@@ -335,7 +377,7 @@ export async function submitLesson(formData: FormData) {
       targetId: inserted.id,
       details: {
         actorName: actor.name,
-        submissionUrl,
+        fileCount: files.length,
         version: nextVersion,
         isLate,
         lessonId,
@@ -351,65 +393,126 @@ export async function submitLesson(formData: FormData) {
   return { success: true, version: nextVersion };
 }
 
-// ── submission: get signed download URL ──────────────────────────────────────
-
-export async function getSubmissionDownloadUrl(submissionId: string) {
+// ── submission: add extra "adicional" files to an already-made delivery ───────
+// Gated: the latest submission must have allow_additional = true (the coach or
+// organizer enables it). Files are appended to the existing delivery (no new
+// version) and each one records whether it landed before or after the deadline.
+export async function addSubmissionFiles(formData: FormData) {
   const supabase = await createClient();
-  const profileId = await getProfileId();
-  if (!profileId) return { error: 'No autenticado' };
-
-  const { data: sub } = await supabase
-    .from('submissions')
-    .select('storage_path, user_id')
-    .eq('id', submissionId)
-    .single();
-
-  if (!sub) return { error: 'Entrega no encontrada' };
-  if (sub.user_id !== profileId && !(await isStaff(supabase))) return { error: 'Sin acceso' };
-
-  if (!sub.storage_path) return { error: 'Esta entrega usa link externo' };
-  const { data } = await supabase.storage
-    .from('submissions')
-    .createSignedUrl(sub.storage_path, 300);
-
-  return data ? { url: data.signedUrl } : { error: 'No se pudo generar el enlace' };
-}
-
-async function isStaff(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
-  const { data } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('user_id', user.id)
-    .single();
-  return isAdminRole(data?.role ?? '');
-}
+  if (!user) return { error: 'No autenticado' };
 
-// ── submission: get signed URL for coach's revised file ──────────────────────
+  const { data: profile } = await supabase
+    .from('profiles').select('id').eq('user_id', user.id).single();
+  if (!profile) return { error: 'Perfil no encontrado' };
 
-export async function getStudentReviewFileUrl(storagePath: string) {
-  if (!storagePath) return { error: 'Ruta inválida' };
-  const supabase = await createClient();
-  const profileId = await getProfileId();
-  if (!profileId) return { error: 'No autenticado' };
+  const lessonId = formData.get('lessonId') as string;
+  const courseId = formData.get('courseId') as string;
+  if (!lessonId || !courseId) return { error: 'Faltan datos de la clase' };
 
-  // Verify the student owns a submission that has a review with this path
-  const { data: review } = await supabase
-    .from('submission_reviews')
-    .select('id, submission_id, submissions(user_id)')
-    .eq('revised_storage_path', storagePath)
+  const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) return { error: 'Adjuntá al menos un archivo' };
+  if (files.length > MAX_FILES_PER_SUBMISSION) {
+    return { error: `Máximo ${MAX_FILES_PER_SUBMISSION} archivos por vez` };
+  }
+  for (const f of files) {
+    if (f.size > MAX_FILE_BYTES) {
+      return { error: `"${f.name}" supera los ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB permitidos` };
+    }
+    if (!isAllowedFile(f.name)) {
+      return { error: `"${f.name}" tiene un formato no permitido (PDF, Word, imágenes, etc.)` };
+    }
+  }
+
+  // Latest delivery + the permission gate.
+  const { data: latestSub } = await supabase
+    .from('submissions')
+    .select('id, version, allow_additional')
+    .eq('user_id', profile.id)
+    .eq('lesson_id', lessonId)
+    .order('version', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  const ownsSubmission = (review as any)?.submissions?.user_id === profileId;
-  if (!ownsSubmission) return { error: 'Sin acceso' };
+  if (!latestSub) return { error: 'Todavía no hiciste una entrega en esta clase.' };
+  if (!latestSub.allow_additional) {
+    return { error: 'Tu coach todavía no habilitó agregar archivos adicionales.' };
+  }
 
-  const { data } = await supabase.storage
-    .from('submissions')
-    .createSignedUrl(storagePath, 300);
+  // On time or late? — now vs the lesson deadline.
+  const { data: lesson } = await supabase
+    .from('lessons')
+    .select('unlocked_at, due_days_after_unlock')
+    .eq('id', lessonId)
+    .single();
+  const isLate = !!(
+    lesson?.unlocked_at &&
+    lesson?.due_days_after_unlock &&
+    Date.now() > new Date(lesson.unlocked_at).getTime() + lesson.due_days_after_unlock * 86400000
+  );
 
-  return data ? { url: data.signedUrl } : { error: 'No se pudo generar el enlace' };
+  const uploadedKeys: string[] = [];
+  try {
+    for (const file of files) {
+      const fileId = crypto.randomUUID();
+      const key = buildSubmissionKey({
+        courseId, lessonId, studentProfileId: profile.id,
+        version: latestSub.version, fileId, fileName: file.name,
+      });
+      await putEntregaObject(key, await file.arrayBuffer(), file.type);
+      uploadedKeys.push(key);
+
+      const { error: fileErr } = await supabase
+        .from('submission_files')
+        .insert({
+          submission_id: latestSub.id,
+          storage_key: key,
+          file_name: file.name,
+          content_type: file.type || null,
+          size_bytes: file.size,
+          is_additional: true,
+          is_late: isLate,
+        });
+      if (fileErr) throw new Error(fileErr.message);
+    }
+  } catch (err) {
+    await deleteEntregaObjects(uploadedKeys);
+    console.error('[entregas] additional upload failed:', err);
+    return { error: 'No se pudieron subir los adicionales. Probá de nuevo en unos segundos.' };
+  }
+
+  // One round per "habilitación": consume the gate so the coach re-enables for
+  // the next batch.
+  await supabase.from('submissions').update({ allow_additional: false }).eq('id', latestSub.id);
+
+  const actor = await getActor();
+  if (actor) {
+    await logEventServer(supabase, {
+      type: 'student.work_submitted',
+      actorProfileId: actor.profileId,
+      actorRole: actor.role,
+      subjectProfileId: actor.profileId,
+      targetKind: 'submission',
+      targetId: latestSub.id,
+      details: {
+        actorName: actor.name,
+        fileCount: files.length,
+        version: latestSub.version,
+        isLate,
+        additional: true,
+        lessonId,
+      },
+    });
+  }
+
+  revalidatePath(`/cursos/${courseId}/${lessonId}`);
+  revalidatePath(`/admin/lms/${courseId}/entregas`);
+  return { success: true, isLate };
 }
+
+// Delivery files are downloaded through the authenticated streaming route
+// /api/entregas/download?key=<r2-key> (see app/api/entregas/download/route.ts).
+// No signed-URL server action is needed — the route authorizes via RLS.
 
 // ── submission: get full thread for current student ──────────────────────────
 
@@ -421,7 +524,7 @@ export async function getStudentThread(lessonId: string): Promise<SubmissionThre
   // All versions this student has submitted for this lesson
   const { data: rawSubs } = await supabase
     .from('submissions')
-    .select('id, file_name, storage_path, is_late, version, status, approved_by, approved_at, submitted_at')
+    .select('id, file_name, storage_path, submission_url, is_late, version, status, approved_by, approved_at, submitted_at, allow_additional')
     .eq('user_id', profileId)
     .eq('lesson_id', lessonId)
     .order('version', { ascending: true });
@@ -430,6 +533,13 @@ export async function getStudentThread(lessonId: string): Promise<SubmissionThre
 
   const submissionIds = rawSubs.map(s => s.id);
 
+  // Files attached to those submissions (multi-file deliveries)
+  const { data: rawFiles } = await supabase
+    .from('submission_files')
+    .select('id, submission_id, storage_key, file_name, content_type, size_bytes, created_at, is_additional, is_late')
+    .in('submission_id', submissionIds)
+    .order('created_at', { ascending: true });
+
   // All reviews on those submissions
   const { data: rawReviews } = await supabase
     .from('submission_reviews')
@@ -437,20 +547,40 @@ export async function getStudentThread(lessonId: string): Promise<SubmissionThre
     .in('submission_id', submissionIds)
     .order('reviewed_at', { ascending: true });
 
+  // Multi-file devolución attachments, keyed by review.
+  const reviewIds = (rawReviews ?? []).map(r => r.id);
+  const { data: rawReviewFiles } = reviewIds.length
+    ? await supabase
+        .from('submission_review_files')
+        .select('id, review_id, storage_key, file_name, content_type, size_bytes, created_at')
+        .in('review_id', reviewIds)
+        .order('created_at', { ascending: true })
+    : { data: [] as SubmissionReviewFile[] };
+  const reviewFilesByReview: Record<string, SubmissionReviewFile[]> = {};
+  for (const f of (rawReviewFiles ?? [])) {
+    (reviewFilesByReview[f.review_id] ??= []).push(f as SubmissionReviewFile);
+  }
+
   // Chat messages for this thread
   const { data: rawChat } = await supabase
     .from('submission_chat_messages')
-    .select('id, author_id, body, created_at, profiles(first_name, last_name, role)')
+    .select('id, author_id, body, created_at, profiles!author_id(first_name, last_name, role)')
     .eq('lesson_id', lessonId)
     .eq('student_id', profileId)
     .order('created_at', { ascending: true });
 
   // ── Map raw rows to typed shapes ─────────────────────────────────────────
+  const filesBySubmission: Record<string, SubmissionFile[]> = {};
+  for (const f of (rawFiles ?? [])) {
+    (filesBySubmission[f.submission_id] ??= []).push(f as SubmissionFile);
+  }
+
   const submissions: Submission[] = rawSubs.map(s => ({
     ...s,
     user_id: profileId,
     lesson_id: lessonId,
     status: s.status as SubmissionStatus,
+    files: filesBySubmission[s.id] ?? [],
   }));
 
   const reviewsBySubmission: Record<string, SubmissionReview[]> = {};
@@ -465,6 +595,7 @@ export async function getStudentThread(lessonId: string): Promise<SubmissionThre
       revised_file_name: r.revised_file_name,
       reviewed_at: r.reviewed_at,
       reviewer_name: p ? `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || null : null,
+      files: reviewFilesByReview[r.id] ?? [],
     };
     if (!reviewsBySubmission[r.submission_id]) reviewsBySubmission[r.submission_id] = [];
     reviewsBySubmission[r.submission_id].push(mapped);

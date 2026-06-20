@@ -7,7 +7,7 @@ import {
   IoMegaphoneOutline, IoCalendarOutline, IoVideocamOutline,
   IoDocumentTextOutline, IoCloseOutline, IoArrowForwardOutline,
   IoCheckmarkDoneOutline, IoTimeOutline, IoSearchOutline,
-  IoArrowBackOutline, IoFilterOutline,
+  IoArrowBackOutline, IoFilterOutline, IoTrashOutline,
 } from 'react-icons/io5';
 import { restSelect } from '@/src/services/supabaseRest';
 import type { ActivityEventType, ActivityTargetKind } from '@/src/services/activityEvents';
@@ -45,6 +45,7 @@ const CATEGORY_OF: Record<ActivityEventType, CategoryFilter> = {
   'coach.material_accessed':     'access',
   'coach.work_returned':         'reviews',
   'coach.work_approved':         'reviews',
+  'admin.submission_deleted':    'submissions',
 };
 
 const CATEGORIES: { id: CategoryFilter; label: string }[] = [
@@ -80,6 +81,7 @@ const VISUALS: Record<ActivityEventType, CardVisuals> = {
   'coach.material_accessed':     { icon: IoEyeOutline,           accent: 'bg-teal-50 text-teal-600',       border: 'border-l-teal-400' },
   'coach.work_returned':         { icon: IoCheckmarkDoneOutline, accent: 'bg-emerald-50 text-emerald-600', border: 'border-l-emerald-400' },
   'coach.work_approved':         { icon: IoCheckmarkDoneOutline, accent: 'bg-green-50 text-green-600',     border: 'border-l-green-500' },
+  'admin.submission_deleted':    { icon: IoTrashOutline,         accent: 'bg-red-50 text-red-600',         border: 'border-l-red-400' },
 };
 
 // ─── Time helpers ───────────────────────────────────────────────────────────────

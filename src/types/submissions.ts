@@ -2,12 +2,27 @@
 
 export type SubmissionStatus = 'pending_review' | 'reviewed' | 'approved';
 
+/** One file attached to a submission, stored in Cloudflare R2. */
+export interface SubmissionFile {
+  id: string;
+  submission_id: string;
+  storage_key: string;
+  file_name: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
+  /** Attached after the delivery was made (coach-enabled "adicional"). */
+  is_additional: boolean;
+  /** Landed after the lesson deadline. */
+  is_late: boolean;
+}
+
 export interface Submission {
   id: string;
   user_id: string;
   lesson_id: string;
   storage_path: string | null;
-  file_name: string;
+  file_name: string | null;
   submission_url?: string | null;
   is_late: boolean;
   version: number;
@@ -15,6 +30,21 @@ export interface Submission {
   approved_by: string | null;
   approved_at: string | null;
   submitted_at: string;
+  /** Coach/organizer enabled the student to attach extra "adicional" files. */
+  allow_additional?: boolean;
+  /** Attached files (multi-file deliveries). Empty for legacy link/single rows. */
+  files?: SubmissionFile[];
+}
+
+/** One file attached to a devolución (coach → student), stored in R2. */
+export interface SubmissionReviewFile {
+  id: string;
+  review_id: string;
+  storage_key: string;
+  file_name: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  created_at: string;
 }
 
 export interface SubmissionReview {
@@ -27,6 +57,8 @@ export interface SubmissionReview {
   reviewed_at: string;
   /** joined from profiles */
   reviewer_name?: string | null;
+  /** Multi-file devolución (new model). Legacy single file uses revised_* above. */
+  files?: SubmissionReviewFile[];
 }
 
 export interface ChatMessage {
@@ -68,5 +100,7 @@ export interface SubmissionTabData {
   dueDate: string | null;
   isOverdue: boolean;
   daysRemaining: number | null;
+  /** Hard deadline reached: lesson blocks new submissions past the due date. */
+  submissionsClosed: boolean;
   thread: SubmissionThread | null;
 }

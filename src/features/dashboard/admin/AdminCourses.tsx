@@ -915,37 +915,28 @@ function resolveTypeAdmin(r: LessonResource) {
 }
 
 function AdminCourseResources({
-  groups, total, hasLessons, onAdd, onDelete,
+  groups, total, hasInstitutionalContainer, onAdd, onDelete,
 }: {
   groups: ResourceGroup[];
   total: number;
-  hasLessons: boolean;
+  hasInstitutionalContainer: boolean;
   onAdd: () => void;
   onDelete: (id: string) => void;
 }) {
-  if (!hasLessons) {
-    return (
-      <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-10 text-center text-slate-500">
-        <IoFolderOpenOutline size={40} className="mx-auto text-slate-300 mb-3" />
-        <p className="font-bold text-slate-700">Necesitás temas para subir materiales.</p>
-        <p className="text-sm mt-1">Creá al menos un módulo con un tema y volvé acá para asociar archivos.</p>
-      </div>
-    );
-  }
-
   if (total === 0) {
     return (
       <div className="bg-gradient-to-br from-emerald-50 via-white to-white border-2 border-dashed border-emerald-200 rounded-2xl p-10 text-center">
         <IoFolderOpenOutline size={40} className="mx-auto text-emerald-400 mb-3" />
         <p className="font-bold text-slate-700 mb-1">Sin archivos institucionales todavía</p>
         <p className="text-sm text-slate-500 max-w-md mx-auto mb-4">
-          Subí PDFs, audios o enlaces al curso. Los alumnos los verán como una biblioteca ordenada por módulo.
+          Subí reglas de convivencia, contratos, criterios de certificación y otros documentos importantes.
+          {!hasInstitutionalContainer && ' Al subir el primero, vamos a crear el contenedor automáticamente.'}
         </p>
         <button
           onClick={onAdd}
           className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-xs font-bold uppercase tracking-wider rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
         >
-          <IoAddOutline size={14} /> Agregar el primer material
+          <IoAddOutline size={14} /> Agregar el primer documento
         </button>
       </div>
     );
@@ -959,8 +950,8 @@ function AdminCourseResources({
             <IoFolderOpenOutline size={20} />
           </div>
           <div>
-            <p className="text-sm font-bold text-slate-900">{total} {total === 1 ? 'material' : 'materiales'} en el programa</p>
-            <p className="text-xs text-slate-500">Ordenados por módulo, después por tema, y dentro del tema por fecha de subida.</p>
+            <p className="text-sm font-bold text-slate-900">{total} {total === 1 ? 'documento' : 'documentos'} institucionales</p>
+            <p className="text-xs text-slate-500">Reglas, contratos y documentos importantes. Los alumnos los ven directos, sin pasar por temas.</p>
           </div>
         </div>
       </div>
@@ -1043,26 +1034,69 @@ function AdminCourseResources({
 }
 
 // ─── Add Material Modal ──────────────────────────────────────────────────────
+// Used from the Archivos institucionales tab. If the course has no
+// institutional container yet, this modal will create one transparently on
+// first save (module + default lesson) so the admin only thinks in terms of
+// "upload a document".
 
 function AddMaterialModal({
-  lessonOptions, onClose, onSaved,
+  courseId, courseTitle, lessonOptions, institutionalModules, onClose, onSaved,
 }: {
+  courseId: string;
+  courseTitle: string;
   lessonOptions: { id: string; label: string }[];
+  institutionalModules: { id: string; title: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [lessonId, setLessonId] = useState(lessonOptions[0]?.id ?? '');
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
-  const [type, setType] = useState<'link' | 'pdf' | 'audio'>('link');
+  const [type, setType] = useState<'link' | 'pdf' | 'audio'>('pdf');
   const [saving, setSaving] = useState(false);
 
+  const willAutoCreate = lessonOptions.length === 0;
+
+  /**
+   * Ensures the course has an institutional container (module + lesson) and
+   * returns the lesson_id we should attach the resource to.
+   */
+  const resolveTargetLessonId = async (): Promise<string> => {
+    if (lessonId) return lessonId;
+
+    // No institutional lesson yet — bootstrap the container.
+    let containerModuleId = institutionalModules[0]?.id ?? null;
+    if (!containerModuleId) {
+      const moduleCreated = await restInsert<{ id: string }>('modules', {
+        course_id: courseId,
+        title: 'Archivos institucionales',
+        module_type: 'institutional',
+        order_index: 0,
+        is_published: true,
+      });
+      if (!moduleCreated?.id) throw new Error('No se pudo crear el contenedor institucional.');
+      containerModuleId = moduleCreated.id;
+    }
+
+    const lessonCreated = await restInsert<{ id: string }>('lessons', {
+      module_id: containerModuleId,
+      title: 'Documentos',
+      order_index: 1,
+      is_published: true,
+      duration_seconds: 0,
+    });
+    if (!lessonCreated?.id) throw new Error('No se pudo crear la lección para los documentos.');
+    return lessonCreated.id;
+  };
+
   const handleSave = async () => {
-    if (!lessonId || !title.trim() || !url.trim()) return;
+    if (!title.trim() || !url.trim()) return;
     setSaving(true);
     try {
+      const targetLessonId = await resolveTargetLessonId();
+
       await restInsert('lesson_resources', {
-        lesson_id: lessonId,
+        lesson_id: targetLessonId,
         title: title.trim(),
         file_url: url.trim(),
         type,
@@ -1080,12 +1114,14 @@ function AddMaterialModal({
             actorName: actor.name,
             materialTitle: title.trim(),
             materialType: type,
-            lessonId,
+            lessonId: targetLessonId,
+            scope: 'institutional',
+            courseTitle,
           },
         });
       }
 
-      toast.success('Material agregado.');
+      toast.success('Documento institucional agregado.');
       onSaved();
     } catch (err: any) {
       toast.error('Error: ' + (err.message || 'No se pudo guardar'));
@@ -1102,33 +1138,41 @@ function AddMaterialModal({
             <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
               <IoFolderOpenOutline size={16} />
             </div>
-            <h2 className="font-bold text-slate-900">Nuevo material</h2>
+            <h2 className="font-bold text-slate-900">Nuevo documento institucional</h2>
           </div>
           <button onClick={onClose}><IoCloseOutline size={22} className="text-slate-400" /></button>
         </div>
         <div className="p-5 space-y-4">
+          {willAutoCreate && (
+            <div className="bg-emerald-50/60 border border-emerald-100 rounded-lg p-3 text-xs text-emerald-800 leading-relaxed">
+              Es el primer documento de este programa. Vamos a crear automáticamente el contenedor <strong>"Archivos institucionales"</strong> al guardar.
+            </div>
+          )}
+          {lessonOptions.length > 1 && (
+            <div>
+              <label className={labelCls}>Sección institucional</label>
+              <select className={inputCls} value={lessonId} onChange={(e) => setLessonId(e.target.value)}>
+                {lessonOptions.map(opt => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
-            <label className={labelCls}>Tema al que pertenece *</label>
-            <select className={inputCls} value={lessonId} onChange={(e) => setLessonId(e.target.value)}>
-              {lessonOptions.map(opt => (
-                <option key={opt.id} value={opt.id}>{opt.label}</option>
-              ))}
-            </select>
+            <label className={labelCls}>Título del documento *</label>
+            <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: Reglas de convivencia 2026" />
           </div>
           <div>
-            <label className={labelCls}>Título *</label>
-            <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: Guía de lectura - Capítulo 1" />
-          </div>
-          <div>
-            <label className={labelCls}>URL del material *</label>
+            <label className={labelCls}>URL del archivo *</label>
             <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://drive.google.com/..." />
+            <p className="text-[11px] text-slate-400 mt-1">Drive, Dropbox o cualquier URL pública. Los alumnos lo abrirán en una pestaña nueva.</p>
           </div>
           <div>
             <label className={labelCls}>Tipo</label>
             <div className="grid grid-cols-3 gap-2">
               {([
-                { value: 'link' as const, label: 'Link', Icon: IoLinkOutline },
-                { value: 'pdf'  as const, label: 'PDF',  Icon: IoDocumentTextOutline },
+                { value: 'pdf'  as const, label: 'PDF',   Icon: IoDocumentTextOutline },
+                { value: 'link' as const, label: 'Link',  Icon: IoLinkOutline },
                 { value: 'audio' as const, label: 'Audio', Icon: IoMusicalNotesOutline },
               ]).map(opt => {
                 const isActive = type === opt.value;
@@ -1154,10 +1198,10 @@ function AddMaterialModal({
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Cancelar</button>
           <button
             onClick={handleSave}
-            disabled={saving || !lessonId || !title.trim() || !url.trim()}
+            disabled={saving || !title.trim() || !url.trim()}
             className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg disabled:opacity-50 hover:bg-emerald-700 transition-colors"
           >
-            {saving ? 'Guardando...' : 'Guardar material'}
+            {saving ? 'Guardando...' : 'Guardar documento'}
           </button>
         </div>
       </div>
@@ -1418,14 +1462,19 @@ export default function AdminCourses() {
         .sort((a, b) => a.session_date.localeCompare(b.session_date))
     : [];
 
-  // ── Resources for the selected course, grouped by module then lesson ──────
+  // ── Institutional resources for the selected course (Archivos tab) ─────────
+  // Only modules with module_type='institutional' feed the Archivos tab. This
+  // mirrors the student view, where institutional docs are a stand-alone
+  // repository (rules, contracts, certification criteria) — NOT a roll-up of
+  // every material across the course.
+  const institutionalModulesForSelected = selectedCourse
+    ? modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'institutional').sort((a, b) => a.order_index - b.order_index)
+    : [];
+
   const resourceGroupsForSelected = (() => {
     if (!selectedCourse) return [];
-    const courseModules = modules
-      .filter(m => m.course_id === selectedCourse.id)
-      .sort((a, b) => a.order_index - b.order_index);
     const lessonIndex = new Map<string, { lessonTitle: string; lessonOrder: number; lessonPublished: boolean; moduleId: string; moduleTitle: string; moduleOrder: number; moduleType: string }>();
-    for (const m of courseModules) {
+    for (const m of institutionalModulesForSelected) {
       const ml = lessons.filter(l => l.module_id === m.id).sort((a, b) => a.order_index - b.order_index);
       for (const l of ml) {
         lessonIndex.set(l.id, {
@@ -1460,20 +1509,18 @@ export default function AdminCourses() {
 
   const totalResourcesForSelected = resourceGroupsForSelected.reduce((s, g) => s + g.items.length, 0);
 
-  const lessonsForSelectedCourse = selectedCourse
-    ? modules
-        .filter(m => m.course_id === selectedCourse.id)
-        .sort((a, b) => a.order_index - b.order_index)
-        .flatMap(m => {
-          const moduleLabel = m.module_type === 'workshop'
-            ? `🎯 ${m.title}`
-            : `Módulo ${m.order_index} · ${m.title}`;
-          return lessons
-            .filter(l => l.module_id === m.id)
-            .sort((a, b) => a.order_index - b.order_index)
-            .map(l => ({ id: l.id, label: `${moduleLabel} → ${l.order_index}. ${l.title}` }));
-        })
+  // Only institutional lessons feed the "Agregar material" picker.
+  const institutionalLessonsForSelectedCourse = selectedCourse
+    ? institutionalModulesForSelected.flatMap(m => {
+        return lessons
+          .filter(l => l.module_id === m.id)
+          .sort((a, b) => a.order_index - b.order_index)
+          .map(l => ({ id: l.id, label: `${m.title} → ${l.title}` }));
+      })
     : [];
+
+  const hasInstitutionalContainer = institutionalModulesForSelected.length > 0
+    && institutionalLessonsForSelectedCourse.length > 0;
 
   // ── Courses List View ────────────────────────────────────────────────────────
 
@@ -1644,12 +1691,12 @@ export default function AdminCourses() {
                 <IoAddOutline size={16} /> Taller
               </button>
             )}
-            {courseTab === 'archivos' && lessonsForSelectedCourse.length > 0 && (
+            {courseTab === 'archivos' && (
               <button
                 onClick={() => setAddMaterialOpen(true)}
                 className="flex items-center gap-1.5 text-sm font-bold text-emerald-600 hover:underline"
               >
-                <IoAddOutline size={16} /> Material
+                <IoAddOutline size={16} /> Material institucional
               </button>
             )}
           </div>
@@ -1670,7 +1717,7 @@ export default function AdminCourses() {
             <AdminCourseResources
               groups={resourceGroupsForSelected}
               total={totalResourcesForSelected}
-              hasLessons={lessonsForSelectedCourse.length > 0}
+              hasInstitutionalContainer={hasInstitutionalContainer}
               onAdd={() => setAddMaterialOpen(true)}
               onDelete={deleteResource}
             />
@@ -1678,9 +1725,9 @@ export default function AdminCourses() {
 
           {(courseTab === 'modules' || courseTab === 'workshop') && (() => {
             const isWorkshopTab = courseTab === 'workshop';
+            const targetType = isWorkshopTab ? 'workshop' : 'module';
             const filteredMods = modules.filter(m =>
-              m.course_id === selectedCourse.id &&
-              (isWorkshopTab ? m.module_type === 'workshop' : m.module_type !== 'workshop')
+              m.course_id === selectedCourse.id && m.module_type === targetType
             );
             const accentColor = isWorkshopTab ? 'text-amber-600' : 'text-[#00A9CE]';
             const accentBg = isWorkshopTab ? 'bg-amber-500' : 'bg-[#00A9CE]';
@@ -1857,7 +1904,10 @@ export default function AdminCourses() {
       )}
       {addMaterialOpen && selectedCourse && (
         <AddMaterialModal
-          lessonOptions={lessonsForSelectedCourse}
+          courseId={selectedCourse.id}
+          courseTitle={selectedCourse.title}
+          lessonOptions={institutionalLessonsForSelectedCourse}
+          institutionalModules={institutionalModulesForSelected.map(m => ({ id: m.id, title: m.title }))}
           onClose={() => setAddMaterialOpen(false)}
           onSaved={() => { setAddMaterialOpen(false); fetchData(true); }}
         />

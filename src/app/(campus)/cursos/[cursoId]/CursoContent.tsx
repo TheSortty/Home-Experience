@@ -478,78 +478,92 @@ function ArchivosTab({
     return (
       <EmptyState
         icon={<IoFolderOpenOutline size={36} />}
-        title="No hay archivos todavía"
-        message="Cuando se suban PDFs, audios o enlaces de material, los vas a ver acá ordenados por módulo."
+        title="Sin archivos institucionales"
+        message="Cuando la organización publique reglas, contratos o documentos importantes, los vas a ver acá."
       />
     );
   }
+
+  // Flatten in module → lesson → upload order; the user's mental model treats
+  // these as a list of documents, not a hierarchy of modules.
+  const flat = grouped.flatMap((g) => g.items);
+  // Show subtle section dividers only when there are multiple institutional
+  // modules (the common case is a single module with all docs).
+  const showSections = grouped.length > 1;
+
   return (
-    <div className="space-y-8">
-      <div className="bg-gradient-to-br from-emerald-50 via-white to-white border border-emerald-100 rounded-2xl p-5">
-        <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 mb-1">Biblioteca del programa</p>
-        <p className="text-sm text-slate-600 leading-relaxed">
-          Todos los materiales, organizados por módulo y en el orden en que fueron publicados.
-        </p>
+    <div className="space-y-6">
+      <div className="bg-gradient-to-br from-emerald-50 via-white to-white border border-emerald-100 rounded-2xl p-5 flex items-start gap-4">
+        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+          <IoFolderOpenOutline size={20} />
+        </div>
+        <div className="flex-1">
+          <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 mb-0.5">
+            Documentos del programa
+          </p>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Reglas de convivencia, contratos, criterios de certificación y otros documentos importantes para vos.
+          </p>
+        </div>
+        <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-md bg-white border border-emerald-200 text-[11px] font-black text-emerald-700 tabular-nums">
+          {totalCount} {totalCount === 1 ? 'doc' : 'docs'}
+        </span>
       </div>
 
-      {grouped.map((group) => {
-        const titleHasModuloPrefix = /^m[oó]dulo\b/i.test(group.moduleTitle.trim());
-        return (
-        <section key={group.moduleId} className="space-y-3">
-          <header className="flex items-baseline justify-between gap-4 pb-2 border-b border-slate-100">
-            <div>
-              {!titleHasModuloPrefix && (
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                  Módulo {group.moduleOrder}
-                </p>
-              )}
-              <h3 className="text-base font-bold text-slate-900">{group.moduleTitle}</h3>
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-              {group.items.length} {group.items.length === 1 ? 'archivo' : 'archivos'}
-            </span>
-          </header>
+      {showSections ? (
+        grouped.map((group) => (
+          <section key={group.moduleId} className="space-y-3">
+            <header className="flex items-baseline justify-between gap-4 pb-2 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-700 tracking-tight">{group.moduleTitle}</h3>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                {group.items.length} {group.items.length === 1 ? 'doc' : 'docs'}
+              </span>
+            </header>
+            <ResourceCards resources={group.items} />
+          </section>
+        ))
+      ) : (
+        <ResourceCards resources={flat} />
+      )}
+    </div>
+  );
+}
 
-          <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {group.items.map((r, i) => {
-              const visual = resolveType(r);
-              return (
-                <li key={r.id}>
-                  <a
-                    href={r.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-300 hover:shadow-md hover:-translate-y-0.5 transition-all"
-                  >
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ring-1 ${visual.bg} ${visual.bgHover} ${visual.ring}`}>
-                      <visual.Icon className={`w-6 h-6 ${visual.text}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${visual.chip}`}>
-                          {visual.label}
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          #{String(i + 1).padStart(2, '0')}
-                        </span>
-                      </div>
-                      <p className="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors truncate">
-                        {r.title}
-                      </p>
-                      <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                        Tema {r.lessonOrder}: {r.lessonTitle}
-                      </p>
-                    </div>
-                    <IoArrowForwardOutline className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0" />
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+function ResourceCards({ resources }: { resources: ResourceWithContext[] }) {
+  return (
+    <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {resources.map((r, i) => {
+        const visual = resolveType(r);
+        return (
+          <li key={r.id}>
+            <a
+              href={r.file_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-2xl hover:border-emerald-300 hover:shadow-md hover:-translate-y-0.5 transition-all"
+            >
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ring-1 ${visual.bg} ${visual.bgHover} ${visual.ring}`}>
+                <visual.Icon className={`w-6 h-6 ${visual.text}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border ${visual.chip}`}>
+                    {visual.label}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 tabular-nums">
+                    #{String(i + 1).padStart(2, '0')}
+                  </span>
+                </div>
+                <p className="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors line-clamp-2">
+                  {r.title}
+                </p>
+              </div>
+              <IoArrowForwardOutline className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+            </a>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }
 

@@ -5,17 +5,19 @@ import {
   IoCheckmarkCircle, IoAlertCircleOutline, IoOpenOutline,
   IoChevronDownOutline, IoChevronUpOutline, IoTimeOutline,
   IoChatbubbleEllipsesOutline, IoSendOutline, IoShieldCheckmarkOutline,
-  IoPeopleOutline, IoDocumentOutline, IoArrowUndoOutline,
+  IoPeopleOutline, IoDocumentOutline, IoArrowUndoOutline, IoTrashOutline,
+  IoEyeOutline, IoDownloadOutline, IoRefreshOutline, IoAddCircleOutline,
 } from 'react-icons/io5';
-import { getAdminSignedUrl, getReviewerThread, postReviewerChatMessage, submitAdminReview } from '../../actions';
+import { getReviewerThread, postReviewerChatMessage, submitAdminReview, deleteSubmission, resetStudentSubmission, setAdditionalAllowed } from '../../actions';
 import { supabase } from '@/src/services/supabaseClient';
-import type { SubmissionThread, ChatMessage } from '@/src/types/submissions';
+import { entregaDownloadHref, entregaPreviewHref, isPreviewable } from '@/src/services/entregaDownload';
+import type { SubmissionThread, ChatMessage, SubmissionFile } from '@/src/types/submissions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SubmissionSummary {
   id: string;
-  file_name: string;
+  file_name: string | null;
   storage_path: string | null;
   submission_url?: string | null;
   submitted_at: string;
@@ -23,6 +25,15 @@ interface SubmissionSummary {
   version: number;
   status: string;
   user_id: string;
+  allow_additional: boolean;
+  files: SubmissionFile[];
+}
+
+interface ReviewFileLite {
+  id: string;
+  storage_key: string;
+  file_name: string;
+  content_type: string | null;
 }
 
 interface ReviewSummary {
@@ -31,6 +42,7 @@ interface ReviewSummary {
   revised_file_name: string | null;
   revised_storage_path: string | null;
   reviewed_at: string;
+  submission_review_files?: ReviewFileLite[];
 }
 
 interface Props {
@@ -43,6 +55,7 @@ interface Props {
   lessonId: string;
   reviewerProfileId: string;
   isMyTeam: boolean;
+  isAdmin: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -63,22 +76,70 @@ function timeAgo(iso: string) {
 }
 
 function DownloadLink({ storagePath, label }: { storagePath: string; label: string }) {
-  const [loading, setLoading] = useState(false);
-  const handleClick = async () => {
-    setLoading(true);
-    const res = await getAdminSignedUrl(storagePath);
-    setLoading(false);
-    if (res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
-  };
   return (
-    <button
-      onClick={handleClick}
-      disabled={loading}
-      className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 underline underline-offset-2 transition-colors disabled:opacity-50"
+    <a
+      href={entregaDownloadHref(storagePath)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 underline underline-offset-2 transition-colors"
     >
       <IoDocumentOutline size={13} />
-      {loading ? 'Cargando…' : label}
-    </button>
+      {label}
+    </a>
+  );
+}
+
+// A delivery file row with an inline preview toggle (PDF / image) + download.
+function FileRow({
+  storageKey, fileName, contentType, isAdditional, isLate,
+}: {
+  storageKey: string;
+  fileName: string;
+  contentType?: string | null;
+  isAdditional?: boolean;
+  isLate?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const canPreview = isPreviewable(fileName, contentType);
+  const isImage = !/\.pdf$/i.test(fileName) && (contentType?.startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(fileName));
+
+  return (
+    <div className={`bg-slate-50 border rounded-lg overflow-hidden ${isAdditional ? 'border-violet-200' : 'border-slate-100'}`}>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <IoDocumentOutline size={14} className="shrink-0 text-slate-400" />
+        <span className="flex-1 min-w-0 truncate text-xs font-bold text-slate-700">{fileName}</span>
+        {isAdditional && (
+          <span className={`shrink-0 text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${isLate ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'}`}>
+            Adicional · {isLate ? 'tarde' : 'a tiempo'}
+          </span>
+        )}
+        {canPreview && (
+          <button
+            onClick={() => setOpen(v => !v)}
+            className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-[#00A9CE] hover:text-blue-700 transition-colors"
+          >
+            <IoEyeOutline size={13} /> {open ? 'Ocultar' : 'Ver'}
+          </button>
+        )}
+        <a
+          href={entregaDownloadHref(storageKey)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-slate-900 transition-colors"
+        >
+          <IoDownloadOutline size={13} /> Descargar
+        </a>
+      </div>
+      {open && canPreview && (
+        <div className="border-t border-slate-200 bg-white">
+          {isImage ? (
+            <img src={entregaPreviewHref(storageKey)} alt={fileName} className="max-h-[480px] w-full object-contain bg-slate-100" />
+          ) : (
+            <iframe src={entregaPreviewHref(storageKey)} title={fileName} className="w-full h-[520px]" />
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -103,7 +164,7 @@ function InlineReviewForm({
   const [approve, setApprove] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [msg, setMsg] = useState<{ ok?: string; err?: string } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   if (isApproved) {
@@ -122,12 +183,13 @@ function InlineReviewForm({
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // The file input is named "revised_files" inside the form, so FormData
+    // already carries every selected file — no manual append needed.
     const fd = new FormData(e.currentTarget);
     fd.append('submissionId', submissionId);
     fd.append('courseId', courseId);
     fd.append('lessonId', lessonId);
     if (approve) fd.append('approve', '1');
-    if (fileRef.current?.files?.[0]) fd.append('revised_file', fileRef.current.files[0]);
     setMsg(null);
 
     startTransition(async () => {
@@ -139,6 +201,7 @@ function InlineReviewForm({
         setMsg({ ok: wasApproved ? 'Entrega aprobada y hilo cerrado.' : 'Devolución enviada al alumno.' });
         setOpen(false);
         setApprove(false);
+        setPickedFiles([]);
         onReviewSaved(wasApproved);
       }
     });
@@ -170,6 +233,31 @@ function InlineReviewForm({
             rows={4}
             className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30 resize-none placeholder-slate-400"
           />
+
+          {/* Adjuntar archivo(s) de devolución (PDF/Word/imágenes, varios permitidos) */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-600">
+              Adjuntar archivo(s) corregido(s) <span className="font-normal text-slate-400">(opcional)</span>
+            </label>
+            <input
+              type="file"
+              name="revised_files"
+              multiple
+              accept=".pdf,.doc,.docx,.odt,.rtf,.txt,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png"
+              onChange={e => setPickedFiles(Array.from(e.target.files ?? []))}
+              className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 file:cursor-pointer"
+            />
+            {pickedFiles.length > 0 && (
+              <ul className="space-y-1 pt-0.5">
+                {pickedFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <IoDocumentOutline size={12} className="shrink-0 text-slate-400" />
+                    <span className="truncate">{f.name}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
             approve
@@ -409,10 +497,46 @@ export default function SubmissionCard({
   lessonId,
   reviewerProfileId,
   isMyTeam,
+  isAdmin,
 }: Props) {
   const [currentStatus, setCurrentStatus] = useState(latestSubmission.status);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<SubmissionThread | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [didReset, setDidReset] = useState(false);
+  const [allowAdditional, setAllowAdditional] = useState(latestSubmission.allow_additional);
+  const [togglingAdd, setTogglingAdd] = useState(false);
+
+  const handleToggleAdditional = async () => {
+    const next = !allowAdditional;
+    setTogglingAdd(true);
+    const res = await setAdditionalAllowed(latestSubmission.id, courseId, next);
+    setTogglingAdd(false);
+    if (!res.error) setAllowAdditional(next);
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`¿Borrar la entrega de ${studentName}? Se eliminan todos sus archivos de R2 y no se puede deshacer.`)) return;
+    setDeleting(true);
+    setDeleteErr(null);
+    const res = await deleteSubmission(latestSubmission.id, courseId);
+    setDeleting(false);
+    if (res.error) setDeleteErr(res.error);
+    else setDeleted(true);
+  };
+
+  const handleReset = async () => {
+    if (!confirm(`¿Reiniciar la entrega de ${studentName}? Se borran TODAS sus versiones, devoluciones y chat de esta clase para que pueda entregar de cero. No se puede deshacer.`)) return;
+    setResetting(true);
+    setDeleteErr(null);
+    const res = await resetStudentSubmission(studentProfileId, lessonId, courseId);
+    setResetting(false);
+    if (res.error) setDeleteErr(res.error);
+    else { setDidReset(true); setDeleted(true); }
+  };
 
   const initials = studentName
     .split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
@@ -441,6 +565,17 @@ export default function SubmissionCard({
     setHistoryOpen(true);
   };
 
+  if (deleted) {
+    return (
+      <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl px-5 py-4 text-sm text-slate-400 flex items-center gap-2">
+        {didReset ? <IoRefreshOutline size={15} /> : <IoTrashOutline size={15} />}
+        {didReset
+          ? `Entrega de ${studentName} reiniciada — puede volver a entregar.`
+          : `Entrega de ${studentName} eliminada.`}
+      </div>
+    );
+  }
+
   return (
     <div className={`bg-white rounded-2xl border border-slate-200 border-l-4 ${cfg.border} shadow-sm overflow-hidden transition-shadow hover:shadow-md`}>
 
@@ -468,7 +603,7 @@ export default function SubmissionCard({
       {/* ── Submission info ── */}
       <div className="px-5 pb-4 space-y-4">
 
-        {/* Link / file row */}
+        {/* Version / status row */}
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[11px] font-black text-slate-400 bg-slate-100 rounded px-2 py-0.5">
             v{latestSubmission.version}
@@ -481,23 +616,36 @@ export default function SubmissionCard({
             <IoTimeOutline size={11} />
             {timeAgo(latestSubmission.submitted_at)}
           </span>
-
-          {latestSubmission.submission_url ? (
-            <a
-              href={latestSubmission.submission_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-700 text-white text-xs font-bold rounded-lg transition-colors shrink-0"
-            >
-              <IoOpenOutline size={13} />
-              Abrir entrega
-            </a>
-          ) : latestSubmission.storage_path ? (
-            <div className="ml-auto shrink-0">
-              <DownloadLink storagePath={latestSubmission.storage_path} label="Descargar entrega" />
-            </div>
-          ) : null}
+          {latestSubmission.files.length > 0 && (
+            <span className="text-[11px] font-bold text-slate-400">
+              {latestSubmission.files.length} archivo{latestSubmission.files.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
+
+        {/* Files */}
+        {latestSubmission.files.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            {latestSubmission.files.map(f => (
+              <FileRow key={f.id} storageKey={f.storage_key} fileName={f.file_name} contentType={f.content_type} isAdditional={f.is_additional} isLate={f.is_late} />
+            ))}
+          </div>
+        ) : latestSubmission.submission_url ? (
+          /* Legacy link-based deliveries */
+          <a
+            href={latestSubmission.submission_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-700 text-white text-xs font-bold rounded-lg transition-colors w-fit"
+          >
+            <IoOpenOutline size={13} />
+            Abrir entrega
+          </a>
+        ) : latestSubmission.storage_path ? (
+          <DownloadLink storagePath={latestSubmission.storage_path} label="Descargar entrega" />
+        ) : (
+          <p className="text-xs text-slate-400 italic">Sin archivos adjuntos.</p>
+        )}
 
         {/* Latest review preview (if exists and not approved) */}
         {latestReview && currentStatus !== 'approved' && (
@@ -510,9 +658,15 @@ export default function SubmissionCard({
                 {latestReview.feedback_text}
               </p>
             )}
-            {latestReview.revised_file_name && latestReview.revised_storage_path && (
+            {(latestReview.submission_review_files?.length ?? 0) > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                {latestReview.submission_review_files!.map(f => (
+                  <FileRow key={f.id} storageKey={f.storage_key} fileName={f.file_name} contentType={f.content_type} />
+                ))}
+              </div>
+            ) : latestReview.revised_file_name && latestReview.revised_storage_path ? (
               <DownloadLink storagePath={latestReview.revised_storage_path} label={latestReview.revised_file_name} />
-            )}
+            ) : null}
           </div>
         )}
 
@@ -562,6 +716,32 @@ export default function SubmissionCard({
           reviewerProfileId={reviewerProfileId}
         />
 
+        {/* Additionals toggle (coach / organizador) */}
+        <div className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${allowAdditional ? 'bg-violet-50 border-violet-200' : 'bg-slate-50 border-slate-200'}`}>
+          <IoAddCircleOutline size={16} className={allowAdditional ? 'text-violet-600 shrink-0' : 'text-slate-400 shrink-0'} />
+          <div className="flex-1 min-w-0">
+            <p className={`text-xs font-bold ${allowAdditional ? 'text-violet-800' : 'text-slate-600'}`}>
+              {allowAdditional ? 'Adicionales habilitados' : 'Agregar adicionales'}
+            </p>
+            <p className="text-[11px] text-slate-400 leading-tight">
+              {allowAdditional
+                ? 'El alumno puede sumar archivos a esta entrega. Se cierra solo tras subirlos.'
+                : 'Permití que el alumno sume archivos a la entrega ya hecha.'}
+            </p>
+          </div>
+          <button
+            onClick={handleToggleAdditional}
+            disabled={togglingAdd}
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 ${
+              allowAdditional
+                ? 'bg-white border border-violet-300 text-violet-700 hover:bg-violet-100'
+                : 'bg-violet-600 text-white hover:bg-violet-700'
+            }`}
+          >
+            {togglingAdd ? '…' : allowAdditional ? 'Deshabilitar' : 'Habilitar'}
+          </button>
+        </div>
+
         {/* Review form */}
         <div className="pt-1">
           <InlineReviewForm
@@ -573,6 +753,36 @@ export default function SubmissionCard({
             onReviewSaved={(approved) => setCurrentStatus(approved ? 'approved' : 'reviewed')}
           />
         </div>
+
+        {/* Reset / delete (organizador / admin only) */}
+        {isAdmin && (
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+            {deleteErr && (
+              <span className="text-xs text-red-600 flex items-center gap-1">
+                <IoAlertCircleOutline size={12} /> {deleteErr}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-3">
+              <button
+                onClick={handleReset}
+                disabled={resetting || deleting}
+                className="flex items-center gap-1.5 text-xs font-bold text-amber-600 hover:text-amber-700 transition-colors disabled:opacity-50"
+                title="Borra todas las versiones para que el alumno entregue de cero"
+              >
+                <IoRefreshOutline size={13} />
+                {resetting ? 'Reiniciando…' : 'Reiniciar'}
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting || resetting}
+                className="flex items-center gap-1.5 text-xs font-bold text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
+              >
+                <IoTrashOutline size={13} />
+                {deleting ? 'Borrando…' : 'Borrar entrega'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

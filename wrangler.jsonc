@@ -26,6 +26,10 @@
     {
       "binding": "AVATARS",
       "bucket_name": "campus-avatars"
+    },
+    {
+      "binding": "ENTREGAS",
+      "bucket_name": "campus-entregas"
     }
   ],
   "vars": {

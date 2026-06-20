@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   IoAlertCircleOutline, IoCheckmarkCircle, IoCloudUploadOutline,
   IoDocumentOutline, IoLockClosedOutline, IoRefreshOutline,
-  IoSendOutline, IoTimeOutline,
+  IoSendOutline, IoTimeOutline, IoCloseOutline,
 } from 'react-icons/io5';
-import { submitLesson, postStudentChatMessage, getStudentReviewFileUrl } from '../../actions';
+import { submitLesson, addSubmissionFiles, postStudentChatMessage } from '../../actions';
 import { supabase } from '@/src/services/supabaseClient';
+import { entregaDownloadHref } from '@/src/services/entregaDownload';
 import type { ChatMessage, SubmissionTabData, ThreadItem } from '@/src/types/submissions';
 
 // ─── Re-export so LessonViewer can import the type from one place ─────────────
@@ -98,61 +100,133 @@ function DueDateBanner({ data }: { data: SubmissionTabData }) {
   );
 }
 
-// ─── Link submit zone ─────────────────────────────────────────────────────────
+// ─── File upload zone (multi-file, single delivery) ───────────────────────────
 
-function LinkZone({
+const MAX_FILES = 8;
+const MAX_MB = 3;
+const ACCEPT = '.pdf,.doc,.docx,.odt,.rtf,.txt,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png';
+
+function fmtSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function UploadZone({
   lessonId,
   courseId,
   nextVersion,
   onSuccess,
+  mode = 'version',
 }: {
   lessonId: string;
   courseId: string;
   nextVersion: number;
-  onSuccess: (url: string, version: number) => void;
+  onSuccess: () => void;
+  mode?: 'version' | 'additional';
 }) {
-  const [url, setUrl] = useState('');
+  const isAdditional = mode === 'additional';
+  const [files, setFiles] = useState<File[]>([]);
   const [feedback, setFeedback] = useState<{ ok?: string; err?: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = (incoming: FileList | null) => {
+    if (!incoming) return;
+    setFeedback(null);
+    const picked = Array.from(incoming);
+    const tooBig = picked.find(f => f.size > MAX_MB * 1024 * 1024);
+    if (tooBig) { setFeedback({ err: `"${tooBig.name}" supera los ${MAX_MB} MB` }); return; }
+    setFiles(prev => {
+      // De-dup by name+size, cap at MAX_FILES
+      const merged = [...prev];
+      for (const f of picked) {
+        if (!merged.some(m => m.name === f.name && m.size === f.size)) merged.push(f);
+      }
+      if (merged.length > MAX_FILES) { setFeedback({ err: `Máximo ${MAX_FILES} archivos` }); }
+      return merged.slice(0, MAX_FILES);
+    });
+  };
+
+  const removeFile = (idx: number) => setFiles(prev => prev.filter((_, i) => i !== idx));
 
   const handleSubmit = () => {
-    if (!url.trim()) { setFeedback({ err: 'Pegá el link de tu trabajo' }); return; }
+    if (files.length === 0) { setFeedback({ err: 'Adjuntá al menos un archivo' }); return; }
     setFeedback(null);
 
     const fd = new FormData();
     fd.append('lessonId', lessonId);
     fd.append('courseId', courseId);
-    fd.append('submission_url', url.trim());
+    for (const f of files) fd.append('files', f);
 
     startTransition(async () => {
-      const res = await submitLesson(fd);
+      const res = isAdditional ? await addSubmissionFiles(fd) : await submitLesson(fd);
       if (res.error) {
         setFeedback({ err: res.error });
       } else {
-        setFeedback({ ok: `v${res.version ?? nextVersion} enviada correctamente.` });
-        setUrl('');
-        onSuccess(url.trim(), res.version ?? nextVersion);
+        setFeedback({
+          ok: isAdditional
+            ? `Agregaste ${files.length} archivo${files.length !== 1 ? 's' : ''}${(res as { isLate?: boolean }).isLate ? ' · fuera de término' : ' · dentro de término'}.`
+            : `Versión ${(res as { version?: number }).version ?? nextVersion} enviada correctamente.`,
+        });
+        setFiles([]);
+        if (inputRef.current) inputRef.current.value = '';
+        onSuccess();
       }
     });
   };
 
   return (
-    <div className="space-y-3 pt-4 border-t border-slate-100">
+    <div className={`space-y-3 pt-4 border-t ${isAdditional ? 'border-violet-200' : 'border-slate-100'}`}>
       <p className="text-sm font-bold text-slate-700">
-        {nextVersion === 1 ? 'Enviar entrega' : `Enviar versión ${nextVersion}`}
+        {isAdditional ? 'Agregar archivos adicionales' : nextVersion === 1 ? 'Enviar entrega' : `Enviar versión ${nextVersion}`}
       </p>
       <p className="text-xs text-slate-500">
-        Compartí el link de tu trabajo (Google Drive, Dropbox, Notion, YouTube, etc.). Asegurate de que el link tenga permisos para quien tenga el link.
+        {isAdditional
+          ? `Tu coach habilitó sumar archivos a tu entrega ya hecha. Quedará registrado si los subís dentro o fuera de término. Hasta ${MAX_FILES} archivos de ${MAX_MB} MB cada uno.`
+          : `Subí tus archivos (PDF, Word, imágenes…). Podés adjuntar varios en una misma entrega — hasta ${MAX_FILES} archivos de ${MAX_MB} MB cada uno.`}
       </p>
 
+      {/* Drop / picker */}
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
+        className="w-full flex flex-col items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-[#00A9CE] hover:text-[#00A9CE] transition-colors"
+      >
+        <IoCloudUploadOutline size={26} />
+        <span className="text-sm font-bold">Elegí archivos o arrastralos acá</span>
+      </button>
       <input
-        type="url"
-        value={url}
-        onChange={(e) => { setUrl(e.target.value); setFeedback(null); }}
-        placeholder="https://drive.google.com/..."
-        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-[#00A9CE] focus:ring-2 focus:ring-[#00A9CE]/20 transition-all"
-        onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+        ref={inputRef}
+        type="file"
+        multiple
+        accept={ACCEPT}
+        className="hidden"
+        onChange={(e) => addFiles(e.target.files)}
       />
+
+      {/* Selected files */}
+      {files.length > 0 && (
+        <ul className="space-y-1.5">
+          {files.map((f, idx) => (
+            <li key={`${f.name}-${idx}`} className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+              <IoDocumentOutline size={15} className="shrink-0 text-slate-400" />
+              <span className="flex-1 min-w-0 truncate text-sm text-slate-700">{f.name}</span>
+              <span className="text-[11px] text-slate-400 shrink-0">{fmtSize(f.size)}</span>
+              <button
+                type="button"
+                onClick={() => removeFile(idx)}
+                className="shrink-0 text-slate-400 hover:text-red-500 transition-colors"
+                aria-label="Quitar"
+              >
+                <IoCloseOutline size={16} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {feedback?.err && (
         <p className="text-sm text-red-600 flex items-center gap-1.5">
@@ -167,11 +241,11 @@ function LinkZone({
 
       <button
         onClick={handleSubmit}
-        disabled={isPending || !url.trim()}
+        disabled={isPending || files.length === 0}
         className="w-full py-3 bg-[#00A9CE] text-white font-bold text-sm rounded-xl hover:bg-blue-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-2"
       >
         <IoSendOutline size={16} />
-        {isPending ? 'Enviando…' : 'Enviar entrega'}
+        {isPending ? 'Subiendo…' : isAdditional ? 'Agregar archivos' : 'Enviar entrega'}
       </button>
     </div>
   );
@@ -179,19 +253,11 @@ function LinkZone({
 
 // ─── Hilo (timeline) view ─────────────────────────────────────────────────────
 
-function HiloView({
-  items,
-  onDownloadSubmission,
-  onDownloadRevised,
-}: {
-  items: ThreadItem[];
-  onDownloadSubmission: (id: string) => void;
-  onDownloadRevised: (path: string) => void;
-}) {
+function HiloView({ items }: { items: ThreadItem[] }) {
   if (items.length === 0) {
     return (
       <div className="py-8 text-center text-slate-400 text-sm italic">
-        Todavía no hay entregas. Subí tu primer archivo cuando estés listo.
+        Todavía no hay entregas. Subí tus archivos cuando estés listo.
       </div>
     );
   }
@@ -201,6 +267,7 @@ function HiloView({
       {items.map((item, idx) => {
         if (item.kind === 'submission') {
           const sub = item.data;
+          const files = sub.files ?? [];
           return (
             <div
               key={`sub-${sub.id}-${idx}`}
@@ -209,32 +276,55 @@ function HiloView({
               <div className="w-9 h-9 rounded-xl bg-[#00A9CE]/10 text-[#00A9CE] flex items-center justify-center shrink-0 text-xs font-black">
                 v{sub.version}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+              <div className="flex-1 min-w-0 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {sub.is_late
                     ? <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-600">Atrasada</span>
                     : <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">A tiempo</span>
                   }
+                  <span className="text-xs text-slate-400">{fmtShort(sub.submitted_at)}</span>
                 </div>
-                <p className="text-xs text-slate-400">{fmtShort(sub.submitted_at)}</p>
+
+                {/* Files */}
+                {files.length > 0 ? (
+                  <div className="flex flex-col gap-1">
+                    {files.map(f => (
+                      <div key={f.id} className="flex items-center gap-2 flex-wrap">
+                        <a
+                          href={entregaDownloadHref(f.storage_key)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-xs font-bold text-[#00A9CE] hover:text-blue-700 transition-colors w-fit"
+                        >
+                          <IoDocumentOutline size={14} /> {f.file_name}
+                        </a>
+                        {f.is_additional && (
+                          <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${f.is_late ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'}`}>
+                            Adicional · {f.is_late ? 'fuera de término' : 'a tiempo'}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : sub.submission_url ? (
+                  <a
+                    href={sub.submission_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs font-bold text-[#00A9CE] hover:text-blue-700 transition-colors w-fit"
+                  >
+                    <IoDocumentOutline size={14} /> Abrir entrega
+                  </a>
+                ) : null}
               </div>
-              {sub.submission_url ? (
-                <a
-                  href={sub.submission_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 text-xs font-bold text-[#00A9CE] hover:text-blue-700 flex items-center gap-1 transition-colors"
-                >
-                  <IoDocumentOutline size={14} /> Abrir
-                </a>
-              ) : null}
             </div>
           );
         }
 
         if (item.kind === 'review') {
           const rev = item.data;
-          const isApproval = !rev.feedback_text && !rev.revised_file_name;
+          const revFiles = rev.files ?? [];
+          const isApproval = !rev.feedback_text && !rev.revised_file_name && revFiles.length === 0;
           return (
             <div
               key={`rev-${rev.id}-${idx}`}
@@ -255,15 +345,32 @@ function HiloView({
                   {rev.feedback_text}
                 </p>
               )}
-              {rev.revised_file_name && rev.revised_storage_path && (
-                <button
-                  onClick={() => onDownloadRevised(rev.revised_storage_path!)}
-                  className="mt-2 flex items-center gap-1.5 text-xs font-bold text-[#00A9CE] hover:text-blue-700"
+              {revFiles.length > 0 ? (
+                <div className="mt-2 flex flex-col gap-1">
+                  {revFiles.map(f => (
+                    <a
+                      key={f.id}
+                      href={entregaDownloadHref(f.storage_key)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-xs font-bold text-[#00A9CE] hover:text-blue-700 w-fit"
+                    >
+                      <IoDocumentOutline size={14} />
+                      Descargar: {f.file_name}
+                    </a>
+                  ))}
+                </div>
+              ) : rev.revised_file_name && rev.revised_storage_path ? (
+                <a
+                  href={entregaDownloadHref(rev.revised_storage_path)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 flex items-center gap-1.5 text-xs font-bold text-[#00A9CE] hover:text-blue-700 w-fit"
                 >
                   <IoDocumentOutline size={14} />
                   Descargar: {rev.revised_file_name}
-                </button>
-              )}
+                </a>
+              ) : null}
             </div>
           );
         }
@@ -455,11 +562,10 @@ function ChatInput({
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function SubmissionTab({ lessonId, courseId, data, studentProfileId }: Props) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'hilo' | 'chat'>('hilo');
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // Local thread state — updated optimistically after new uploads
-  const [thread, setThread] = useState(data.thread);
+  const thread = data.thread;
 
   if (!data.requiresSubmission) {
     return (
@@ -471,58 +577,20 @@ export default function SubmissionTab({ lessonId, courseId, data, studentProfile
 
   const status = thread?.status ?? null;
   const submissions = thread?.submissions ?? [];
-  const canUpload = status === null || status === 'reviewed';
+  const canUpload = (status === null || status === 'reviewed') && !data.submissionsClosed;
   const nextVersion = (submissions.at(-1)?.version ?? 0) + 1;
+  // Coach/organizer enabled the student to attach extra files to the existing
+  // delivery (independent of the version flow).
+  const additionalAllowed = submissions.at(-1)?.allow_additional ?? false;
 
   // Build hilo items (submissions + reviews only, no chat)
   const hiloItems: ThreadItem[] = thread
     ? thread.timeline.filter(i => i.kind === 'submission' || i.kind === 'review')
     : [];
 
-  const handleDownloadSubmission = async (submissionId: string) => {
-    const { getSubmissionDownloadUrl } = await import('../../actions');
-    setDownloadingId(submissionId);
-    const res = await getSubmissionDownloadUrl(submissionId);
-    setDownloadingId(null);
-    if (res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleDownloadRevised = async (storagePath: string) => {
-    setDownloadingId(storagePath);
-    const res = await getStudentReviewFileUrl(storagePath);
-    setDownloadingId(null);
-    if (res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleUploadSuccess = (fileName: string, version: number) => {
-    // Optimistically update thread state
-    setThread(prev => {
-      const newSub = {
-        id: `opt-${Date.now()}`,
-        user_id: studentProfileId ?? '',
-        lesson_id: lessonId,
-        file_name: fileName,
-        storage_path: '',
-        is_late: data.isOverdue,
-        version,
-        status: 'pending_review' as const,
-        approved_by: null,
-        approved_at: null,
-        submitted_at: new Date().toISOString(),
-      };
-      const newTimeline = [
-        ...(prev?.timeline ?? []),
-        { kind: 'submission' as const, data: newSub },
-      ];
-      return {
-        status: 'pending_review' as const,
-        submissions: [...(prev?.submissions ?? []), newSub],
-        reviewsBySubmission: prev?.reviewsBySubmission ?? {},
-        chatMessages: prev?.chatMessages ?? [],
-        timeline: newTimeline,
-      };
-    });
-  };
+  // After a successful upload, re-fetch server data so the new version (with its
+  // real R2 file keys) shows up in the thread.
+  const handleUploadSuccess = () => router.refresh();
 
   return (
     <div className="space-y-4">
@@ -555,23 +623,34 @@ export default function SubmissionTab({ lessonId, courseId, data, studentProfile
       <div>
         {(!thread || activeTab === 'hilo') && (
           <div className="space-y-4">
-            <HiloView
-              items={hiloItems}
-              onDownloadSubmission={handleDownloadSubmission}
-              onDownloadRevised={handleDownloadRevised}
-            />
+            <HiloView items={hiloItems} />
             {canUpload && (
-              <LinkZone
+              <UploadZone
                 lessonId={lessonId}
                 courseId={courseId}
                 nextVersion={nextVersion}
                 onSuccess={handleUploadSuccess}
               />
             )}
-            {status === 'pending_review' && (
+            {additionalAllowed && (
+              <UploadZone
+                mode="additional"
+                lessonId={lessonId}
+                courseId={courseId}
+                nextVersion={nextVersion}
+                onSuccess={handleUploadSuccess}
+              />
+            )}
+            {status === 'pending_review' && !data.submissionsClosed && (
               <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 rounded-lg px-4 py-3 border border-slate-200">
                 <IoLockClosedOutline size={16} className="shrink-0 text-slate-400" />
                 Podés enviar una nueva versión cuando tu coach responda.
+              </div>
+            )}
+            {data.submissionsClosed && status !== 'approved' && (
+              <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 rounded-lg px-4 py-3 border border-red-200">
+                <IoLockClosedOutline size={16} className="shrink-0 text-red-400" />
+                El plazo de entrega de esta clase venció. Ya no se aceptan nuevas entregas.
               </div>
             )}
             {status === 'approved' && (

@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { IoDocumentOutline } from 'react-icons/io5';
-import { getAdminSignedUrl } from '../../actions';
+import { entregaDownloadHref } from '@/src/services/entregaDownload';
 
 export default function DownloadButton({
   storagePath,
@@ -11,23 +10,15 @@ export default function DownloadButton({
   storagePath: string;
   label?: string;
 }) {
-  const [loading, setLoading] = useState(false);
-
-  const handleClick = async () => {
-    setLoading(true);
-    const res = await getAdminSignedUrl(storagePath);
-    setLoading(false);
-    if (res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
-  };
-
   return (
-    <button
-      onClick={handleClick}
-      disabled={loading}
-      className="flex items-center gap-1.5 text-xs font-bold text-[#00A9CE] hover:text-blue-700 transition-colors disabled:opacity-50"
+    <a
+      href={entregaDownloadHref(storagePath)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-1.5 text-xs font-bold text-[#00A9CE] hover:text-blue-700 transition-colors"
     >
       <IoDocumentOutline size={14} />
-      {loading ? 'Cargando…' : label}
-    </button>
+      {label}
+    </a>
   );
 }

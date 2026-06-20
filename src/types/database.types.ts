@@ -725,6 +725,7 @@ export type Database = {
       }
       lessons: {
         Row: {
+          block_after_due: boolean
           created_at: string
           description: string | null
           due_days_after_unlock: number | null
@@ -741,6 +742,7 @@ export type Database = {
           video_url: string | null
         }
         Insert: {
+          block_after_due?: boolean
           created_at?: string
           description?: string | null
           due_days_after_unlock?: number | null
@@ -757,6 +759,7 @@ export type Database = {
           video_url?: string | null
         }
         Update: {
+          block_after_due?: boolean
           created_at?: string
           description?: string | null
           due_days_after_unlock?: number | null
@@ -1320,6 +1323,88 @@ export type Database = {
           },
         ]
       }
+      submission_files: {
+        Row: {
+          content_type: string | null
+          created_at: string
+          file_name: string
+          id: string
+          is_additional: boolean
+          is_late: boolean
+          size_bytes: number | null
+          storage_key: string
+          submission_id: string
+        }
+        Insert: {
+          content_type?: string | null
+          created_at?: string
+          file_name: string
+          id?: string
+          is_additional?: boolean
+          is_late?: boolean
+          size_bytes?: number | null
+          storage_key: string
+          submission_id: string
+        }
+        Update: {
+          content_type?: string | null
+          created_at?: string
+          file_name?: string
+          id?: string
+          is_additional?: boolean
+          is_late?: boolean
+          size_bytes?: number | null
+          storage_key?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submission_files_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      submission_review_files: {
+        Row: {
+          content_type: string | null
+          created_at: string
+          file_name: string
+          id: string
+          review_id: string
+          size_bytes: number | null
+          storage_key: string
+        }
+        Insert: {
+          content_type?: string | null
+          created_at?: string
+          file_name: string
+          id?: string
+          review_id: string
+          size_bytes?: number | null
+          storage_key: string
+        }
+        Update: {
+          content_type?: string | null
+          created_at?: string
+          file_name?: string
+          id?: string
+          review_id?: string
+          size_bytes?: number | null
+          storage_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submission_review_files_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "submission_reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       submission_reviews: {
         Row: {
           feedback_text: string | null
@@ -1367,9 +1452,10 @@ export type Database = {
       }
       submissions: {
         Row: {
+          allow_additional: boolean
           approved_at: string | null
           approved_by: string | null
-          file_name: string
+          file_name: string | null
           id: string
           is_late: boolean
           lesson_id: string
@@ -1381,9 +1467,10 @@ export type Database = {
           version: number
         }
         Insert: {
+          allow_additional?: boolean
           approved_at?: string | null
           approved_by?: string | null
-          file_name: string
+          file_name?: string | null
           id?: string
           is_late?: boolean
           lesson_id: string
@@ -1395,9 +1482,10 @@ export type Database = {
           version?: number
         }
         Update: {
+          allow_additional?: boolean
           approved_at?: string | null
           approved_by?: string | null
-          file_name?: string
+          file_name?: string | null
           id?: string
           is_late?: boolean
           lesson_id?: string

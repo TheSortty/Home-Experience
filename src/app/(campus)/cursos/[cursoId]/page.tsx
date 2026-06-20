@@ -98,31 +98,34 @@ export default async function CursoDetallePage({
       })),
   }));
 
-  const modules = allModules.filter((m) => m.module_type !== 'workshop');
+  const modules = allModules.filter((m) => m.module_type === 'module');
   const workshopModules = allModules.filter((m) => m.module_type === 'workshop');
+  const institutionalModules = allModules.filter((m) => m.module_type === 'institutional');
 
-  // Fetch lesson_progress (skip for organizer)
-  const allLessonIds = allModules.flatMap((m) => m.lessons.map((l) => l.id));
+  // Lessons that count toward progress = regular modules + workshops (NOT institutional)
+  const trackableLessonIds = [...modules, ...workshopModules].flatMap((m) => m.lessons.map((l) => l.id));
+  const institutionalLessonIds = institutionalModules.flatMap((m) => m.lessons.map((l) => l.id));
+
+  // Fetch lesson_progress (skip for organizer) — only for trackable lessons.
   const completedSet = new Set<string>();
-
-  if (!isOrganizer && allLessonIds.length > 0) {
+  if (!isOrganizer && trackableLessonIds.length > 0) {
     const { data: progress } = await supabase
       .from('lesson_progress')
       .select('lesson_id')
       .eq('user_id', profile.id)
-      .in('lesson_id', allLessonIds)
+      .in('lesson_id', trackableLessonIds)
       .eq('completed', true);
     (progress || []).forEach((p: any) => completedSet.add(p.lesson_id));
   }
 
-  const totalLessons = allLessonIds.length;
+  const totalLessons = trackableLessonIds.length;
   const completedCount = completedSet.size;
   const progressPercent = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
 
-  // Find the first incomplete lesson for the "Continuar" link (skip for organizer)
+  // First incomplete lesson — only across trackable modules.
   let nextLessonId: string | null = null;
   if (!isOrganizer) {
-    outer: for (const mod of allModules) {
+    outer: for (const mod of [...modules, ...workshopModules]) {
       for (const lesson of mod.lessons) {
         if (!completedSet.has(lesson.id)) {
           nextLessonId = lesson.id;
@@ -131,21 +134,22 @@ export default async function CursoDetallePage({
       }
     }
   }
-  // Organizer: link to first lesson for easy navigation
-  const firstLessonId = allModules[0]?.lessons[0]?.id ?? null;
+  // Organizer: link to first regular/workshop lesson for easy navigation
+  const firstLessonId = modules[0]?.lessons[0]?.id ?? workshopModules[0]?.lessons[0]?.id ?? null;
 
-  // Fetch lesson_resources with creation order to power the "Archivos" tab.
-  const { data: resources } = allLessonIds.length > 0
+  // Fetch lesson_resources from INSTITUTIONAL modules only — these power the
+  // "Archivos institucionales" tab as a stand-alone document repository.
+  const { data: resources } = institutionalLessonIds.length > 0
     ? await supabase
         .from('lesson_resources')
         .select('id, lesson_id, title, file_url, type, created_at')
-        .in('lesson_id', allLessonIds)
+        .in('lesson_id', institutionalLessonIds)
         .order('created_at', { ascending: true })
     : { data: [] };
 
-  // Build lesson → module index map for grouping/context.
+  // Build lesson → module index map for institutional resources only.
   const lessonIndex = new Map<string, { lessonTitle: string; lessonOrder: number; moduleId: string; moduleTitle: string; moduleOrder: number }>();
-  for (const m of allModules) {
+  for (const m of institutionalModules) {
     for (const l of m.lessons) {
       lessonIndex.set(l.id, {
         lessonTitle: l.title,
@@ -294,7 +298,7 @@ export default async function CursoDetallePage({
         </div>
       </div>
 
-      {totalLessons === 0 ? (
+      {totalLessons === 0 && resourcesWithContext.length === 0 ? (
         /* No LMS content yet */
         <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
           <IoDocumentTextOutline size={40} className="mx-auto text-slate-300 mb-3" />

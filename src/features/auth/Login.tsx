@@ -80,7 +80,17 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
       });
       if (error) {
-        setError('Error al enviar el correo de recuperación.');
+        // Surface the real cause so this is diagnosable from the console/network tab.
+        console.error('[resetPasswordForEmail] error:', { status: error.status, code: error.code, message: error.message });
+        const status = error.status;
+        const msg = (error.message || '').toLowerCase();
+        if (status === 429 || msg.includes('rate limit') || msg.includes('rate_limit')) {
+          setError('Demasiados intentos por ahora. Esperá unos minutos y volvé a intentar.');
+        } else if (msg.includes('smtp') || msg.includes('sending') || msg.includes('send email') || msg.includes('error sending')) {
+          setError('No pudimos enviar el correo en este momento. Intentá más tarde o escribinos.');
+        } else {
+          setError('Error al enviar el correo de recuperación.');
+        }
       } else {
         toast.success('Te enviamos un correo con un link. Revisá tu bandeja de entrada (y spam).', { duration: 6000 });
         setIsForgotView(false); // volver al login

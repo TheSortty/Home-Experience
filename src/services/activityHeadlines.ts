@@ -61,6 +61,11 @@ export function composeHeadline(ev: ActivityEventSlim): { title: string; seconda
         title: `${actor} aprobó la entrega`,
         secondary: `${d.lessonTitle ?? 'clase'}${d.submissionVersion ? ` · v${d.submissionVersion}` : ''}${d.courseTitle ? ` · ${d.courseTitle}` : ''}`,
       };
+    case 'admin.submission_deleted':
+      return {
+        title: `${actor} eliminó una entrega`,
+        secondary: `${d.fileCount ? `${d.fileCount} archivo${Number(d.fileCount) !== 1 ? 's' : ''}` : 'entrega'}${d.version ? ` · v${d.version}` : ''}`,
+      };
     default:
       return { title: 'Evento', secondary: null };
   }

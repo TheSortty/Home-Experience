@@ -87,7 +87,7 @@ export default async function ClasePage({
   // Fetch the lesson (include lifecycle columns)
   const { data: lesson } = await supabase
     .from('lessons')
-    .select('id, title, description, video_url, duration_seconds, order_index, module_id, status, unlock_at, unlocked_at, due_days_after_unlock, requires_submission')
+    .select('id, title, description, video_url, duration_seconds, order_index, module_id, status, unlock_at, unlocked_at, due_days_after_unlock, requires_submission, block_after_due')
     .eq('id', claseId)
     .single();
 
@@ -275,6 +275,7 @@ export default async function ClasePage({
     dueDate,
     isOverdue,
     daysRemaining,
+    submissionsClosed: isOverdue && (lesson.block_after_due ?? false),
     thread,
   };
 
