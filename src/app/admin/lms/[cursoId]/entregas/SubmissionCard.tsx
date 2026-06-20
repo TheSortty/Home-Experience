@@ -243,7 +243,7 @@ function InlineReviewForm({
               type="file"
               name="revised_files"
               multiple
-              accept=".pdf,.doc,.docx,.odt,.rtf,.txt,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png"
+              accept=".pdf,.doc,.docx,.odt,.rtf,.txt,.md,.csv,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.tif,.tiff"
               onChange={e => setPickedFiles(Array.from(e.target.files ?? []))}
               className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 file:cursor-pointer"
             />

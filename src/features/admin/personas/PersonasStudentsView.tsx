@@ -36,8 +36,11 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
-  // Assign program modal state
-  const [studentToAssign, setStudentToAssign] = useState<PersonaStudent | null>(null);
+  // Assign program modal state (1 o varios alumnos)
+  const [studentsToAssign, setStudentsToAssign] = useState<PersonaStudent[] | null>(null);
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Invite modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -207,7 +210,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
         setSelectedStudent(null);
         setIsConfirmDeleteOpen(false);
         setIsInviteModalOpen(false);
-        setStudentToAssign(null);
+        setStudentsToAssign(null);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -298,6 +301,44 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
     }
   };
 
+  // ─── Bulk selection + unlink ───────────────────────────────────────────────
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // Desvincular (eliminar la inscripción) un programa de un alumno.
+  const handleUnlink = async (student: PersonaStudent, program: ProgramChipData) => {
+    const label = program.courseTitle || program.cycleName;
+    if (!window.confirm(`¿Desvincular "${label}" de ${student.name}? Pierde el acceso a ese programa. No se puede deshacer.`)) return;
+    try {
+      setIsSubmitting(true);
+      await restDelete('enrollments', { id: `eq.${program.enrollmentId}` });
+      // No existe RPC de decremento → ajustamos el contador a mano (solo CRESER).
+      if (program.category === 'creser' && program.cycleId) {
+        try {
+          const { data } = await restSelect<any>('cycles', {
+            columns: 'enrolled_count',
+            filters: { id: `eq.${program.cycleId}` },
+          });
+          const cur = data?.[0]?.enrolled_count ?? 0;
+          await restUpdate('cycles', { enrolled_count: Math.max(0, cur - 1) }, { id: `eq.${program.cycleId}` });
+        } catch { /* contador best-effort */ }
+      }
+      toast.success(`"${label}" desvinculado de ${student.name}`);
+      fetchData(true);
+    } catch (err: any) {
+      toast.error('Error al desvincular: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // ─── Filtering ───────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
@@ -328,6 +369,19 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
       return true;
     });
   }, [students, scope, statusFilter, searchTerm]);
+
+  // ─── Selection derived ─────────────────────────────────────────────────────
+
+  const selectedStudents = students.filter(s => selectedIds.has(s.id));
+  const allFilteredSelected = filtered.length > 0 && filtered.every(s => selectedIds.has(s.id));
+  const toggleAll = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (filtered.every(s => next.has(s.id))) filtered.forEach(s => next.delete(s.id));
+      else filtered.forEach(s => next.add(s.id));
+      return next;
+    });
+  };
 
   // ─── Render helpers ──────────────────────────────────────────────────────
 
@@ -392,6 +446,29 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
           </div>
         </div>
 
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center justify-between gap-3 px-4 md:px-6 py-2.5 bg-violet-50 border-b border-violet-100 animate-fade-in-up">
+            <span className="text-xs font-bold text-violet-700">
+              {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { if (selectedStudents.length) setStudentsToAssign(selectedStudents); }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-wider bg-violet-600 text-white hover:bg-violet-700 transition-colors shadow-sm"
+              >
+                + Asignar programa
+              </button>
+              <button
+                onClick={clearSelection}
+                className="px-3 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                Limpiar
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="flex-1 overflow-auto">
           {isLoading && students.length === 0 ? (
@@ -404,16 +481,24 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
               students={filtered}
               onSelect={(s) => setSelectedStudent(studentForModal(s))}
               onInvite={openInvite}
-              onAssign={(s) => setStudentToAssign(s)}
+              onAssign={(s) => setStudentsToAssign([s])}
+              onUnlink={handleUnlink}
               initials={initials}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              onToggleAll={toggleAll}
+              allSelected={allFilteredSelected}
             />
           ) : (
             <GridView
               students={filtered}
               onSelect={(s) => setSelectedStudent(studentForModal(s))}
               onInvite={openInvite}
-              onAssign={(s) => setStudentToAssign(s)}
+              onAssign={(s) => setStudentsToAssign([s])}
+              onUnlink={handleUnlink}
               initials={initials}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
             />
           )}
         </div>
@@ -433,12 +518,12 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
         />
       )}
 
-      {/* Assign program modal */}
-      {studentToAssign && (
+      {/* Assign program modal (single o bulk) */}
+      {studentsToAssign && (
         <AssignProgramModal
-          student={studentToAssign}
-          onClose={() => setStudentToAssign(null)}
-          onAssigned={() => { fetchData(true); setStudentToAssign(null); }}
+          students={studentsToAssign}
+          onClose={() => setStudentsToAssign(null)}
+          onAssigned={() => { fetchData(true); setStudentsToAssign(null); clearSelection(); }}
         />
       )}
 
@@ -510,13 +595,19 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
 // ─── Sub-views ────────────────────────────────────────────────────────────────
 
 function TableView({
-  students, onSelect, onInvite, onAssign, initials,
+  students, onSelect, onInvite, onAssign, onUnlink, initials,
+  selectedIds, onToggleSelect, onToggleAll, allSelected,
 }: {
   students: PersonaStudent[];
   onSelect: (s: PersonaStudent) => void;
   onInvite: (s: PersonaStudent) => void;
   onAssign: (s: PersonaStudent) => void;
+  onUnlink: (s: PersonaStudent, p: ProgramChipData) => void;
   initials: (s: PersonaStudent) => string;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onToggleAll: () => void;
+  allSelected: boolean;
 }) {
   if (students.length === 0) {
     return (
@@ -527,6 +618,15 @@ function TableView({
     <table className="formal-table min-w-[800px]">
       <thead>
         <tr>
+          <th className="w-8 text-center">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={onToggleAll}
+              className="w-3.5 h-3.5 accent-violet-600 cursor-pointer"
+              title="Seleccionar todos"
+            />
+          </th>
           <th>Alumno</th>
           <th>Programas</th>
           <th className="text-center">Campus</th>
@@ -539,12 +639,21 @@ function TableView({
         {students.map((s) => {
           const latest = s.programHistory?.[0];
           const hasConflict = s.programs.some(p => p.status === 'CONFLICT');
+          const isSel = selectedIds.has(s.id);
           return (
             <tr
               key={s.id}
-              className={`hover:bg-slate-50 transition-colors cursor-pointer ${hasConflict ? 'bg-rose-50/40' : ''}`}
+              className={`hover:bg-slate-50 transition-colors cursor-pointer ${isSel ? 'bg-violet-50/60' : hasConflict ? 'bg-rose-50/40' : ''}`}
               onClick={() => onSelect(s)}
             >
+              <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={isSel}
+                  onChange={() => onToggleSelect(s.id)}
+                  className="w-3.5 h-3.5 accent-violet-600 cursor-pointer"
+                />
+              </td>
               <td>
                 <div className="flex items-center gap-3">
                   {s.avatarUrl ? (
@@ -572,8 +681,10 @@ function TableView({
                 </div>
               </td>
               <td>
-                <div className="flex flex-wrap gap-1.5 max-w-[320px]">
-                  {s.programs.length === 0 ? <NoProgramChip /> : s.programs.map((p) => <ProgramChip key={p.enrollmentId} program={p} />)}
+                <div className="flex flex-wrap gap-1.5 max-w-[320px]" onClick={(e) => e.stopPropagation()}>
+                  {s.programs.length === 0 ? <NoProgramChip /> : s.programs.map((p) => (
+                    <ProgramChip key={p.enrollmentId} program={p} onRemove={() => onUnlink(s, p)} />
+                  ))}
                 </div>
               </td>
               <td className="text-center">
@@ -616,13 +727,17 @@ function TableView({
 }
 
 function GridView({
-  students, onSelect, onInvite, onAssign, initials,
+  students, onSelect, onInvite, onAssign, onUnlink, initials,
+  selectedIds, onToggleSelect,
 }: {
   students: PersonaStudent[];
   onSelect: (s: PersonaStudent) => void;
   onInvite: (s: PersonaStudent) => void;
   onAssign: (s: PersonaStudent) => void;
+  onUnlink: (s: PersonaStudent, p: ProgramChipData) => void;
   initials: (s: PersonaStudent) => string;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
 }) {
   if (students.length === 0) {
     return (
@@ -634,13 +749,22 @@ function GridView({
       {students.map(s => {
         const latest = s.programHistory?.[0];
         const hasConflict = s.programs.some(p => p.status === 'CONFLICT');
+        const isSel = selectedIds.has(s.id);
         return (
-          <button
+          <div
             key={s.id}
             onClick={() => onSelect(s)}
-            className={`text-left bg-white rounded-2xl border ${hasConflict ? 'border-rose-200' : 'border-slate-200'} hover:border-[#00A9CE]/40 hover:shadow-md transition-all p-4 flex flex-col gap-3`}
+            className={`relative cursor-pointer text-left bg-white rounded-2xl border ${isSel ? 'border-violet-300 ring-1 ring-violet-200' : hasConflict ? 'border-rose-200' : 'border-slate-200'} hover:border-[#00A9CE]/40 hover:shadow-md transition-all p-4 flex flex-col gap-3`}
           >
-            <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={isSel}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => onToggleSelect(s.id)}
+              className="absolute top-3 right-3 w-3.5 h-3.5 accent-violet-600 cursor-pointer"
+              title="Seleccionar"
+            />
+            <div className="flex items-start gap-3 pr-5">
               {s.avatarUrl ? (
                 <img src={s.avatarUrl} alt={s.name} className="w-12 h-12 rounded-xl object-cover shrink-0" />
               ) : (
@@ -654,8 +778,10 @@ function GridView({
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-1.5">
-              {s.programs.length === 0 ? <NoProgramChip /> : s.programs.slice(0, 4).map(p => <ProgramChip key={p.enrollmentId} program={p} />)}
+            <div className="flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
+              {s.programs.length === 0 ? <NoProgramChip /> : s.programs.slice(0, 4).map(p => (
+                <ProgramChip key={p.enrollmentId} program={p} onRemove={() => onUnlink(s, p)} />
+              ))}
               {s.programs.length > 4 && (
                 <span className="text-[10px] font-bold text-slate-400 uppercase">+{s.programs.length - 4}</span>
               )}
@@ -683,7 +809,7 @@ function GridView({
                 + Programa
               </span>
             </div>
-          </button>
+          </div>
         );
       })}
     </div>

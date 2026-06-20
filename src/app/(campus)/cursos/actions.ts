@@ -462,23 +462,32 @@ export async function addSubmissionFiles(formData: FormData) {
       await putEntregaObject(key, await file.arrayBuffer(), file.type);
       uploadedKeys.push(key);
 
-      const { error: fileErr } = await supabase
+      const baseRow = {
+        submission_id: latestSub.id,
+        storage_key: key,
+        file_name: file.name,
+        content_type: file.type || null,
+        size_bytes: file.size,
+      };
+      let { error: fileErr } = await supabase
         .from('submission_files')
-        .insert({
-          submission_id: latestSub.id,
-          storage_key: key,
-          file_name: file.name,
-          content_type: file.type || null,
-          size_bytes: file.size,
-          is_additional: true,
-          is_late: isLate,
-        });
+        .insert({ ...baseRow, is_additional: true, is_late: isLate });
+
+      // If the new columns aren't recognised yet (stale PostgREST schema cache /
+      // migration not fully applied), save the file anyway so the upload never
+      // hard-fails — the "adicional" badge just won't show until the cache
+      // catches up.
+      if (fileErr && /is_additional|is_late|schema cache|column|PGRST204/i.test(fileErr.message)) {
+        console.warn('[entregas] additional flags not in cache, inserting without them:', fileErr.message);
+        ({ error: fileErr } = await supabase.from('submission_files').insert(baseRow));
+      }
       if (fileErr) throw new Error(fileErr.message);
     }
   } catch (err) {
     await deleteEntregaObjects(uploadedKeys);
     console.error('[entregas] additional upload failed:', err);
-    return { error: 'No se pudieron subir los adicionales. Probá de nuevo en unos segundos.' };
+    const detail = err instanceof Error ? err.message : 'error desconocido';
+    return { error: `No se pudieron subir los adicionales: ${detail}` };
   }
 
   // One round per "habilitación": consume the gate so the coach re-enables for

@@ -6,6 +6,8 @@ import { categorizeCycle, cycleTypeLabel, type ProgramChipData } from './types';
 interface Props {
   program: ProgramChipData;
   size?: 'sm' | 'md';
+  /** When provided, shows a small × to unlink (desvincular) the program. */
+  onRemove?: () => void;
 }
 
 const STATUS_DOT: Record<ProgramChipData['status'], string> = {
@@ -19,7 +21,7 @@ const CATEGORY_STYLES: Record<'creser' | 'campus', { bg: string; text: string; b
   campus: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
 };
 
-export default function ProgramChip({ program, size = 'sm' }: Props) {
+export default function ProgramChip({ program, size = 'sm', onRemove }: Props) {
   const category = categorizeCycle(program.cycleType);
   const styles = CATEGORY_STYLES[category];
   const dot = STATUS_DOT[program.status];
@@ -40,6 +42,19 @@ export default function ProgramChip({ program, size = 'sm' }: Props) {
           <span className="opacity-70 font-medium normal-case tracking-normal"> · {subLabel}</span>
         )}
       </span>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          className="ml-0.5 -mr-0.5 flex items-center justify-center w-3.5 h-3.5 rounded-full hover:bg-rose-500 hover:text-white text-current opacity-60 hover:opacity-100 transition-colors"
+          title="Desvincular programa"
+          aria-label="Desvincular programa"
+        >
+          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      )}
     </span>
   );
 }

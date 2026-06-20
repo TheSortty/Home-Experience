@@ -40,14 +40,17 @@ type ProgramTab = 'creser' | 'campus';
 type PaymentStatus = 'pending' | 'paid';
 
 interface Props {
-  student: PersonaStudent;
+  /** One or more students. With more than one, the modal enrols all of them. */
+  students: PersonaStudent[];
   onClose: () => void;
   onAssigned: () => void;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function AssignProgramModal({ student, onClose, onAssigned }: Props) {
+export default function AssignProgramModal({ students, onClose, onAssigned }: Props) {
+  const isBulk = students.length > 1;
+  const single = students[0];
   const [tab, setTab] = useState<ProgramTab>('creser');
   const [cycles, setCycles] = useState<AvailableCycle[]>([]);
   const [courses, setCourses] = useState<AvailableCourse[]>([]);
@@ -57,14 +60,15 @@ export default function AssignProgramModal({ student, onClose, onAssigned }: Pro
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('pending');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Dedup sets — by cycle (CRESER) and by course (Campus LMS)
+  // Dedup sets — by cycle (CRESER) and by course (Campus LMS). Only used to
+  // disable options in single-student mode; in bulk we skip per-student on submit.
   const enrolledCycleIds = useMemo(
-    () => new Set(student.programs.map(p => p.cycleId).filter(Boolean) as string[]),
-    [student.programs],
+    () => isBulk ? new Set<string>() : new Set(single.programs.map(p => p.cycleId).filter(Boolean) as string[]),
+    [single.programs, isBulk],
   );
   const enrolledCourseIds = useMemo(
-    () => new Set(student.programs.map(p => p.courseId).filter(Boolean) as string[]),
-    [student.programs],
+    () => isBulk ? new Set<string>() : new Set(single.programs.map(p => p.courseId).filter(Boolean) as string[]),
+    [single.programs, isBulk],
   );
 
   useEffect(() => {
@@ -133,9 +137,9 @@ export default function AssignProgramModal({ student, onClose, onAssigned }: Pro
   const selectedCourse = courses.find(c => c.id === selectedCourseId) ?? null;
 
   const hasSelection = tab === 'creser' ? !!selectedCycleId : !!selectedCourseId;
-  const alreadyEnrolled = tab === 'creser'
+  const alreadyEnrolled = isBulk ? false : (tab === 'creser'
     ? (selectedCycleId ? enrolledCycleIds.has(selectedCycleId) : false)
-    : (selectedCourseId ? enrolledCourseIds.has(selectedCourseId) : false);
+    : (selectedCourseId ? enrolledCourseIds.has(selectedCourseId) : false));
   const isFull = selectedCycle
     ? (selectedCycle.capacity != null && selectedCycle.enrolled_count != null && selectedCycle.enrolled_count >= selectedCycle.capacity)
     : false;
@@ -145,15 +149,18 @@ export default function AssignProgramModal({ student, onClose, onAssigned }: Pro
     setIsSubmitting(true);
     try {
       let cycleIdToEnroll: string | null = null;
+      let targetCourseId: string | null = null;
       let label: string = '';
       let isCreser = false;
 
       if (tab === 'creser' && selectedCycle) {
         cycleIdToEnroll = selectedCycle.id;
+        targetCourseId = selectedCycle.course_id;
         label = selectedCycle.course_title || selectedCycle.name;
         isCreser = true;
       } else if (tab === 'campus' && selectedCourse) {
         label = selectedCourse.title;
+        targetCourseId = selectedCourse.id;
         if (selectedCourse.cycleId) {
           cycleIdToEnroll = selectedCourse.cycleId;
         } else {
@@ -179,19 +186,43 @@ export default function AssignProgramModal({ student, onClose, onAssigned }: Pro
         return;
       }
 
-      await restInsert('enrollments', {
-        user_id: student.id,
-        cycle_id: cycleIdToEnroll,
-        status: 'active',
-        payment_status: paymentStatus,
-        enrolled_at: new Date().toISOString(),
-      }, { returning: 'minimal' });
-
-      if (isCreser) {
-        await restRpc('increment_enrolled_count', { p_cycle_id: cycleIdToEnroll });
+      // Enrol every selected student, skipping those already in this program.
+      let enrolled = 0, skipped = 0, errors = 0;
+      for (const st of students) {
+        const already = isCreser
+          ? st.programs.some(p => p.cycleId === cycleIdToEnroll)
+          : st.programs.some(p => p.courseId === targetCourseId);
+        if (already) { skipped++; continue; }
+        try {
+          await restInsert('enrollments', {
+            user_id: st.id,
+            cycle_id: cycleIdToEnroll,
+            status: 'active',
+            payment_status: paymentStatus,
+            enrolled_at: new Date().toISOString(),
+          }, { returning: 'minimal' });
+          if (isCreser) await restRpc('increment_enrolled_count', { p_cycle_id: cycleIdToEnroll });
+          enrolled++;
+        } catch (e) {
+          console.error('enroll error for', st.id, e);
+          errors++;
+        }
       }
 
-      toast.success(`${student.name} inscripto en ${label}`);
+      if (isBulk) {
+        if (enrolled > 0) {
+          toast.success(`${enrolled} inscripto${enrolled !== 1 ? 's' : ''} en ${label}${skipped ? ` · ${skipped} ya estaban` : ''}${errors ? ` · ${errors} con error` : ''}`);
+        } else if (skipped > 0) {
+          toast(`Todos ya estaban en ${label}.`);
+        } else {
+          toast.error('No se pudo inscribir a nadie.');
+        }
+      } else {
+        if (enrolled > 0) toast.success(`${single.name} inscripto en ${label}`);
+        else if (skipped > 0) toast(`${single.name} ya estaba en ${label}.`);
+        else throw new Error('No se pudo inscribir.');
+      }
+
       onAssigned();
       onClose();
     } catch (err: any) {
@@ -226,7 +257,11 @@ export default function AssignProgramModal({ student, onClose, onAssigned }: Pro
           <div>
             <h2 className="text-lg font-bold text-slate-900">Asignar programa</h2>
             <p className="text-sm text-slate-500 mt-0.5">
-              Inscribiendo a <span className="font-semibold text-slate-700">{student.name}</span>
+              {isBulk ? (
+                <>Inscribiendo a <span className="font-semibold text-slate-700">{students.length} personas</span></>
+              ) : (
+                <>Inscribiendo a <span className="font-semibold text-slate-700">{single.name}</span></>
+              )}
             </p>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-all">
@@ -234,12 +269,31 @@ export default function AssignProgramModal({ student, onClose, onAssigned }: Pro
           </button>
         </div>
 
-        {/* ── Current programs (compact) ── */}
-        {student.programs.length > 0 && (
+        {/* ── Bulk recipients summary ── */}
+        {isBulk && (
+          <div className="mx-6 mb-3 px-3 py-2.5 bg-violet-50 rounded-lg border border-violet-100 shrink-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-violet-500 mb-1.5">
+              {students.length} seleccionados — se omiten los que ya estén en el programa
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {students.slice(0, 12).map(s => (
+                <span key={s.id} className="inline-flex items-center px-2 py-0.5 rounded-sm border border-violet-200 bg-white text-[10px] font-bold text-violet-600">
+                  {s.name}
+                </span>
+              ))}
+              {students.length > 12 && (
+                <span className="text-[10px] font-bold text-violet-400 self-center">+{students.length - 12}</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Current programs (compact, single only) ── */}
+        {!isBulk && single.programs.length > 0 && (
           <div className="mx-6 mb-3 px-3 py-2.5 bg-slate-50 rounded-lg border border-slate-100 shrink-0">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Programas actuales</p>
             <div className="flex flex-wrap gap-1.5">
-              {student.programs.map(p => (
+              {single.programs.map(p => (
                 <span
                   key={p.enrollmentId}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm border border-slate-200 bg-white text-[10px] font-bold text-slate-500 uppercase tracking-wider"
@@ -471,7 +525,7 @@ export default function AssignProgramModal({ student, onClose, onAssigned }: Pro
               disabled={!canSubmit}
               className="flex-1 py-3 bg-[#00A9CE] text-white font-bold text-[10px] uppercase tracking-widest rounded-sm hover:bg-[#0097bb] disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-[#00A9CE]/20"
             >
-              {isSubmitting ? 'Inscribiendo...' : 'Confirmar inscripción'}
+              {isSubmitting ? 'Inscribiendo...' : isBulk ? `Inscribir ${students.length} personas` : 'Confirmar inscripción'}
             </button>
           </div>
         </div>

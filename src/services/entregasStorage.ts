@@ -16,10 +16,13 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 export const MAX_FILE_BYTES = 3 * 1024 * 1024;        // 3 MB per file
 export const MAX_FILES_PER_SUBMISSION = 8;
 
-/** Accepted document types for deliveries (PDF / Word + common doc formats). */
+/** Accepted document types for deliveries (PDF / Word + common doc + image formats). */
 export const ALLOWED_EXTENSIONS = [
-  'pdf', 'doc', 'docx', 'odt', 'rtf', 'txt',
-  'ppt', 'pptx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png',
+  // Documentos
+  'pdf', 'doc', 'docx', 'odt', 'rtf', 'txt', 'md', 'csv',
+  'ppt', 'pptx', 'xls', 'xlsx',
+  // Imágenes (incluye formatos de celular/web que antes se rechazaban)
+  'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'bmp', 'tif', 'tiff',
 ] as const;
 
 export function isAllowedFile(fileName: string): boolean {
