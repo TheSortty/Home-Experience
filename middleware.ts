@@ -93,8 +93,11 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   // Step 3: Role-based Redirection Logic
   const role = user ? await resolveRole(supabase, user.id) : null
   const isAdmin = role === 'admin' || role === 'sysadmin'
+  const isCoach = role === 'coach'
+  // Coaches can access /admin/lms (entregas + course overview) but nothing else in /admin.
+  const isCoachLmsRoute = matchesPrefix('/admin/lms')
 
-  // Guard /admin routes — only admins allowed
+  // Guard /admin routes — only admins (and coaches on /admin/lms) allowed
   if (isAdminRoute) {
     if (!user) {
       const redirectUrl = request.nextUrl.clone()
@@ -106,8 +109,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
       })
       return redirectResponse
     }
-    
-    if (!isAdmin) {
+
+    if (!isAdmin && !(isCoach && isCoachLmsRoute)) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard'
       const redirectResponse = NextResponse.redirect(redirectUrl)
