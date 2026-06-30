@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { IoMenuOutline, IoCloseOutline, IoChevronDownOutline, IoNotificationsOutline } from 'react-icons/io5';
+import { IoMenuOutline, IoCloseOutline, IoChevronDownOutline, IoNotificationsOutline, IoSparklesOutline } from 'react-icons/io5';
 import LogoutIcon from '../../../ui/icons/LogoutIcon';
 import UsersIcon from '../../../ui/icons/UsersIcon';
 import CalendarIcon from '../../../ui/icons/CalendarIcon';
@@ -14,6 +14,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restRpc } from '../../../services/supabaseRest';
 
+import { CHANGELOG } from '@/src/data/changelog';
 import '../../dashboard/admin/admin-reboot.css';
 
 interface NavItem {
@@ -284,6 +285,25 @@ export default function AdminShell({ children }: AdminShellProps) {
               })}
             </>
           )}
+
+          {/* Changelog link */}
+          <div className="px-6 pt-6 mt-auto mb-2">
+            <div className="h-px w-full bg-white/5 mb-4" />
+            <Link
+              href="/admin/novedades"
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-sm text-sm font-medium transition-all group ${
+                isActive('/admin/novedades')
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <IoSparklesOutline className={`w-4 h-4 flex-shrink-0 ${isActive('/admin/novedades') ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
+              <span className="truncate">Novedades</span>
+              <span className="ml-auto text-[9px] font-black text-slate-500 group-hover:text-slate-300">
+                v{CHANGELOG[0].version}
+              </span>
+            </Link>
+          </div>
         </nav>
       </aside>
 
@@ -385,6 +405,15 @@ export default function AdminShell({ children }: AdminShellProps) {
                     </svg>
                     Editar perfil
                   </a>
+                  <Link
+                    href="/admin/novedades"
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    onClick={() => setProfileMenuOpen(false)}
+                  >
+                    <IoSparklesOutline className="w-4 h-4 text-slate-400" />
+                    <span className="flex-1">Novedades</span>
+                    <span className="text-[10px] font-black text-slate-400">v{CHANGELOG[0].version}</span>
+                  </Link>
                   <div className="border-t border-slate-100">
                     <button
                       onClick={() => { setProfileMenuOpen(false); handleLogout(); }}
