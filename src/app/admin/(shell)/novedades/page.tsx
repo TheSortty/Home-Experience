@@ -94,7 +94,7 @@ export default function NovedadesPage() {
 
       {/* Footer */}
       <p className="text-xs text-slate-400 text-center pb-4">
-        Los cambios reflejan el historial de desarrollo de siendohome.com desde abril 2026.
+        Historial de desarrollo de siendohome.com desde diciembre 2025 · {CHANGELOG.length} versiones
       </p>
     </div>
   );

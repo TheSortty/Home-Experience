@@ -54,6 +54,7 @@ const SECTION_TITLES: Record<string, string> = {
   '/admin/formularios': 'Formulario y Encuestas',
   '/admin/configuracion': 'Configuración Web',
   '/admin/auditoria': 'Auditoría',
+  '/admin/novedades': 'Novedades del sistema',
 };
 
 interface AdminShellProps {
