@@ -38,6 +38,18 @@ async function assertReviewer() {
   return { supabase, profile: profile! };
 }
 
+export async function toggleLessonSubmission(lessonId: string, courseId: string, enabled: boolean) {
+  const { supabase } = await assertStaff();
+  const { error } = await supabase
+    .from('lessons')
+    .update({ requires_submission: enabled })
+    .eq('id', lessonId);
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/lms/${courseId}`);
+  revalidatePath(`/admin/lms/${courseId}/entregas`);
+  return { success: true };
+}
+
 export async function updateLessonLifecycle(formData: FormData) {
   const { supabase } = await assertStaff();
 
