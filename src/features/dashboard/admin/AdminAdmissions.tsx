@@ -6,7 +6,6 @@ import { restSelect, restInsert, restUpdate, restDelete, restRpc, getCurrentUser
 import ArrowRightIcon from '../../../ui/icons/ArrowRightIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 import DocumentIcon from '../../../ui/icons/DocumentIcon';
-import ChartIcon from '../../../ui/icons/ChartIcon';
 
 // Types (simplified for this file)
 interface Registration {
@@ -415,8 +414,10 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
         (r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term))
     );
 
-    const pendingReview = activeMatched.filter(r => r.status === 'PENDING_REVIEW');
-    const pendingPayment = activeMatched.filter(r => r.status === 'PENDING_PAYMENT');
+    // Lista unificada: solicitudes nuevas + las que estaban esperando pago se
+    // gestionan en un solo flujo (revisar respuestas -> confirmar inscripción).
+    const activePending = activeMatched;
+    const newCount = activePending.filter(r => r.status === 'PENDING_REVIEW').length;
 
     const historyMatched = registrations.filter(r => 
         !r.is_deleted && 
@@ -431,22 +432,22 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
 
     return (
         <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in-up h-full">
-                {/* Tabbed Column */}
+            <div className="max-w-3xl mx-auto w-full animate-fade-in-up h-full">
+                {/* Unified Submissions Card */}
                 <div className="formal-card p-8 flex flex-col h-full bg-white">
-                    <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center gap-4">
+                    <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
+                        <div className="flex items-center gap-4 flex-wrap">
                             <h3 className="text-lg font-bold text-slate-800">
-                                {viewMode === 'active' && 'Solicitudes Nuevas'}
+                                {viewMode === 'active' && 'Solicitudes'}
                                 {viewMode === 'history' && 'Historial Aprobados'}
                                 {viewMode === 'trash' && 'Papelera & Rechazadas'}
                             </h3>
                             <div className="flex bg-slate-100 p-1 rounded-sm gap-1">
                                 <button
                                     onClick={() => setViewMode('active')}
-                                    className={`px-3 py-1 text-[10px] font-bold rounded-sm uppercase tracking-wider transition-colors ${viewMode === 'active' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                    className={`px-3 py-1 text-[10px] font-bold rounded-sm uppercase tracking-wider transition-colors relative ${viewMode === 'active' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                                 >
-                                    Activas
+                                    <span className="flex items-center gap-1">Activas {activePending.length > 0 && <span className="bg-blue-100 text-blue-700 text-[8px] px-1.5 py-0.5 rounded-full">{activePending.length}</span>}</span>
                                 </button>
                                 <button
                                     onClick={() => setViewMode('history')}
@@ -462,11 +463,16 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                 </button>
                             </div>
                         </div>
+                        {viewMode === 'active' && newCount > 0 && (
+                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                                {newCount} {newCount === 1 ? 'nueva sin revisar' : 'nuevas sin revisar'}
+                            </span>
+                        )}
                     </div>
 
                     <div className="space-y-3 flex-1 overflow-y-auto pr-2">
                         {(() => {
-                            const listToRender = viewMode === 'active' ? pendingReview : (viewMode === 'history' ? historyMatched : trashMatched);
+                            const listToRender = viewMode === 'active' ? activePending : (viewMode === 'history' ? historyMatched : trashMatched);
                             if (listToRender.length === 0) {
                                 return (
                                     <div className="flex flex-col items-center justify-center py-20 text-slate-300">
@@ -480,17 +486,24 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                 );
                             }
 
-                            return listToRender.map(reg => (
+                            return listToRender.map(reg => {
+                                const isNew = reg.status === 'PENDING_REVIEW';
+                                return (
                                 <div
                                     key={reg.id}
-                                    className={`group p-4 bg-white border ${viewMode === 'active' ? 'border-amber-100/50 hover:border-amber-200' : (viewMode === 'history' ? 'border-slate-100 hover:border-blue-200' : 'border-red-50 bg-red-50/20 hover:border-red-200')} rounded-sm cursor-pointer transition-all flex flex-col`}
+                                    className={`group p-4 bg-white border ${viewMode === 'active' ? (isNew ? 'border-amber-100/50 hover:border-amber-200' : 'border-emerald-100/50 hover:border-emerald-200') : (viewMode === 'history' ? 'border-slate-100 hover:border-blue-200' : 'border-red-50 bg-red-50/20 hover:border-red-200')} rounded-sm cursor-pointer transition-all flex flex-col`}
                                     onClick={() => setSelectedRegistration(reg)}
                                 >
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <h4 className="font-bold text-slate-800 text-sm">{reg.name}</h4>
-                                            <div className="flex items-center gap-2 mt-1">
+                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                 <span className="text-[10px] font-bold text-slate-400 border border-slate-100 px-1.5 py-0.5 uppercase">{reg.selectedPackage}</span>
+                                                {viewMode === 'active' && (
+                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 uppercase rounded-sm ${isNew ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                        {isNew ? 'Nueva' : 'Esperando pago'}
+                                                    </span>
+                                                )}
                                                 {viewMode === 'trash' && (
                                                     <span className={`text-[9px] font-bold px-1.5 py-0.5 uppercase rounded-sm ${reg.is_deleted ? 'bg-slate-100 text-slate-500' : 'bg-red-50 text-red-500'}`}>
                                                         {reg.is_deleted ? 'Eliminada' : 'Rechazada'}
@@ -501,49 +514,14 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                         <div className="flex flex-col items-end gap-1">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{reg.date}</p>
                                             <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                                {reg.status === 'PENDING_REVIEW' ? 'Auditar Respuesta' : 'Ver detalle'} &rarr;
+                                                {viewMode === 'active' ? 'Revisar y confirmar' : 'Ver detalle'} &rarr;
                                             </p>
                                         </div>
                                     </div>
                                 </div>
-                            ));
+                                );
+                            });
                         })()}
-                    </div>
-                </div>
-
-                {/* Pending Payment / Assignment Column */}
-                <div className="formal-card p-8 flex flex-col h-full bg-white">
-                    <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-lg font-bold text-slate-800">Pagos y Asignación</h3>
-                        <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider">{pendingPayment.length}</span>
-                    </div>
-
-                    <div className="space-y-3 flex-1 overflow-y-auto pr-2">
-                        {pendingPayment.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-slate-300">
-                                <ChartIcon className="w-12 h-12 mb-4 opacity-20" />
-                                <p className="text-sm font-medium">No hay pagos pendientes por procesar.</p>
-                            </div>
-                        ) : (
-                            pendingPayment.map(reg => (
-                                <div key={reg.id} className="p-4 bg-slate-50 border border-slate-100 rounded-sm flex flex-col sm:flex-row justify-between items-center gap-4 hover:border-emerald-200 transition-all">
-                                    <div>
-                                        <h4 className="font-bold text-slate-800 text-sm">{reg.name}</h4>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Esperando Pago</span>
-                                            <span className="text-slate-300 text-xs">|</span>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase">{reg.selectedPackage}</p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => { setSelectedRegistration(reg); setIsAssignModalOpen(true); }}
-                                        className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-[10px] font-bold uppercase tracking-widest rounded-sm transition-all shadow-sm"
-                                    >
-                                        Confirmar Alumno
-                                    </button>
-                                </div>
-                            ))
-                        )}
                     </div>
                 </div>
             </div>
@@ -804,7 +782,7 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                     </div>
                                 ) : (
                                     <>
-                                        {selectedRegistration.status === 'PENDING_REVIEW' && (
+                                        {(selectedRegistration.status === 'PENDING_REVIEW' || selectedRegistration.status === 'PENDING_PAYMENT') && (
                                             <>
                                                 <button
                                                     onClick={() => handleSoftDelete(selectedRegistration)}
@@ -821,15 +799,15 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                                     Rechazar
                                                 </button>
                                                 <button
-                                                    onClick={() => handleStatusUpdate(selectedRegistration, 'PENDING_PAYMENT')}
+                                                    onClick={() => setIsAssignModalOpen(true)}
                                                     disabled={isSubmitting}
                                                     className="px-10 py-3 bg-slate-900 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-2xl shadow-slate-900/10 hover:bg-black transition-all disabled:opacity-50 flex items-center gap-2"
                                                 >
-                                                    {isSubmitting ? 'Procesando...' : 'Aprobar Solicitud'}
+                                                    {isSubmitting ? 'Procesando...' : 'Confirmar Inscripción'}
                                                 </button>
                                             </>
                                         )}
-                                        {selectedRegistration.status !== 'PENDING_REVIEW' && (
+                                        {selectedRegistration.status !== 'PENDING_REVIEW' && selectedRegistration.status !== 'PENDING_PAYMENT' && (
                                             <button
                                                 onClick={() => setSelectedRegistration(null)}
                                                 className="px-8 py-3 bg-slate-100 text-slate-600 font-bold text-xs uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all"
@@ -849,13 +827,13 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
             {/* Assignment Portal ("The Brain") */}
             {isAssignModalOpen && selectedRegistration && createPortal(
                 <div className="full-screen-modal-overlay" onClick={() => setIsAssignModalOpen(false)}>
-                    <div className="formal-modal max-w-xl w-full p-0 flex flex-col animate-scale-in" onClick={e => e.stopPropagation()}>
-                        <div className="p-10 border-b border-slate-100 bg-slate-50">
+                    <div className="formal-modal max-w-xl w-full p-0 flex flex-col animate-scale-in max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                        <div className="p-10 border-b border-slate-100 bg-slate-50 shrink-0">
                             <h3 className="text-2xl font-bold text-slate-900 mb-2 leading-none">Confirmar ingreso</h3>
                             <p className="text-sm text-slate-500">Asignación de cupo y verificación final para <strong>{selectedRegistration.name}</strong>.</p>
                         </div>
 
-                        <div className="p-10 space-y-10 bg-white">
+                        <div className="p-10 space-y-10 bg-white flex-1 overflow-y-auto min-h-0">
                             {/* 1. Payment Verification */}
                             <div>
                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">1. Verificación de Cobro</h4>
@@ -968,7 +946,7 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                             </div>
                         </div>
 
-                        <div className="p-8 bg-slate-50 flex gap-4 border-t border-slate-100">
+                        <div className="p-8 bg-slate-50 flex gap-4 border-t border-slate-100 shrink-0">
                             <button
                                 onClick={() => setIsAssignModalOpen(false)}
                                 className="flex-1 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"

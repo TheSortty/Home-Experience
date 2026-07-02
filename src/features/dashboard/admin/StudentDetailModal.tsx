@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
-import { restSelect, restInsert, restUpsert, restRpc } from '../../../services/supabaseRest';
+import { restSelect, restInsert, restUpsert, restUpdate, restRpc } from '../../../services/supabaseRest';
 import { StudentProgramProgress } from '../../../services/progressService';
 import CheckIcon from '../../../ui/icons/CheckIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
@@ -13,9 +13,182 @@ export interface ProgramHistoryItem {
     status: 'ACTIVE' | 'CONFLICT' | 'GRADUATED';
     attendanceCount: number;
     totalSessions: number;
+    paymentStatus?: string; // enrollment.payment_status: 'paid' | 'pending'
     paymentInfo?: { amount: number; method: string; status: string; paidAt: string } | null;
     notes?: string;
 }
+
+const PAYMENT_METHODS = [
+    { value: 'transfer', label: 'Transferencia' },
+    { value: 'mercadopago', label: 'Mercado Pago' },
+    { value: 'cash', label: 'Efectivo / Manual' },
+];
+
+const paymentMethodLabel = (m: string) =>
+    m === 'mercadopago' ? 'Mercado Pago' : m === 'transfer' ? 'Transferencia' : 'Efectivo';
+
+const formatMoneyInput = (val: string) =>
+    val.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const unformatMoney = (val: string) => Number(val.replace(/\./g, '')) || 0;
+
+/**
+ * Gestión de pagos por inscripción (enrollment). Permite registrar pagos
+ * parciales/adicionales y ver el total abonado acumulado. Se auto-refresca
+ * al agregar un pago para reflejar el nuevo total al instante.
+ */
+const EnrollmentPayments: React.FC<{ enrollmentId: string; initialPaymentStatus?: string }> = ({ enrollmentId, initialPaymentStatus }) => {
+    const [payments, setPayments] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isAdding, setIsAdding] = useState(false);
+    const [showForm, setShowForm] = useState(false);
+    const [amount, setAmount] = useState('');
+    const [method, setMethod] = useState('transfer');
+    const [payStatus, setPayStatus] = useState(initialPaymentStatus || 'pending');
+    const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
+    const fetchPayments = async () => {
+        setIsLoading(true);
+        try {
+            const { data } = await restSelect<any>('payments', {
+                filters: { enrollment_id: `eq.${enrollmentId}` },
+                order: 'created_at.asc',
+            });
+            setPayments(data || []);
+        } catch (err) {
+            console.error('Error fetching payments:', err);
+        }
+        setIsLoading(false);
+    };
+
+    useEffect(() => {
+        fetchPayments();
+        setPayStatus(initialPaymentStatus || 'pending');
+    }, [enrollmentId]);
+
+    const total = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    const handleAddPayment = async () => {
+        const amt = unformatMoney(amount);
+        if (amt <= 0) { toast.error('Ingresá un monto válido'); return; }
+        setIsAdding(true);
+        try {
+            await restInsert('payments', {
+                enrollment_id: enrollmentId,
+                amount: amt,
+                method,
+                status: 'paid',
+                paid_at: new Date().toISOString(),
+            }, { returning: 'minimal' });
+            toast.success('Pago registrado');
+            setAmount('');
+            setShowForm(false);
+            await fetchPayments();
+        } catch (err: any) {
+            console.error('Error adding payment:', err);
+            toast.error('Error al registrar pago: ' + err.message);
+        }
+        setIsAdding(false);
+    };
+
+    const handleToggleStatus = async (newStatus: string) => {
+        setIsTogglingStatus(true);
+        try {
+            await restUpdate('enrollments', { payment_status: newStatus }, { id: `eq.${enrollmentId}` });
+            setPayStatus(newStatus);
+            toast.success(newStatus === 'paid' ? 'Marcado como saldado' : 'Marcado como pendiente');
+        } catch (err: any) {
+            console.error('Error updating payment status:', err);
+            toast.error('Error al actualizar estado: ' + err.message);
+        }
+        setIsTogglingStatus(false);
+    };
+
+    const isPaid = payStatus === 'paid';
+
+    return (
+        <div className="bg-white border border-slate-200 rounded-lg p-6 h-full flex flex-col">
+            <div className="flex justify-between items-start mb-5">
+                <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Abonado</p>
+                    <p className="text-2xl font-bold text-slate-900 leading-none">${total.toLocaleString('es-AR')}</p>
+                </div>
+                <button
+                    onClick={() => handleToggleStatus(isPaid ? 'pending' : 'paid')}
+                    disabled={isTogglingStatus}
+                    className={`inline-flex items-center px-3 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-wider border transition-colors disabled:opacity-50 ${isPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}
+                    title="Click para cambiar el estado de cobro"
+                >
+                    {isPaid ? '✅ Saldado' : '⏳ Pendiente'}
+                </button>
+            </div>
+
+            {/* Payment list */}
+            <div className="space-y-2 mb-4 flex-1 min-h-[40px]">
+                {isLoading ? (
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 py-4 text-center">Cargando pagos...</p>
+                ) : payments.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic py-4 text-center border border-dashed border-slate-100 rounded-sm">Sin pagos registrados</p>
+                ) : (
+                    payments.map((p) => (
+                        <div key={p.id} className="flex justify-between items-center px-3 py-2 bg-slate-50 border border-slate-100 rounded-sm">
+                            <div className="flex flex-col">
+                                <span className="text-sm font-bold text-slate-700">${Number(p.amount || 0).toLocaleString('es-AR')}</span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{paymentMethodLabel(p.method)}</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-400">
+                                {p.paid_at ? new Date(p.paid_at).toLocaleDateString('es-AR') : (p.created_at ? new Date(p.created_at).toLocaleDateString('es-AR') : '—')}
+                            </span>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Add payment form */}
+            {showForm ? (
+                <div className="border-t border-slate-100 pt-4 space-y-3 animate-fade-in">
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={amount}
+                            onChange={(e) => setAmount(formatMoneyInput(e.target.value))}
+                            placeholder="Monto (ej: 100.000)"
+                            className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400 font-mono"
+                        />
+                        <select
+                            value={method}
+                            onChange={(e) => setMethod(e.target.value)}
+                            className="p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
+                        >
+                            {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                        <button
+                            onClick={() => { setShowForm(false); setAmount(''); }}
+                            className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleAddPayment}
+                            disabled={isAdding}
+                            className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm transition-colors"
+                        >
+                            {isAdding ? 'Guardando...' : 'Registrar pago'}
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <button
+                    onClick={() => setShowForm(true)}
+                    className="w-full py-2.5 border border-dashed border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-300 text-[10px] font-bold uppercase tracking-widest rounded-sm transition-colors"
+                >
+                    + Agregar pago
+                </button>
+            )}
+        </div>
+    );
+};
 
 export interface StudentForModal {
     id: string;
@@ -453,26 +626,13 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                         </span>
                                                     </div>
                                                     
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-                                                        <div className="bg-slate-50/80 p-6 rounded-lg border border-slate-100 flex flex-col justify-center items-center">
+                                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+                                                        <div className="lg:col-span-1 bg-slate-50/80 p-6 rounded-lg border border-slate-100 flex flex-col justify-center items-center">
                                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-4">Asistencia Global</label>
                                                             <AttendanceBadge count={prog.attendanceCount} total={prog.totalSessions} />
                                                         </div>
-                                                        <div className="bg-slate-50/80 p-6 rounded-lg border border-slate-100 flex flex-col justify-center items-center text-center">
-                                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-4">Registro de Pago</label>
-                                                            {prog.paymentInfo ? (
-                                                                <>
-                                                                    <span className={`inline-flex items-center px-3 py-1.5 rounded-sm text-[11px] font-bold uppercase tracking-wider border ${prog.paymentInfo.status === 'Pagado' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                                                        {prog.paymentInfo.status === 'Pagado' ? '✅ Pagado' : '⏳ Pendiente'}
-                                                                    </span>
-                                                                    <span className="text-xs text-slate-600 font-bold mt-3">${prog.paymentInfo.amount?.toLocaleString()} • {prog.paymentInfo.method.replace('Mercado Pago', 'MP').replace('Transferencia', 'Transf.')}</span>
-                                                                </>
-                                                            ) : (
-                                                                <div className="flex flex-col items-center">
-                                                                    <span className="text-xs text-slate-300 font-bold uppercase py-1">Sin información</span>
-                                                                    <span className="text-[9px] text-slate-400 italic mt-1">No hay pagos vinculados a este ciclo</span>
-                                                                </div>
-                                                            )}
+                                                        <div className="lg:col-span-2">
+                                                            <EnrollmentPayments enrollmentId={prog.id} initialPaymentStatus={prog.paymentStatus} />
                                                         </div>
                                                     </div>
 

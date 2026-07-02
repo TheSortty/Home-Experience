@@ -141,6 +141,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
             status: derivedStatus,
             attendanceCount: attCount,
             totalSessions: totalSess,
+            paymentStatus: e.payment_status || 'pending',
             paymentInfo: pay ? {
               amount: pay.amount,
               method: pay.method === 'mercadopago' ? 'Mercado Pago' : (pay.method === 'transfer' ? 'Transferencia' : 'Efectivo'),
