@@ -57,6 +57,7 @@ export async function updateLessonLifecycle(formData: FormData) {
   const courseId = formData.get('courseId') as string;
   const status = formData.get('status') as string;
   const unlockAt = formData.get('unlock_at') as string | null;
+  const dueAt = formData.get('due_at') as string | null;
   const dueDays = formData.get('due_days') as string | null;
   const requiresSubmission = formData.get('requires_submission') === '1';
   const blockAfterDue = formData.get('block_after_due') === '1';
@@ -67,6 +68,7 @@ export async function updateLessonLifecycle(formData: FormData) {
     requires_submission: requiresSubmission,
     block_after_due: blockAfterDue,
     unlock_at: unlockAt || null,
+    due_at: dueAt || null,
     due_days_after_unlock: dueDays ? parseInt(dueDays, 10) : null,
     ...(status === 'unlocked' ? { unlocked_at: new Date().toISOString() } : {}),
   };

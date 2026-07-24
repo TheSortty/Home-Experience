@@ -8,6 +8,7 @@ import {
   buildSubmissionKey, putEntregaObject, deleteEntregaObjects,
   isAllowedFile, MAX_FILE_BYTES, MAX_FILES_PER_SUBMISSION,
 } from '@/src/services/entregasStorage';
+import { isLessonPastDue } from '@/src/services/lessonDeadline';
 import type {
   SubmissionThread, SubmissionStatus, Submission,
   SubmissionReview, ChatMessage, ThreadItem, SubmissionFile, SubmissionReviewFile,
@@ -302,17 +303,13 @@ export async function submitLesson(formData: FormData) {
 
   const { data: lesson } = await supabase
     .from('lessons')
-    .select('status, unlocked_at, due_days_after_unlock, block_after_due')
+    .select('status, due_at, unlock_at, unlocked_at, due_days_after_unlock, block_after_due')
     .eq('id', lessonId)
     .single();
 
   if (!lesson || lesson.status !== 'unlocked') return { error: 'Esta clase no acepta entregas en este momento' };
 
-  const pastDue = !!(
-    lesson.unlocked_at &&
-    lesson.due_days_after_unlock &&
-    Date.now() > new Date(lesson.unlocked_at).getTime() + lesson.due_days_after_unlock * 86400000
-  );
+  const pastDue = isLessonPastDue(lesson);
   if (pastDue && lesson.block_after_due) {
     return { error: 'El plazo de entrega de esta clase venció y ya no acepta entregas.' };
   }
@@ -331,7 +328,7 @@ export async function submitLesson(formData: FormData) {
     return { error: 'Tu entrega está esperando devolución. Podrás enviar una nueva versión cuando tu coach te responda.' };
   }
   if (latestSub?.status === 'approved') {
-    return { error: '¡Esta entrega ya fue aprobada! El hilo está cerrado.' };
+    return { error: 'Esta entrega ya recibió su devolución final. El hilo está cerrado.' };
   }
 
   const isLate = pastDue;
@@ -466,14 +463,10 @@ export async function addSubmissionFiles(formData: FormData) {
   // On time or late? — now vs the lesson deadline.
   const { data: lesson } = await supabase
     .from('lessons')
-    .select('unlocked_at, due_days_after_unlock')
+    .select('due_at, unlock_at, unlocked_at, due_days_after_unlock')
     .eq('id', lessonId)
     .single();
-  const isLate = !!(
-    lesson?.unlocked_at &&
-    lesson?.due_days_after_unlock &&
-    Date.now() > new Date(lesson.unlocked_at).getTime() + lesson.due_days_after_unlock * 86400000
-  );
+  const isLate = !!lesson && isLessonPastDue(lesson);
 
   const uploadedKeys: string[] = [];
   try {

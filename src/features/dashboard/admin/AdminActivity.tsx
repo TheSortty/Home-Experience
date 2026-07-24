@@ -61,7 +61,7 @@ const EVENT_LABEL: Record<ActivityEventType, string> = {
   'student.forum_question':      'pregunta en foro',
   'coach.material_accessed':     'acceso de coach',
   'coach.work_returned':         'devolución',
-  'coach.work_approved':         'aprobación',
+  'coach.work_approved':         'devolución final',
   'admin.submission_deleted':    'entrega eliminada',
 };
 

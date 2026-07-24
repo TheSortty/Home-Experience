@@ -139,8 +139,9 @@ CREATE TABLE IF NOT EXISTS public.modules (
     order_index  INTEGER NOT NULL,
     is_published BOOLEAN DEFAULT true,
     -- 'module' (normal) | 'workshop' (taller) | 'institutional' (archivos institucionales)
+    -- | 'campo' (prácticas de talleres con bitácora del alumno)
     module_type  TEXT NOT NULL DEFAULT 'module'
-        CHECK (module_type IN ('module', 'workshop', 'institutional')),
+        CHECK (module_type IN ('module', 'workshop', 'institutional', 'campo')),
     created_at   TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
 );
 
@@ -159,6 +160,8 @@ CREATE TABLE IF NOT EXISTS public.lessons (
     unlock_at             TIMESTAMP WITH TIME ZONE,
     unlocked_at           TIMESTAMP WITH TIME ZONE,
     due_days_after_unlock INTEGER,
+    -- Fecha y hora límite exacta de la entrega (prioridad sobre due_days_after_unlock)
+    due_at                TIMESTAMP WITH TIME ZONE,
     requires_submission   BOOLEAN NOT NULL DEFAULT false,
     -- Deadline duro: bloquear entregas pasada la fecha (vs. aceptarlas como "tardías")
     block_after_due       BOOLEAN NOT NULL DEFAULT false,

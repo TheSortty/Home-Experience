@@ -33,7 +33,7 @@ export default function ReviewForm({
   if (isApproved) {
     return (
       <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-200">
-        <IoShieldCheckmarkOutline size={14} /> Entrega aprobada — hilo cerrado
+        <IoShieldCheckmarkOutline size={14} /> Devolución final — hilo cerrado
       </div>
     );
   }
@@ -54,7 +54,7 @@ export default function ReviewForm({
         setMsg({ err: res.error });
       } else {
         const wasApproved = res.approved ?? false;
-        setMsg({ ok: wasApproved ? '✓ Entrega aprobada y hilo cerrado.' : 'Devolución enviada.' });
+        setMsg({ ok: wasApproved ? '✓ Devolución final registrada y hilo cerrado.' : 'Devolución enviada.' });
         setOpen(false);
         setApprove(false);
         onReviewSaved?.(wasApproved);
@@ -115,9 +115,9 @@ export default function ReviewForm({
               className="mt-0.5 accent-emerald-600"
             />
             <div>
-              <p className="text-xs font-bold">Aprobar esta entrega</p>
+              <p className="text-xs font-bold">Dar devolución final</p>
               <p className="text-[10px] text-slate-500 mt-0.5">
-                Cierra el hilo. El alumno verá "✓ Aprobada" y no podrá subir más versiones.
+                Cierra el hilo. El alumno verá "✓ Devolución final" y no podrá subir más versiones.
               </p>
             </div>
           </label>
@@ -138,7 +138,7 @@ export default function ReviewForm({
                   : 'bg-slate-900 hover:bg-slate-700 text-white'
               }`}
             >
-              {isPending ? 'Enviando…' : approve ? 'Aprobar y cerrar hilo' : 'Enviar devolución'}
+              {isPending ? 'Enviando…' : approve ? 'Devolución final y cerrar hilo' : 'Enviar devolución'}
             </button>
             <button
               type="button"

@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -728,6 +728,7 @@ export type Database = {
           block_after_due: boolean
           created_at: string
           description: string | null
+          due_at: string | null
           due_days_after_unlock: number | null
           duration_seconds: number | null
           id: string
@@ -745,6 +746,7 @@ export type Database = {
           block_after_due?: boolean
           created_at?: string
           description?: string | null
+          due_at?: string | null
           due_days_after_unlock?: number | null
           duration_seconds?: number | null
           id?: string
@@ -762,6 +764,7 @@ export type Database = {
           block_after_due?: boolean
           created_at?: string
           description?: string | null
+          due_at?: string | null
           due_days_after_unlock?: number | null
           duration_seconds?: number | null
           id?: string

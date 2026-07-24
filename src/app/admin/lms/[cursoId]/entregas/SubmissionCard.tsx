@@ -171,7 +171,7 @@ function InlineReviewForm({
     return (
       <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-sm font-bold text-emerald-700">
         <IoShieldCheckmarkOutline size={16} />
-        Hilo cerrado — entrega aprobada
+        Hilo cerrado — devolución final
       </div>
     );
   }
@@ -198,7 +198,7 @@ function InlineReviewForm({
         setMsg({ err: res.error });
       } else {
         const wasApproved = res.approved ?? false;
-        setMsg({ ok: wasApproved ? 'Entrega aprobada y hilo cerrado.' : 'Devolución enviada al alumno.' });
+        setMsg({ ok: wasApproved ? 'Devolución final registrada y hilo cerrado.' : 'Devolución enviada al alumno.' });
         setOpen(false);
         setApprove(false);
         setPickedFiles([]);
@@ -272,10 +272,10 @@ function InlineReviewForm({
             />
             <div>
               <p className={`text-sm font-bold ${approve ? 'text-emerald-800' : 'text-slate-700'}`}>
-                Aprobar y cerrar el hilo
+                Dar devolución final y cerrar el hilo
               </p>
               <p className="text-xs text-slate-400 mt-0.5">
-                El alumno verá "✓ Aprobada" y no podrá enviar más versiones.
+                El alumno verá "✓ Devolución final" y no podrá enviar más versiones.
               </p>
             </div>
           </label>
@@ -296,7 +296,7 @@ function InlineReviewForm({
                   : 'bg-slate-900 hover:bg-slate-700 text-white'
               }`}
             >
-              {isPending ? 'Enviando…' : approve ? 'Aprobar y cerrar' : 'Enviar devolución'}
+              {isPending ? 'Enviando…' : approve ? 'Devolución final y cerrar' : 'Enviar devolución'}
             </button>
             <button
               type="button"
@@ -552,7 +552,7 @@ export default function SubmissionCard({
     },
     approved: {
       border: 'border-l-emerald-400',
-      badge: <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-[11px] font-black uppercase tracking-wide"><IoShieldCheckmarkOutline size={10} />Aprobada</span>,
+      badge: <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-[11px] font-black uppercase tracking-wide"><IoShieldCheckmarkOutline size={10} />Devolución final</span>,
     },
   };
 

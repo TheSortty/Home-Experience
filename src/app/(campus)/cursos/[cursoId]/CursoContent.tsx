@@ -9,6 +9,7 @@ import {
   IoEllipseOutline,
   IoEyeOutline,
   IoFolderOpenOutline,
+  IoJournalOutline,
   IoSchoolOutline,
   IoFlashOutline,
   IoMusicalNotesOutline,
@@ -53,13 +54,14 @@ interface Props {
   cursoId: string;
   modules: ModuleNode[];
   workshopModules: ModuleNode[];
+  campoModules: ModuleNode[];
   resources: ResourceWithContext[];
   completedLessonIds: string[];
   nextLessonId: string | null;
   isOrganizer: boolean;
 }
 
-type TabId = 'modulos' | 'talleres' | 'archivos';
+type TabId = 'modulos' | 'talleres' | 'campo' | 'archivos';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -96,6 +98,7 @@ export default function CursoContent({
   cursoId,
   modules,
   workshopModules,
+  campoModules,
   resources,
   completedLessonIds,
   nextLessonId,
@@ -103,7 +106,8 @@ export default function CursoContent({
 }: Props) {
   const completedSet = useMemo(() => new Set(completedLessonIds), [completedLessonIds]);
   const totalLessons = modules.reduce((s, m) => s + m.lessons.length, 0)
-                     + workshopModules.reduce((s, m) => s + m.lessons.length, 0);
+                     + workshopModules.reduce((s, m) => s + m.lessons.length, 0)
+                     + campoModules.reduce((s, m) => s + m.lessons.length, 0);
   const completedCount = completedSet.size;
   const progressPercent = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
 
@@ -122,12 +126,14 @@ export default function CursoContent({
   const counts = {
     modulos: modules.length,
     talleres: workshopModules.length,
+    campo: campoModules.length,
     archivos: resources.length,
   };
 
   const tabs: { id: TabId; label: string; Icon: typeof IoSchoolOutline; count: number; accent: string }[] = [
     { id: 'modulos',  label: 'Módulos',                Icon: IoSchoolOutline,      count: counts.modulos,  accent: '#00A9CE' },
     { id: 'talleres', label: 'Talleres',               Icon: IoFlashOutline,       count: counts.talleres, accent: '#F59E0B' },
+    { id: 'campo',    label: 'CAMPO',                  Icon: IoJournalOutline,     count: counts.campo,    accent: '#8B5CF6' },
     { id: 'archivos', label: 'Archivos institucionales', Icon: IoFolderOpenOutline, count: counts.archivos, accent: '#10B981' },
   ];
 
@@ -190,6 +196,15 @@ export default function CursoContent({
               isOrganizer={isOrganizer}
             />
           )}
+          {tab === 'campo' && (
+            <CampoTab
+              cursoId={cursoId}
+              campoModules={campoModules}
+              completedSet={completedSet}
+              nextLessonId={nextLessonId}
+              isOrganizer={isOrganizer}
+            />
+          )}
           {tab === 'archivos' && <ArchivosTab grouped={resourcesByModule} totalCount={resources.length} />}
         </div>
 
@@ -235,6 +250,7 @@ export default function CursoContent({
             <div className="space-y-3">
               <MiniStat icon={<IoSchoolOutline className="w-4 h-4" />} label="Módulos" value={counts.modulos} color="text-[#00A9CE]" bg="bg-[#00A9CE]/10" onClick={() => setTab('modulos')} />
               <MiniStat icon={<IoFlashOutline className="w-4 h-4" />} label="Talleres" value={counts.talleres} color="text-amber-600" bg="bg-amber-100" onClick={() => setTab('talleres')} />
+              <MiniStat icon={<IoJournalOutline className="w-4 h-4" />} label="CAMPO" value={counts.campo} color="text-violet-600" bg="bg-violet-100" onClick={() => setTab('campo')} />
               <MiniStat icon={<IoFolderOpenOutline className="w-4 h-4" />} label="Archivos" value={counts.archivos} color="text-emerald-600" bg="bg-emerald-100" onClick={() => setTab('archivos')} />
             </div>
           </div>
@@ -454,6 +470,103 @@ function TalleresTab({
                     </div>
                     {isNext && (
                       <span className="text-xs font-bold bg-white text-amber-600 px-2 py-1 rounded shadow-sm border border-amber-200 shrink-0">
+                        Continuar
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CampoTab({
+  cursoId, campoModules, completedSet, nextLessonId, isOrganizer,
+}: {
+  cursoId: string;
+  campoModules: ModuleNode[];
+  completedSet: Set<string>;
+  nextLessonId: string | null;
+  isOrganizer: boolean;
+}) {
+  if (campoModules.length === 0) {
+    return <EmptyState icon={<IoJournalOutline size={36} />} title="Sin prácticas de CAMPO todavía" message="Cuando se publiquen las prácticas de los talleres, las vas a ver aquí para subir tu bitácora." />;
+  }
+  return (
+    <div className="space-y-4">
+      <div className="bg-gradient-to-br from-violet-50 via-white to-white border border-violet-100 rounded-2xl p-5 flex items-start gap-4">
+        <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+          <IoJournalOutline size={20} />
+        </div>
+        <div className="flex-1">
+          <p className="text-xs font-bold uppercase tracking-widest text-violet-700 mb-0.5">
+            Prácticas de talleres
+          </p>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Acá van las prácticas de los talleres. En cada una subís tu bitácora — un archivo con tu trabajo, paralelo a los talleres.
+          </p>
+        </div>
+      </div>
+      {campoModules.map((mod) => {
+        const modCompleted = !isOrganizer ? mod.lessons.filter((l) => completedSet.has(l.id)).length : 0;
+        const modTotal = mod.lessons.length;
+        const allDone = !isOrganizer && modCompleted === modTotal && modTotal > 0;
+        return (
+          <div key={mod.id} className="bg-white rounded-2xl border border-l-4 border-violet-200 border-l-violet-400 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-violet-100 bg-violet-50/40 flex justify-between items-center">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest mb-1 text-violet-600">📓 CAMPO</p>
+                <h3 className="text-lg font-bold text-slate-900">{mod.title}</h3>
+              </div>
+              {isOrganizer ? (
+                <div className="text-xs font-bold text-violet-600">{modTotal} prácticas</div>
+              ) : allDone ? (
+                <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
+                  <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
+                </div>
+              ) : (
+                <div className="font-bold text-sm text-violet-600">{modCompleted}/{modTotal}</div>
+              )}
+            </div>
+            <div className="divide-y divide-violet-50">
+              {mod.lessons.map((lesson) => {
+                const isDone = !isOrganizer && completedSet.has(lesson.id);
+                const isNext = !isOrganizer && lesson.id === nextLessonId;
+                return (
+                  <Link
+                    key={lesson.id}
+                    href={`/cursos/${cursoId}/${lesson.id}`}
+                    className={`flex items-center justify-between p-4 transition-colors group ${
+                      isNext ? 'bg-violet-50/60 hover:bg-violet-50' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      {isDone ? (
+                        <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
+                      ) : isNext ? (
+                        <div className="w-6 h-6 rounded-full border-2 border-violet-400 flex items-center justify-center shrink-0">
+                          <div className="w-2 h-2 bg-violet-400 rounded-full" />
+                        </div>
+                      ) : (
+                        <IoEllipseOutline size={24} className="text-violet-200 shrink-0" />
+                      )}
+                      <div>
+                        <p className={`text-sm font-bold transition-colors ${
+                          isNext ? 'text-violet-600' : isDone ? 'text-slate-700 group-hover:text-violet-600' : 'text-slate-900 group-hover:text-violet-600'
+                        }`}>
+                          {lesson.order_index}. {lesson.title}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                          <IoDocumentTextOutline className="inline" /> Práctica con bitácora
+                        </p>
+                      </div>
+                    </div>
+                    {isNext && (
+                      <span className="text-xs font-bold bg-white text-violet-600 px-2 py-1 rounded shadow-sm border border-violet-200 shrink-0">
                         Continuar
                       </span>
                     )}

@@ -58,7 +58,7 @@ export function composeHeadline(ev: ActivityEventSlim): { title: string; seconda
       };
     case 'coach.work_approved':
       return {
-        title: `${actor} aprobó la entrega`,
+        title: `${actor} cerró la entrega con devolución final`,
         secondary: `${d.lessonTitle ?? 'clase'}${d.submissionVersion ? ` · v${d.submissionVersion}` : ''}${d.courseTitle ? ` · ${d.courseTitle}` : ''}`,
       };
     case 'admin.submission_deleted':

@@ -6,6 +6,7 @@ import {
   IoCheckmarkCircle, IoAlertCircleOutline,
 } from 'react-icons/io5';
 import { isAdminRole } from '@/src/services/roleService';
+import { lessonDueMs } from '@/src/services/lessonDeadline';
 import SubmissionCard from './SubmissionCard';
 
 export default async function EntregasPage({
@@ -40,7 +41,7 @@ export default async function EntregasPage({
 
   const { data: lessonsWithSubmission } = await supabase
     .from('lessons')
-    .select('id, title, order_index, unlocked_at, due_days_after_unlock, modules(title, order_index, course_id)')
+    .select('id, title, order_index, unlock_at, unlocked_at, due_at, due_days_after_unlock, modules(title, order_index, course_id)')
     .eq('requires_submission', true)
     .eq('is_published', true);
 
@@ -101,12 +102,8 @@ export default async function EntregasPage({
   if (activeLessonId) {
     activeLesson = lessonList.find((l: any) => l.id === activeLessonId);
 
-    if (activeLesson?.unlocked_at && activeLesson?.due_days_after_unlock) {
-      dueDate = new Date(
-        new Date(activeLesson.unlocked_at).getTime() +
-        activeLesson.due_days_after_unlock * 86400000
-      );
-    }
+    const dueMs = activeLesson ? lessonDueMs(activeLesson) : null;
+    if (dueMs !== null) dueDate = new Date(dueMs);
 
     const { data: subs } = await supabase
       .from('submissions')
@@ -327,7 +324,7 @@ export default async function EntregasPage({
                     {dueDate && (
                       <span className="text-xs text-slate-400 flex items-center gap-1">
                         <IoTimeOutline size={12} />
-                        Vence {dueDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        Vence {dueDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}
                       </span>
                     )}
                   </div>
@@ -337,7 +334,7 @@ export default async function EntregasPage({
                       { id: 'all',            label: 'Todas',       icon: null },
                       { id: 'pending_review', label: 'Pendientes',  icon: <IoAlertCircleOutline size={11} /> },
                       { id: 'reviewed',       label: 'Devueltas',   icon: null },
-                      { id: 'approved',       label: 'Aprobadas',   icon: <IoCheckmarkCircle size={11} /> },
+                      { id: 'approved',       label: 'Finalizadas', icon: <IoCheckmarkCircle size={11} /> },
                     ] as const).map(tab => {
                       const count = countByStatus[tab.id as keyof typeof countByStatus];
                       const isActive = statusFilter === tab.id;

@@ -11,6 +11,7 @@ import {
 import LessonViewer, { type LessonResource, type LessonVideo } from './LessonViewer';
 import type { LessonPost } from './LessonForum';
 import type { SubmissionTabData } from '@/src/types/submissions';
+import { lessonDueMs } from '@/src/services/lessonDeadline';
 import { getStudentThread } from '../../actions';
 
 
@@ -35,6 +36,7 @@ function getYoutubeEmbedUrl(url: string | null): string | null {
 function formatUnlockDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    timeZone: 'America/Argentina/Buenos_Aires',
   });
 }
 
@@ -87,7 +89,7 @@ export default async function ClasePage({
   // Fetch the lesson (include lifecycle columns)
   const { data: lesson } = await supabase
     .from('lessons')
-    .select('id, title, description, video_url, duration_seconds, order_index, module_id, status, unlock_at, unlocked_at, due_days_after_unlock, requires_submission, block_after_due')
+    .select('id, title, description, video_url, duration_seconds, order_index, module_id, status, unlock_at, unlocked_at, due_at, due_days_after_unlock, requires_submission, block_after_due')
     .eq('id', claseId)
     .single();
 
@@ -258,9 +260,9 @@ export default async function ClasePage({
   let isOverdue = false;
   let daysRemaining: number | null = null;
 
-  if (lesson.requires_submission && lesson.unlocked_at && lesson.due_days_after_unlock) {
+  const dueMs = lesson.requires_submission ? lessonDueMs(lesson) : null;
+  if (dueMs !== null) {
     const nowMs = Date.now();
-    const dueMs = new Date(lesson.unlocked_at).getTime() + lesson.due_days_after_unlock * 86400000;
     dueDate = new Date(dueMs).toISOString();
     isOverdue = nowMs > dueMs;
     daysRemaining = isOverdue ? null : Math.ceil((dueMs - nowMs) / 86400000);

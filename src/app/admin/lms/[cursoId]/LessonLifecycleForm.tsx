@@ -16,11 +16,25 @@ interface Props {
     status: string;
     unlock_at: string | null;
     unlocked_at: string | null;
+    due_at: string | null;
     due_days_after_unlock: number | null;
     requires_submission: boolean;
     block_after_due: boolean;
   };
   courseId: string;
+}
+
+// ── datetime-local ↔ ISO ─────────────────────────────────────────────────────
+// El input datetime-local trabaja en hora local del navegador (sin huso). Antes
+// se mandaba el string crudo y Postgres lo interpretaba como UTC, corriéndose
+// la hora. Convertimos siempre local → ISO al enviar, y ISO → local al mostrar.
+
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -44,6 +58,11 @@ export default function LessonLifecycleForm({ lesson, courseId }: Props) {
     const fd = new FormData(formRef.current);
     fd.append('lessonId', lesson.id);
     fd.append('courseId', courseId);
+    // datetime-local → ISO con el huso del navegador del admin
+    for (const name of ['unlock_at', 'due_at']) {
+      const v = fd.get(name);
+      if (typeof v === 'string' && v) fd.set(name, new Date(v).toISOString());
+    }
     startTransition(async () => {
       const res = await updateLessonLifecycle(fd);
       if (res.error) setMsg({ err: res.error });
@@ -173,14 +192,29 @@ export default function LessonLifecycleForm({ lesson, courseId }: Props) {
               <input
                 type="datetime-local"
                 name="unlock_at"
-                defaultValue={lesson.unlock_at ? lesson.unlock_at.slice(0, 16) : ''}
+                defaultValue={isoToLocalInput(lesson.unlock_at)}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/40"
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                Días de plazo para entrega (desde desbloqueo)
+                Día y hora límite de entrega
+              </label>
+              <input
+                type="datetime-local"
+                name="due_at"
+                defaultValue={isoToLocalInput(lesson.due_at)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/40"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                El alumno ve exactamente esta fecha y hora como vencimiento.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                Días de plazo (alternativa)
               </label>
               <input
                 type="number"
@@ -190,6 +224,9 @@ export default function LessonLifecycleForm({ lesson, courseId }: Props) {
                 placeholder="ej: 7"
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/40"
               />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Solo se usa si no cargás día y hora límite: cuenta desde la fecha de desbloqueo.
+              </p>
             </div>
 
             <div className="flex items-center gap-3">

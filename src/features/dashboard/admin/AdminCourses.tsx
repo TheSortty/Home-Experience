@@ -45,6 +45,9 @@ type Lesson = {
   duration_seconds: number;
   order_index: number;
   is_published: boolean;
+  requires_submission?: boolean;
+  due_at?: string | null;
+  block_after_due?: boolean;
 };
 
 type LessonResource = {
@@ -93,6 +96,23 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 
 const inputCls = 'w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#00A9CE] focus:border-transparent text-slate-900 text-sm';
 const labelCls = 'block text-xs font-bold text-slate-600 mb-1';
+
+// datetime-local ↔ ISO: el input trabaja en hora local del admin (sin huso);
+// siempre convertimos local → ISO al guardar e ISO → local al mostrar.
+function isoToLocalInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Etiquetas por tipo de módulo
+const MODULE_TYPE_LABELS: Record<string, { singular: string; example: string }> = {
+  module:    { singular: 'Módulo',  example: 'Ej: Módulo 1 — Fundamentos' },
+  workshop:  { singular: 'Taller',  example: 'Ej: Competencias del Coach' },
+  campo:     { singular: 'Práctica CAMPO', example: 'Ej: Prácticas Taller 1' },
+};
 
 // ─── Course Modal ─────────────────────────────────────────────────────────────
 
@@ -193,7 +213,8 @@ function ModuleModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const isWorkshop = mod ? mod.module_type === 'workshop' : moduleType === 'workshop';
+  const effectiveType = mod ? mod.module_type : (moduleType ?? 'module');
+  const typeLabel = MODULE_TYPE_LABELS[effectiveType] ?? MODULE_TYPE_LABELS.module;
   const [title, setTitle] = useState(mod?.title ?? '');
   const [order, setOrder] = useState(mod?.order_index ?? nextOrder);
   const [published, setPublished] = useState(mod?.is_published ?? true);
@@ -208,10 +229,10 @@ function ModuleModal({
       if (mod) {
         await restUpdate('modules', payload, { id: `eq.${mod.id}` });
       } else {
-        await restInsert('modules', { course_id: courseId, module_type: isWorkshop ? 'workshop' : 'module', ...payload }, { returning: 'minimal' });
+        await restInsert('modules', { course_id: courseId, module_type: effectiveType, ...payload }, { returning: 'minimal' });
       }
 
-      toast.success(mod ? (isWorkshop ? 'Taller actualizado.' : 'Módulo actualizado.') : (isWorkshop ? 'Taller creado.' : 'Módulo creado.'));
+      toast.success(`${typeLabel.singular} ${mod ? 'actualizado.' : 'creado.'}`);
       onSaved();
     } catch (err: any) {
       console.error('[ModuleModal] Unexpected error:', err);
@@ -225,13 +246,13 @@ function ModuleModal({
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-slate-200">
-          <h2 className="font-bold text-slate-900">{mod ? (isWorkshop ? 'Editar Taller' : 'Editar Módulo') : (isWorkshop ? 'Nuevo Taller' : 'Nuevo Módulo')}</h2>
+          <h2 className="font-bold text-slate-900">{mod ? `Editar ${typeLabel.singular}` : `Nuevo ${typeLabel.singular}`}</h2>
           <button onClick={onClose}><IoCloseOutline size={22} className="text-slate-400" /></button>
         </div>
         <div className="p-5 space-y-4">
           <div>
             <label className={labelCls}>Título *</label>
-            <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder={isWorkshop ? 'Ej: Competencias del Coach' : 'Ej: Módulo 1 — Fundamentos'} />
+            <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder={typeLabel.example} />
           </div>
           <div>
             <label className={labelCls}>Orden</label>
@@ -258,12 +279,14 @@ function ModuleModal({
 function LessonModal({
   lesson,
   moduleId,
+  moduleType,
   nextOrder,
   onClose,
   onSaved,
 }: {
   lesson: Lesson | null;
   moduleId: string;
+  moduleType?: string;
   nextOrder: number;
   onClose: () => void;
   onSaved: () => void;
@@ -272,6 +295,14 @@ function LessonModal({
   const [desc, setDesc] = useState(lesson?.description ?? '');
   const [order, setOrder] = useState(lesson?.order_index ?? nextOrder);
   const [published, setPublished] = useState(lesson?.is_published ?? false);
+
+  // ── Entrega (config en el mismo lugar donde se carga el material) ─────────
+  // Las prácticas CAMPO nuevas piden entrega (bitácora) por defecto.
+  const [requiresSubmission, setRequiresSubmission] = useState(
+    lesson ? (lesson.requires_submission ?? false) : moduleType === 'campo'
+  );
+  const [dueAtLocal, setDueAtLocal] = useState(isoToLocalInput(lesson?.due_at));
+  const [blockAfterDue, setBlockAfterDue] = useState(lesson?.block_after_due ?? false);
 
   // ── Videos (multi-video) ──────────────────────────────────────────────────
   const [videos, setVideos] = useState<LessonVideoRow[]>([]);
@@ -333,6 +364,9 @@ function LessonModal({
         duration_seconds: totalDuration,
         order_index: order,
         is_published: published,
+        requires_submission: requiresSubmission,
+        due_at: requiresSubmission && dueAtLocal ? new Date(dueAtLocal).toISOString() : null,
+        block_after_due: requiresSubmission ? blockAfterDue : false,
       };
 
       let lessonId = lesson?.id;
@@ -599,6 +633,50 @@ function LessonModal({
               <label className="text-sm font-medium text-slate-700">Visible para alumnos</label>
               <Toggle checked={published} onChange={setPublished} />
             </div>
+          </div>
+
+          {/* Entrega */}
+          <div className="pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                <IoDocumentTextOutline size={16} /> Entrega del alumno
+              </h3>
+              <Toggle checked={requiresSubmission} onChange={setRequiresSubmission} />
+            </div>
+            <p className="text-xs text-slate-400 mb-3">
+              Si está activa, el alumno puede subir archivos (su trabajo o bitácora) en este tema.
+            </p>
+            {requiresSubmission && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Día y hora límite</label>
+                  <input
+                    type="datetime-local"
+                    className={inputCls}
+                    value={dueAtLocal}
+                    onChange={e => setDueAtLocal(e.target.value)}
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    El alumno ve exactamente esta fecha y hora como vencimiento. Dejá vacío para entrega sin plazo.
+                  </p>
+                </div>
+                <div className="flex items-start gap-3 pt-5">
+                  <input
+                    type="checkbox"
+                    id="lesson-block-after-due"
+                    checked={blockAfterDue}
+                    onChange={e => setBlockAfterDue(e.target.checked)}
+                    className="w-4 h-4 accent-red-500 mt-0.5"
+                  />
+                  <label htmlFor="lesson-block-after-due" className="text-sm font-medium text-slate-700">
+                    Bloquear entregas pasado el plazo
+                    <span className="block text-xs text-slate-400 font-normal mt-0.5">
+                      Si no, se aceptan igual pero marcadas como "atrasadas".
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Resources */}
@@ -1226,7 +1304,7 @@ export default function AdminCourses() {
   // Modals
   const [courseModal, setCourseModal] = useState<{ open: boolean; course: Course | null }>({ open: false, course: null });
   const [moduleModal, setModuleModal] = useState<{ open: boolean; mod: Module | null; courseId: string; moduleType?: string } | null>(null);
-  const [lessonModal, setLessonModal] = useState<{ open: boolean; lesson: Lesson | null; moduleId: string } | null>(null);
+  const [lessonModal, setLessonModal] = useState<{ open: boolean; lesson: Lesson | null; moduleId: string; moduleType?: string } | null>(null);
   const [courseSessions, setCourseSessions] = useState<CourseSession[]>([]);
   const [allResources, setAllResources] = useState<LessonResource[]>([]);
   const [newSessionDate, setNewSessionDate] = useState('');
@@ -1235,7 +1313,7 @@ export default function AdminCourses() {
   const [newSessionLocation, setNewSessionLocation] = useState('');
   const [newSessionMandatory, setNewSessionMandatory] = useState(true);
   const [savingSession, setSavingSession] = useState(false);
-  const [courseTab, setCourseTab] = useState<'modules' | 'workshop' | 'archivos' | 'calendar'>('modules');
+  const [courseTab, setCourseTab] = useState<'modules' | 'workshop' | 'campo' | 'archivos' | 'calendar'>('modules');
   const [addMaterialOpen, setAddMaterialOpen] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
@@ -1653,6 +1731,17 @@ export default function AdminCourses() {
                 )}
               </button>
               <button
+                onClick={() => setCourseTab('campo')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'campo' ? 'bg-white text-violet-700 shadow-sm' : 'text-slate-500 hover:text-violet-600'}`}
+              >
+                <span className="text-base leading-none">📓</span> CAMPO
+                {modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'campo').length > 0 && (
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${courseTab === 'campo' ? 'bg-violet-100 text-violet-600' : 'bg-slate-200 text-slate-500'}`}>
+                    {modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'campo').length}
+                  </span>
+                )}
+              </button>
+              <button
                 onClick={() => setCourseTab('archivos')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'archivos' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-emerald-600'}`}
               >
@@ -1691,6 +1780,14 @@ export default function AdminCourses() {
                 <IoAddOutline size={16} /> Taller
               </button>
             )}
+            {courseTab === 'campo' && (
+              <button
+                onClick={() => setModuleModal({ open: true, mod: null, courseId: selectedCourse.id, moduleType: 'campo' })}
+                className="flex items-center gap-1.5 text-sm font-bold text-violet-600 hover:underline"
+              >
+                <IoAddOutline size={16} /> Práctica CAMPO
+              </button>
+            )}
             {courseTab === 'archivos' && (
               <button
                 onClick={() => setAddMaterialOpen(true)}
@@ -1723,16 +1820,19 @@ export default function AdminCourses() {
             />
           )}
 
-          {(courseTab === 'modules' || courseTab === 'workshop') && (() => {
+          {(courseTab === 'modules' || courseTab === 'workshop' || courseTab === 'campo') && (() => {
             const isWorkshopTab = courseTab === 'workshop';
-            const targetType = isWorkshopTab ? 'workshop' : 'module';
+            const isCampoTab = courseTab === 'campo';
+            const targetType = isWorkshopTab ? 'workshop' : isCampoTab ? 'campo' : 'module';
             const filteredMods = modules.filter(m =>
               m.course_id === selectedCourse.id && m.module_type === targetType
             );
-            const accentColor = isWorkshopTab ? 'text-amber-600' : 'text-[#00A9CE]';
-            const accentBg = isWorkshopTab ? 'bg-amber-500' : 'bg-[#00A9CE]';
+            const accentColor = isWorkshopTab ? 'text-amber-600' : isCampoTab ? 'text-violet-600' : 'text-[#00A9CE]';
+            const accentBg = isWorkshopTab ? 'bg-amber-500' : isCampoTab ? 'bg-violet-500' : 'bg-[#00A9CE]';
             const emptyLabel = isWorkshopTab
               ? 'No hay talleres todavía. Creá el primero para comenzar.'
+              : isCampoTab
+              ? 'No hay prácticas CAMPO todavía. Creá la primera: ahí los alumnos suben su bitácora de talleres.'
               : 'No hay módulos. Creá el primero para comenzar.';
 
             if (loadingCourses && filteredMods.length === 0) {
@@ -1749,23 +1849,23 @@ export default function AdminCourses() {
               const modLessons = lessons.filter(l => l.module_id === mod.id).sort((a, b) => a.order_index - b.order_index);
               const isOpen = expandedModule === mod.id;
               return (
-                <div key={mod.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden ${isWorkshopTab ? 'border-amber-100' : 'border-slate-200'}`}>
+                <div key={mod.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden ${isWorkshopTab ? 'border-amber-100' : isCampoTab ? 'border-violet-100' : 'border-slate-200'}`}>
                   {/* Module header */}
                   <div
-                    className={`flex items-center gap-3 p-4 cursor-pointer transition-colors ${isWorkshopTab ? 'hover:bg-amber-50/40' : 'hover:bg-slate-50'}`}
+                    className={`flex items-center gap-3 p-4 cursor-pointer transition-colors ${isWorkshopTab ? 'hover:bg-amber-50/40' : isCampoTab ? 'hover:bg-violet-50/40' : 'hover:bg-slate-50'}`}
                     onClick={() => setExpandedModule(isOpen ? null : mod.id)}
                   >
                     <IoReorderFourOutline size={18} className="text-slate-300" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs font-bold ${isWorkshopTab ? 'text-amber-500' : 'text-slate-400'}`}>
-                          {isWorkshopTab ? '🎯 Taller' : `Módulo ${mod.order_index}`}
+                        <span className={`text-xs font-bold ${isWorkshopTab ? 'text-amber-500' : isCampoTab ? 'text-violet-500' : 'text-slate-400'}`}>
+                          {isWorkshopTab ? '🎯 Taller' : isCampoTab ? '📓 CAMPO' : `Módulo ${mod.order_index}`}
                         </span>
                         {!mod.is_published && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">Oculto</span>}
                       </div>
                       <h4 className="font-bold text-slate-900 truncate">{mod.title}</h4>
                     </div>
-                    <span className="text-xs text-slate-400 font-medium shrink-0">{modLessons.length} temas</span>
+                    <span className="text-xs text-slate-400 font-medium shrink-0">{modLessons.length} {isCampoTab ? 'prácticas' : 'temas'}</span>
                     <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setModuleModal({ open: true, mod, courseId: selectedCourse.id })} className={`p-1.5 text-slate-400 hover:${accentColor}`}>
                         <IoPencilOutline size={14} />
@@ -1779,9 +1879,9 @@ export default function AdminCourses() {
 
                   {/* Lessons */}
                   {isOpen && (
-                    <div className={`border-t ${isWorkshopTab ? 'border-amber-100' : 'border-slate-100'}`}>
+                    <div className={`border-t ${isWorkshopTab ? 'border-amber-100' : isCampoTab ? 'border-violet-100' : 'border-slate-100'}`}>
                       {modLessons.map((lesson, idx) => (
-                        <div key={lesson.id} className={`flex items-center gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50/50 group ${isWorkshopTab ? 'border-amber-50' : 'border-slate-50'}`}>
+                        <div key={lesson.id} className={`flex items-center gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50/50 group ${isWorkshopTab ? 'border-amber-50' : isCampoTab ? 'border-violet-50' : 'border-slate-50'}`}>
                           <span className="text-xs text-slate-400 font-mono w-4 shrink-0">{idx + 1}</span>
                           <IoVideocamOutline size={14} className="text-slate-300 shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -1795,10 +1895,10 @@ export default function AdminCourses() {
                             )}
                           </div>
                           <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => toggleLessonPublished(lesson)} title={lesson.is_published ? 'Ocultar' : 'Publicar'} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : 'hover:text-[#00A9CE]'}`}>
+                            <button onClick={() => toggleLessonPublished(lesson)} title={lesson.is_published ? 'Ocultar' : 'Publicar'} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : isCampoTab ? 'hover:text-violet-500' : 'hover:text-[#00A9CE]'}`}>
                               {lesson.is_published ? <IoEyeOutline size={14} /> : <IoEyeOffOutline size={14} />}
                             </button>
-                            <button onClick={() => setLessonModal({ open: true, lesson, moduleId: mod.id })} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : 'hover:text-[#00A9CE]'}`}>
+                            <button onClick={() => setLessonModal({ open: true, lesson, moduleId: mod.id, moduleType: targetType })} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : isCampoTab ? 'hover:text-violet-500' : 'hover:text-[#00A9CE]'}`}>
                               <IoPencilOutline size={14} />
                             </button>
                             <button onClick={() => deleteLesson(lesson.id)} className="p-1.5 text-slate-400 hover:text-red-500">
@@ -1812,10 +1912,10 @@ export default function AdminCourses() {
                       ))}
                       <div className="px-4 py-2.5">
                         <button
-                          onClick={() => setLessonModal({ open: true, lesson: null, moduleId: mod.id })}
-                          className={`flex items-center gap-1.5 text-xs font-bold hover:underline ${isWorkshopTab ? 'text-amber-600' : 'text-[#00A9CE]'}`}
+                          onClick={() => setLessonModal({ open: true, lesson: null, moduleId: mod.id, moduleType: targetType })}
+                          className={`flex items-center gap-1.5 text-xs font-bold hover:underline ${accentColor}`}
                         >
-                          <IoAddOutline size={14} /> Agregar tema
+                          <IoAddOutline size={14} /> {isCampoTab ? 'Agregar práctica' : 'Agregar tema'}
                         </button>
                       </div>
                     </div>
@@ -1897,6 +1997,7 @@ export default function AdminCourses() {
         <LessonModal
           lesson={lessonModal.lesson}
           moduleId={lessonModal.moduleId}
+          moduleType={lessonModal.moduleType ?? modules.find(m => m.id === lessonModal.moduleId)?.module_type}
           nextOrder={lessons.filter(l => l.module_id === lessonModal.moduleId).length + 1}
           onClose={() => setLessonModal(null)}
           onSaved={() => { setLessonModal(null); fetchData(true); }}

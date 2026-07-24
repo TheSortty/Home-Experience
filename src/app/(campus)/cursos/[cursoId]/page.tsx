@@ -100,10 +100,11 @@ export default async function CursoDetallePage({
 
   const modules = allModules.filter((m) => m.module_type === 'module');
   const workshopModules = allModules.filter((m) => m.module_type === 'workshop');
+  const campoModules = allModules.filter((m) => m.module_type === 'campo');
   const institutionalModules = allModules.filter((m) => m.module_type === 'institutional');
 
-  // Lessons that count toward progress = regular modules + workshops (NOT institutional)
-  const trackableLessonIds = [...modules, ...workshopModules].flatMap((m) => m.lessons.map((l) => l.id));
+  // Lessons that count toward progress = regular modules + workshops + campo (NOT institutional)
+  const trackableLessonIds = [...modules, ...workshopModules, ...campoModules].flatMap((m) => m.lessons.map((l) => l.id));
   const institutionalLessonIds = institutionalModules.flatMap((m) => m.lessons.map((l) => l.id));
 
   // Fetch lesson_progress (skip for organizer) — only for trackable lessons.
@@ -125,7 +126,7 @@ export default async function CursoDetallePage({
   // First incomplete lesson — only across trackable modules.
   let nextLessonId: string | null = null;
   if (!isOrganizer) {
-    outer: for (const mod of [...modules, ...workshopModules]) {
+    outer: for (const mod of [...modules, ...workshopModules, ...campoModules]) {
       for (const lesson of mod.lessons) {
         if (!completedSet.has(lesson.id)) {
           nextLessonId = lesson.id;
@@ -135,7 +136,7 @@ export default async function CursoDetallePage({
     }
   }
   // Organizer: link to first regular/workshop lesson for easy navigation
-  const firstLessonId = modules[0]?.lessons[0]?.id ?? workshopModules[0]?.lessons[0]?.id ?? null;
+  const firstLessonId = modules[0]?.lessons[0]?.id ?? workshopModules[0]?.lessons[0]?.id ?? campoModules[0]?.lessons[0]?.id ?? null;
 
   // Fetch lesson_resources from INSTITUTIONAL modules only — these power the
   // "Archivos institucionales" tab as a stand-alone document repository.
@@ -310,6 +311,7 @@ export default async function CursoDetallePage({
           cursoId={cursoId}
           modules={modules}
           workshopModules={workshopModules}
+          campoModules={campoModules}
           resources={resourcesWithContext}
           completedLessonIds={Array.from(completedSet)}
           nextLessonId={nextLessonId}

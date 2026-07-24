@@ -24,16 +24,22 @@ interface Props {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Zona horaria fija: la hora que carga el admin es hora argentina y es la que
+// debe ver el alumno, sin importar el huso del servidor o del navegador.
+const TZ = 'America/Argentina/Buenos_Aires';
+
 function fmt(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', {
     day: 'numeric', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
+    timeZone: TZ,
   });
 }
 
 function fmtShort(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+    timeZone: TZ,
   });
 }
 
@@ -46,8 +52,8 @@ function StatusBanner({ status }: { status: 'pending_review' | 'reviewed' | 'app
       <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-medium">
         <IoCheckmarkCircle size={20} className="shrink-0 text-emerald-500" />
         <div>
-          <p className="font-bold">¡Entrega aprobada!</p>
-          <p className="text-xs text-emerald-600 mt-0.5">Tu coach cerró el hilo. Este trabajo está listo.</p>
+          <p className="font-bold">Devolución final recibida</p>
+          <p className="text-xs text-emerald-600 mt-0.5">Tu coach cerró el hilo de esta entrega.</p>
         </div>
       </div>
     );
@@ -336,7 +342,7 @@ function HiloView({ items }: { items: ThreadItem[] }) {
             >
               <div className="flex items-center justify-between gap-2 mb-2">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  {isApproval ? '✓ Aprobada por el equipo' : `Devolución${rev.reviewer_name ? ` de ${rev.reviewer_name}` : ''}`}
+                  {isApproval ? '✓ Devolución final del equipo' : `Devolución${rev.reviewer_name ? ` de ${rev.reviewer_name}` : ''}`}
                 </p>
                 <span className="text-xs text-slate-400 shrink-0">{fmtShort(rev.reviewed_at)}</span>
               </div>
@@ -656,7 +662,7 @@ export default function SubmissionTab({ lessonId, courseId, data, studentProfile
             {status === 'approved' && (
               <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-4 py-3 border border-emerald-200">
                 <IoCheckmarkCircle size={16} className="shrink-0" />
-                Hilo cerrado. ¡Muy bien trabajo!
+                Hilo cerrado — devolución final recibida.
               </div>
             )}
           </div>
