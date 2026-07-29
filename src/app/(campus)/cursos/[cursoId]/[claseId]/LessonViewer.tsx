@@ -47,6 +47,8 @@ interface Props {
   currentUserRole?: string | null;
   studentProfileId?: string | null;
   submissionData: SubmissionTabData;
+  /** Pestaña pedida por querystring (?tab=entrega), si es válida. */
+  requestedTab?: string | null;
 }
 
 function getYoutubeEmbedUrl(url: string): string | null {
@@ -80,6 +82,7 @@ export default function LessonViewer({
   currentUserRole,
   studentProfileId,
   submissionData,
+  requestedTab,
 }: Props) {
   const [isCompleted, setIsCompleted] = useState(initialCompleted);
   const [activeVideoIdx, setActiveVideoIdx] = useState(0);
@@ -89,7 +92,9 @@ export default function LessonViewer({
   const activeVideo = videos[activeVideoIdx] ?? null;
 
   const initialTab: 'resumen' | 'materiales' | 'foro' | 'entrega' =
-    !hasVideos && !description && resources.length > 0 ? 'materiales' : 'resumen';
+    requestedTab === 'entrega' && submissionData.requiresSubmission
+      ? 'entrega'
+      : !hasVideos && !description && resources.length > 0 ? 'materiales' : 'resumen';
   const [activeTab, setActiveTab] = useState<'resumen' | 'materiales' | 'foro' | 'entrega'>(initialTab);
   const [isPending, startTransition] = useTransition();
 

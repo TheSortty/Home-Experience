@@ -48,7 +48,9 @@ export default async function ClasePage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { cursoId, claseId } = await params;
-  await searchParams; // reserved for future use (?as=student)
+  // ?tab=entrega — usado por las tarjetas de CAMPO para abrir directo la entrega.
+  const sp = await searchParams;
+  const requestedTab = typeof sp.tab === 'string' ? sp.tab : null;
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -371,6 +373,7 @@ export default async function ClasePage({
               studentProfileId={profile?.id ?? null}
               videos={lessonVideos}
               submissionData={submissionData}
+              requestedTab={requestedTab}
             />
           </div>
 

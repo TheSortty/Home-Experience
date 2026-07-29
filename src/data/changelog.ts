@@ -15,6 +15,18 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '1.8',
+    date: '29 jul 2026',
+    title: 'CAMPO: clases sueltas con cuaderno de campo',
+    description: 'La sección CAMPO deja de organizarse en módulos: ahora son clases independientes y cada una tiene su entrega.',
+    items: [
+      { type: 'nuevo',    text: 'Cada clase de CAMPO es una unidad suelta con su propia tarjeta: fecha límite y acceso directo a subir el cuaderno de campo.' },
+      { type: 'nuevo',    text: 'El alumno sube su cuaderno (PDF, Word, imágenes) desde la tarjeta, que abre la clase directamente en la pestaña de entrega.' },
+      { type: 'mejorado', text: 'En el admin, CAMPO se carga como lista de clases (sin crear módulos) y la entrega queda activada de forma obligatoria en cada una.' },
+      { type: 'nuevo',    text: 'Acceso directo desde cada clase de CAMPO a los cuadernos entregados por los alumnos.' },
+    ],
+  },
+  {
     version: '1.7',
     date: '30 jun 2026',
     title: 'Novedades del sistema y accesos rápidos en LMS',

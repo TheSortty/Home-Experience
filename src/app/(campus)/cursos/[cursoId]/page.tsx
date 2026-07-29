@@ -1,10 +1,11 @@
 import { createClient } from '@/utils/supabase/server';
 import { normalizeImageUrl } from '@/src/services/imageUrl';
 import { isAdminRole } from '@/src/services/roleService';
+import { lessonDueMs } from '@/src/services/lessonDeadline';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { IoArrowBackOutline, IoDocumentTextOutline, IoEyeOutline } from 'react-icons/io5';
-import CursoContent, { type ModuleNode, type ResourceWithContext } from './CursoContent';
+import CursoContent, { type CampoClass, type ModuleNode, type ResourceWithContext } from './CursoContent';
 
 export default async function CursoDetallePage({
   params,
@@ -63,7 +64,8 @@ export default async function CursoDetallePage({
     .select(`
       id, title, order_index, module_type,
       lessons (
-        id, title, description, video_url, duration_seconds, order_index, is_published
+        id, title, description, video_url, duration_seconds, order_index, is_published,
+        status, requires_submission, due_at, due_days_after_unlock, unlock_at, unlocked_at
       )
     `)
     .eq('course_id', cursoId)
@@ -78,6 +80,12 @@ export default async function CursoDetallePage({
     duration_seconds: number;
     order_index: number;
     is_published: boolean;
+    status: string | null;
+    requires_submission: boolean | null;
+    due_at: string | null;
+    due_days_after_unlock: number | null;
+    unlock_at: string | null;
+    unlocked_at: string | null;
   };
 
   const allModules: ModuleNode[] = (rawModules || []).map((m: any) => ({
@@ -103,6 +111,56 @@ export default async function CursoDetallePage({
   const campoModules = allModules.filter((m) => m.module_type === 'campo');
   const institutionalModules = allModules.filter((m) => m.module_type === 'institutional');
 
+  // ── CAMPO: clases sueltas (no módulos) ─────────────────────────────────────
+  // El alumno ve cada clase de CAMPO como una tarjeta independiente donde sube
+  // su cuaderno de campo. En la base siguen viviendo dentro de un contenedor
+  // module_type='campo', pero acá las aplanamos en una sola lista ordenada.
+  const rawCampoLessons = (rawModules || [])
+    .filter((m: any) => (m.module_type ?? 'module') === 'campo')
+    .flatMap((m: any) =>
+      ((m.lessons || []) as RawLesson[])
+        .filter((l) => l.is_published)
+        .map((l) => ({ lesson: l, moduleOrder: m.order_index as number }))
+    )
+    .sort((a, b) =>
+      a.moduleOrder !== b.moduleOrder
+        ? a.moduleOrder - b.moduleOrder
+        : a.lesson.order_index - b.lesson.order_index
+    );
+
+  // Última entrega del alumno por clase de CAMPO (para el estado de la tarjeta).
+  const campoLessonIds = rawCampoLessons.map((c) => c.lesson.id);
+  const latestSubmissionByLesson = new Map<string, { status: string; version: number }>();
+  if (!isOrganizer && campoLessonIds.length > 0) {
+    const { data: subs } = await supabase
+      .from('submissions')
+      .select('lesson_id, status, version')
+      .eq('user_id', profile.id)
+      .in('lesson_id', campoLessonIds)
+      .order('version', { ascending: true });
+    (subs || []).forEach((s: any) => {
+      latestSubmissionByLesson.set(s.lesson_id, { status: s.status, version: s.version });
+    });
+  }
+
+  const campoClasses: CampoClass[] = rawCampoLessons.map(({ lesson: l }, idx) => {
+    const requiresSubmission = l.requires_submission ?? true;
+    const dueMs = lessonDueMs(l);
+    const sub = latestSubmissionByLesson.get(l.id);
+    return {
+      id: l.id,
+      title: l.title,
+      description: l.description,
+      index: idx + 1,
+      requiresSubmission,
+      dueAt: dueMs !== null ? new Date(dueMs).toISOString() : null,
+      isLocked: l.status === 'scheduled',
+      submissionStatus: (sub?.status as CampoClass['submissionStatus']) ?? null,
+      submittedVersions: sub?.version ?? 0,
+      isCompleted: false, // se completa más abajo con lesson_progress
+    };
+  });
+
   // Lessons that count toward progress = regular modules + workshops + campo (NOT institutional)
   const trackableLessonIds = [...modules, ...workshopModules, ...campoModules].flatMap((m) => m.lessons.map((l) => l.id));
   const institutionalLessonIds = institutionalModules.flatMap((m) => m.lessons.map((l) => l.id));
@@ -118,6 +176,8 @@ export default async function CursoDetallePage({
       .eq('completed', true);
     (progress || []).forEach((p: any) => completedSet.add(p.lesson_id));
   }
+
+  for (const c of campoClasses) c.isCompleted = completedSet.has(c.id);
 
   const totalLessons = trackableLessonIds.length;
   const completedCount = completedSet.size;
@@ -311,7 +371,7 @@ export default async function CursoDetallePage({
           cursoId={cursoId}
           modules={modules}
           workshopModules={workshopModules}
-          campoModules={campoModules}
+          campoClasses={campoClasses}
           resources={resourcesWithContext}
           completedLessonIds={Array.from(completedSet)}
           nextLessonId={nextLessonId}

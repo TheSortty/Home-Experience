@@ -15,6 +15,8 @@ import {
   IoMusicalNotesOutline,
   IoLinkOutline,
   IoArrowForwardOutline,
+  IoCloudUploadOutline,
+  IoTimeOutline,
 } from 'react-icons/io5';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -36,6 +38,23 @@ export type ModuleNode = {
   lessons: LessonNode[];
 };
 
+/**
+ * Clase de CAMPO — unidad suelta (no vive dentro de un módulo desde el punto de
+ * vista del alumno). Siempre tiene entrega: el cuaderno de campo.
+ */
+export type CampoClass = {
+  id: string;
+  title: string;
+  description: string | null;
+  index: number;
+  requiresSubmission: boolean;
+  dueAt: string | null;
+  isLocked: boolean;
+  submissionStatus: 'pending_review' | 'reviewed' | 'approved' | null;
+  submittedVersions: number;
+  isCompleted: boolean;
+};
+
 export type ResourceWithContext = {
   id: string;
   title: string;
@@ -54,7 +73,7 @@ interface Props {
   cursoId: string;
   modules: ModuleNode[];
   workshopModules: ModuleNode[];
-  campoModules: ModuleNode[];
+  campoClasses: CampoClass[];
   resources: ResourceWithContext[];
   completedLessonIds: string[];
   nextLessonId: string | null;
@@ -98,7 +117,7 @@ export default function CursoContent({
   cursoId,
   modules,
   workshopModules,
-  campoModules,
+  campoClasses,
   resources,
   completedLessonIds,
   nextLessonId,
@@ -107,7 +126,7 @@ export default function CursoContent({
   const completedSet = useMemo(() => new Set(completedLessonIds), [completedLessonIds]);
   const totalLessons = modules.reduce((s, m) => s + m.lessons.length, 0)
                      + workshopModules.reduce((s, m) => s + m.lessons.length, 0)
-                     + campoModules.reduce((s, m) => s + m.lessons.length, 0);
+                     + campoClasses.length;
   const completedCount = completedSet.size;
   const progressPercent = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
 
@@ -126,7 +145,7 @@ export default function CursoContent({
   const counts = {
     modulos: modules.length,
     talleres: workshopModules.length,
-    campo: campoModules.length,
+    campo: campoClasses.length,
     archivos: resources.length,
   };
 
@@ -199,9 +218,7 @@ export default function CursoContent({
           {tab === 'campo' && (
             <CampoTab
               cursoId={cursoId}
-              campoModules={campoModules}
-              completedSet={completedSet}
-              nextLessonId={nextLessonId}
+              campoClasses={campoClasses}
               isOrganizer={isOrganizer}
             />
           )}
@@ -484,18 +501,33 @@ function TalleresTab({
   );
 }
 
+// ─── CAMPO ───────────────────────────────────────────────────────────────────
+// Cada clase de CAMPO es una unidad suelta (no hay módulos): una tarjeta con su
+// propia entrega, donde el alumno sube el cuaderno de campo.
+
+const TZ = 'America/Argentina/Buenos_Aires';
+
+function fmtDue(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: TZ,
+  });
+}
+
 function CampoTab({
-  cursoId, campoModules, completedSet, nextLessonId, isOrganizer,
+  cursoId, campoClasses, isOrganizer,
 }: {
   cursoId: string;
-  campoModules: ModuleNode[];
-  completedSet: Set<string>;
-  nextLessonId: string | null;
+  campoClasses: CampoClass[];
   isOrganizer: boolean;
 }) {
-  if (campoModules.length === 0) {
-    return <EmptyState icon={<IoJournalOutline size={36} />} title="Sin prácticas de CAMPO todavía" message="Cuando se publiquen las prácticas de los talleres, las vas a ver aquí para subir tu bitácora." />;
+  if (campoClasses.length === 0) {
+    return <EmptyState icon={<IoJournalOutline size={36} />} title="Sin clases de CAMPO todavía" message="Cuando se publiquen las clases de CAMPO, las vas a ver acá para subir tu cuaderno de campo." />;
   }
+
+  const entregadas = campoClasses.filter((c) => c.submissionStatus !== null).length;
+
   return (
     <div className="space-y-4">
       <div className="bg-gradient-to-br from-violet-50 via-white to-white border border-violet-100 rounded-2xl p-5 flex items-start gap-4">
@@ -504,75 +536,108 @@ function CampoTab({
         </div>
         <div className="flex-1">
           <p className="text-xs font-bold uppercase tracking-widest text-violet-700 mb-0.5">
-            Prácticas de talleres
+            Cuadernos de campo
           </p>
           <p className="text-sm text-slate-600 leading-relaxed">
-            Acá van las prácticas de los talleres. En cada una subís tu bitácora — un archivo con tu trabajo, paralelo a los talleres.
+            Cada clase de CAMPO es independiente y tiene su propia entrega: subís ahí el cuaderno de campo con tu trabajo.
           </p>
         </div>
+        {!isOrganizer && (
+          <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-md bg-white border border-violet-200 text-[11px] font-black text-violet-700 tabular-nums shrink-0">
+            {entregadas}/{campoClasses.length} entregadas
+          </span>
+        )}
       </div>
-      {campoModules.map((mod) => {
-        const modCompleted = !isOrganizer ? mod.lessons.filter((l) => completedSet.has(l.id)).length : 0;
-        const modTotal = mod.lessons.length;
-        const allDone = !isOrganizer && modCompleted === modTotal && modTotal > 0;
-        return (
-          <div key={mod.id} className="bg-white rounded-2xl border border-l-4 border-violet-200 border-l-violet-400 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-violet-100 bg-violet-50/40 flex justify-between items-center">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest mb-1 text-violet-600">📓 CAMPO</p>
-                <h3 className="text-lg font-bold text-slate-900">{mod.title}</h3>
-              </div>
-              {isOrganizer ? (
-                <div className="text-xs font-bold text-violet-600">{modTotal} prácticas</div>
-              ) : allDone ? (
-                <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
-                  <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
+
+      {campoClasses.map((c) => {
+        const hasSubmission = c.submissionStatus !== null;
+
+        if (c.isLocked) {
+          return (
+            <div key={c.id} className="bg-white rounded-2xl border border-l-4 border-slate-200 border-l-slate-300 shadow-sm overflow-hidden opacity-70">
+              <div className="p-5 flex items-start gap-4">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0 font-black text-sm">
+                  {c.index}
                 </div>
-              ) : (
-                <div className="font-bold text-sm text-violet-600">{modCompleted}/{modTotal}</div>
-              )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-widest mb-1 text-slate-400">📓 Clase de CAMPO</p>
+                  <h3 className="text-lg font-bold text-slate-600">{c.title}</h3>
+                  <p className="text-xs text-slate-400 mt-1">Todavía no está disponible.</p>
+                </div>
+              </div>
             </div>
-            <div className="divide-y divide-violet-50">
-              {mod.lessons.map((lesson) => {
-                const isDone = !isOrganizer && completedSet.has(lesson.id);
-                const isNext = !isOrganizer && lesson.id === nextLessonId;
-                return (
+          );
+        }
+
+        return (
+          <div key={c.id} className="bg-white rounded-2xl border border-l-4 border-violet-200 border-l-violet-400 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-violet-100 bg-violet-50/40 flex items-start justify-between gap-4">
+              <div className="flex items-start gap-4 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 font-black text-sm">
+                  {c.index}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-widest mb-1 text-violet-600">📓 Clase de CAMPO</p>
+                  <h3 className="text-lg font-bold text-slate-900 leading-snug">{c.title}</h3>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-3">
+              {c.description && (
+                <p className="text-sm text-slate-600 leading-relaxed line-clamp-3">{c.description}</p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+                {c.requiresSubmission ? (
+                  <span className="flex items-center gap-1.5 font-bold text-violet-600">
+                    <IoCloudUploadOutline size={14} /> Requiere cuaderno de campo
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 font-medium text-slate-400">
+                    <IoDocumentTextOutline size={14} /> Clase sin entrega
+                  </span>
+                )}
+                {c.requiresSubmission && (c.dueAt ? (
+                  <span className="flex items-center gap-1.5 font-medium text-slate-500">
+                    <IoTimeOutline size={14} /> Fecha límite: {fmtDue(c.dueAt)}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 font-medium text-slate-400">
+                    <IoTimeOutline size={14} /> Sin fecha límite
+                  </span>
+                ))}
+                {c.submittedVersions > 1 && (
+                  <span className="text-slate-400 font-medium">{c.submittedVersions} versiones enviadas</span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {c.requiresSubmission && (
                   <Link
-                    key={lesson.id}
-                    href={`/cursos/${cursoId}/${lesson.id}`}
-                    className={`flex items-center justify-between p-4 transition-colors group ${
-                      isNext ? 'bg-violet-50/60 hover:bg-violet-50' : 'hover:bg-slate-50'
-                    }`}
+                    href={`/cursos/${cursoId}/${c.id}?tab=entrega`}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-700 transition-colors shadow-sm"
                   >
-                    <div className="flex items-center gap-4">
-                      {isDone ? (
-                        <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
-                      ) : isNext ? (
-                        <div className="w-6 h-6 rounded-full border-2 border-violet-400 flex items-center justify-center shrink-0">
-                          <div className="w-2 h-2 bg-violet-400 rounded-full" />
-                        </div>
-                      ) : (
-                        <IoEllipseOutline size={24} className="text-violet-200 shrink-0" />
-                      )}
-                      <div>
-                        <p className={`text-sm font-bold transition-colors ${
-                          isNext ? 'text-violet-600' : isDone ? 'text-slate-700 group-hover:text-violet-600' : 'text-slate-900 group-hover:text-violet-600'
-                        }`}>
-                          {lesson.order_index}. {lesson.title}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                          <IoDocumentTextOutline className="inline" /> Práctica con bitácora
-                        </p>
-                      </div>
-                    </div>
-                    {isNext && (
-                      <span className="text-xs font-bold bg-white text-violet-600 px-2 py-1 rounded shadow-sm border border-violet-200 shrink-0">
-                        Continuar
-                      </span>
-                    )}
+                    <IoCloudUploadOutline size={16} />
+                    {isOrganizer ? 'Ver entregas de la clase' : hasSubmission ? 'Ver mi entrega' : 'Subir cuaderno de campo'}
                   </Link>
-                );
-              })}
+                )}
+                <Link
+                  href={`/cursos/${cursoId}/${c.id}`}
+                  className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${
+                    c.requiresSubmission
+                      ? 'border border-slate-200 text-slate-600 hover:border-violet-300 hover:text-violet-700'
+                      : 'bg-violet-600 text-white hover:bg-violet-700 shadow-sm'
+                  }`}
+                >
+                  Ver la clase <IoArrowForwardOutline size={14} />
+                </Link>
+                {c.isCompleted && (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
+                    <IoCheckmarkCircle size={16} /> Clase completada
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         );

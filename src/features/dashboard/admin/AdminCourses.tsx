@@ -291,15 +291,18 @@ function LessonModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  // Las clases de CAMPO son unidades sueltas y SIEMPRE tienen entrega: el
+  // cuaderno de campo. Por eso la entrega no es opcional en este tipo.
+  const isCampo = moduleType === 'campo';
+
   const [title, setTitle] = useState(lesson?.title ?? '');
   const [desc, setDesc] = useState(lesson?.description ?? '');
   const [order, setOrder] = useState(lesson?.order_index ?? nextOrder);
   const [published, setPublished] = useState(lesson?.is_published ?? false);
 
   // ── Entrega (config en el mismo lugar donde se carga el material) ─────────
-  // Las prácticas CAMPO nuevas piden entrega (bitácora) por defecto.
   const [requiresSubmission, setRequiresSubmission] = useState(
-    lesson ? (lesson.requires_submission ?? false) : moduleType === 'campo'
+    isCampo ? true : (lesson?.requires_submission ?? false)
   );
   const [dueAtLocal, setDueAtLocal] = useState(isoToLocalInput(lesson?.due_at));
   const [blockAfterDue, setBlockAfterDue] = useState(lesson?.block_after_due ?? false);
@@ -454,7 +457,11 @@ function LessonModal({
         }
       }
 
-      toast.success(lesson ? 'Tema actualizado.' : 'Tema creado.');
+      toast.success(
+        isCampo
+          ? (lesson ? 'Clase de CAMPO actualizada.' : 'Clase de CAMPO creada.')
+          : (lesson ? 'Tema actualizado.' : 'Tema creado.')
+      );
       onSaved();
     } catch (err: any) {
       console.error('[LessonModal] Save error:', err);
@@ -519,14 +526,18 @@ function LessonModal({
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-5 border-b border-slate-200 flex-shrink-0">
-          <h2 className="font-bold text-slate-900">{lesson ? 'Editar Tema' : 'Nuevo Tema'}</h2>
+          <h2 className="font-bold text-slate-900">
+            {isCampo
+              ? (lesson ? 'Editar clase de CAMPO' : 'Nueva clase de CAMPO')
+              : (lesson ? 'Editar Tema' : 'Nuevo Tema')}
+          </h2>
           <button onClick={onClose}><IoCloseOutline size={22} className="text-slate-400" /></button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className={labelCls}>Título *</label>
-              <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Introducción al Coaching Ontológico" />
+              <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder={isCampo ? 'Ej: Práctica de campo 1 — Observación' : 'Ej: Introducción al Coaching Ontológico'} />
             </div>
             <div className="col-span-2">
               <label className={labelCls}>Descripción / Contenido del tema</label>
@@ -639,12 +650,20 @@ function LessonModal({
           <div className="pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
-                <IoDocumentTextOutline size={16} /> Entrega del alumno
+                <IoDocumentTextOutline size={16} /> {isCampo ? 'Cuaderno de campo' : 'Entrega del alumno'}
               </h3>
-              <Toggle checked={requiresSubmission} onChange={setRequiresSubmission} />
+              {isCampo ? (
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md bg-violet-100 text-violet-700">
+                  Obligatorio
+                </span>
+              ) : (
+                <Toggle checked={requiresSubmission} onChange={setRequiresSubmission} />
+              )}
             </div>
             <p className="text-xs text-slate-400 mb-3">
-              Si está activa, el alumno puede subir archivos (su trabajo o bitácora) en este tema.
+              {isCampo
+                ? 'Toda clase de CAMPO tiene entrega: el alumno sube acá su cuaderno de campo (PDF, Word, imágenes…).'
+                : 'Si está activa, el alumno puede subir archivos (su trabajo o bitácora) en este tema.'}
             </p>
             {requiresSubmission && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1549,6 +1568,51 @@ export default function AdminCourses() {
     ? modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'institutional').sort((a, b) => a.order_index - b.order_index)
     : [];
 
+  // ── CAMPO: clases sueltas ───────────────────────────────────────────────────
+  // El admin ya no crea "módulos" de CAMPO: crea clases sueltas, cada una con su
+  // entrega (el cuaderno de campo). En la base siguen colgando de un contenedor
+  // module_type='campo' que se crea solo la primera vez.
+  const campoModulesForSelected = selectedCourse
+    ? modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'campo').sort((a, b) => a.order_index - b.order_index)
+    : [];
+
+  const campoClassesForSelected = campoModulesForSelected
+    .flatMap(m => lessons
+      .filter(l => l.module_id === m.id)
+      .map(l => ({ lesson: l, moduleId: m.id, moduleOrder: m.order_index })))
+    .sort((a, b) => a.moduleOrder !== b.moduleOrder
+      ? a.moduleOrder - b.moduleOrder
+      : a.lesson.order_index - b.lesson.order_index);
+
+  /** Devuelve el módulo contenedor de CAMPO del curso, creándolo si no existe. */
+  const ensureCampoContainer = async (): Promise<string | null> => {
+    if (!selectedCourse) return null;
+    if (campoModulesForSelected.length > 0) return campoModulesForSelected[0].id;
+    try {
+      const created = await restInsert<Module>('modules', {
+        course_id: selectedCourse.id,
+        module_type: 'campo',
+        title: 'CAMPO',
+        order_index: modules.filter(m => m.course_id === selectedCourse.id).length + 1,
+        is_published: true,
+      });
+      if (created?.id) {
+        setModules(prev => [...prev, created]);
+        return created.id;
+      }
+      return null;
+    } catch (err: any) {
+      toast.error('Error al preparar la sección CAMPO: ' + (err?.message ?? 'desconocido'));
+      return null;
+    }
+  };
+
+  const openNewCampoClass = async () => {
+    const moduleId = await ensureCampoContainer();
+    if (!moduleId) return;
+    setLessonModal({ open: true, lesson: null, moduleId, moduleType: 'campo' });
+  };
+
   const resourceGroupsForSelected = (() => {
     if (!selectedCourse) return [];
     const lessonIndex = new Map<string, { lessonTitle: string; lessonOrder: number; lessonPublished: boolean; moduleId: string; moduleTitle: string; moduleOrder: number; moduleType: string }>();
@@ -1735,9 +1799,9 @@ export default function AdminCourses() {
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'campo' ? 'bg-white text-violet-700 shadow-sm' : 'text-slate-500 hover:text-violet-600'}`}
               >
                 <span className="text-base leading-none">📓</span> CAMPO
-                {modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'campo').length > 0 && (
+                {campoClassesForSelected.length > 0 && (
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${courseTab === 'campo' ? 'bg-violet-100 text-violet-600' : 'bg-slate-200 text-slate-500'}`}>
-                    {modules.filter(m => m.course_id === selectedCourse.id && m.module_type === 'campo').length}
+                    {campoClassesForSelected.length}
                   </span>
                 )}
               </button>
@@ -1782,10 +1846,10 @@ export default function AdminCourses() {
             )}
             {courseTab === 'campo' && (
               <button
-                onClick={() => setModuleModal({ open: true, mod: null, courseId: selectedCourse.id, moduleType: 'campo' })}
+                onClick={openNewCampoClass}
                 className="flex items-center gap-1.5 text-sm font-bold text-violet-600 hover:underline"
               >
-                <IoAddOutline size={16} /> Práctica CAMPO
+                <IoAddOutline size={16} /> Clase de CAMPO
               </button>
             )}
             {courseTab === 'archivos' && (
@@ -1820,19 +1884,89 @@ export default function AdminCourses() {
             />
           )}
 
-          {(courseTab === 'modules' || courseTab === 'workshop' || courseTab === 'campo') && (() => {
+          {courseTab === 'campo' && (() => {
+            if (loadingCourses && campoClassesForSelected.length === 0) {
+              return <div className="text-center py-10 text-slate-400 text-sm">Cargando...</div>;
+            }
+            if (campoClassesForSelected.length === 0) {
+              return (
+                <div className="bg-white rounded-xl border-2 border-dashed border-violet-200 p-8 text-center">
+                  <p className="text-sm text-slate-500 mb-1 font-bold">No hay clases de CAMPO todavía</p>
+                  <p className="text-xs text-slate-400 mb-4">
+                    Son clases sueltas (sin módulos). Cada una tiene su entrega: el alumno sube ahí su cuaderno de campo.
+                  </p>
+                  <button
+                    onClick={openNewCampoClass}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-violet-600 text-white text-sm font-bold rounded-lg hover:bg-violet-700"
+                  >
+                    <IoAddOutline size={16} /> Crear la primera clase
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-3">
+                {campoClassesForSelected.map(({ lesson, moduleId }, idx) => (
+                  <div key={lesson.id} className="bg-white rounded-xl border border-violet-100 shadow-sm p-4 flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 font-black text-sm">
+                      {idx + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-violet-500">📓 Clase de CAMPO</span>
+                        {!lesson.is_published && (
+                          <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase">Borrador</span>
+                        )}
+                        {lesson.requires_submission === false && (
+                          <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase">Sin entrega</span>
+                        )}
+                      </div>
+                      <h4 className="font-bold text-slate-900 truncate">{lesson.title}</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {lesson.due_at
+                          ? `Entrega hasta ${new Date(lesson.due_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                          : 'Entrega sin fecha límite'}
+                      </p>
+                      <a
+                        href={`/admin/lms/${selectedCourse.id}/entregas?lesson=${lesson.id}`}
+                        className="inline-flex items-center gap-1 mt-1.5 text-xs font-bold text-violet-600 hover:underline"
+                      >
+                        Ver cuadernos entregados →
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => toggleLessonPublished(lesson)} title={lesson.is_published ? 'Ocultar' : 'Publicar'} className="p-1.5 text-slate-400 hover:text-violet-500">
+                        {lesson.is_published ? <IoEyeOutline size={16} /> : <IoEyeOffOutline size={16} />}
+                      </button>
+                      <button onClick={() => setLessonModal({ open: true, lesson, moduleId, moduleType: 'campo' })} className="p-1.5 text-slate-400 hover:text-violet-500">
+                        <IoPencilOutline size={16} />
+                      </button>
+                      <button onClick={() => deleteLesson(lesson.id)} className="p-1.5 text-slate-400 hover:text-red-500">
+                        <IoTrashOutline size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={openNewCampoClass}
+                  className="flex items-center gap-1.5 text-sm font-bold text-violet-600 hover:underline"
+                >
+                  <IoAddOutline size={16} /> Agregar clase de CAMPO
+                </button>
+              </div>
+            );
+          })()}
+
+          {(courseTab === 'modules' || courseTab === 'workshop') && (() => {
             const isWorkshopTab = courseTab === 'workshop';
-            const isCampoTab = courseTab === 'campo';
-            const targetType = isWorkshopTab ? 'workshop' : isCampoTab ? 'campo' : 'module';
+            const targetType = isWorkshopTab ? 'workshop' : 'module';
             const filteredMods = modules.filter(m =>
               m.course_id === selectedCourse.id && m.module_type === targetType
             );
-            const accentColor = isWorkshopTab ? 'text-amber-600' : isCampoTab ? 'text-violet-600' : 'text-[#00A9CE]';
-            const accentBg = isWorkshopTab ? 'bg-amber-500' : isCampoTab ? 'bg-violet-500' : 'bg-[#00A9CE]';
+            const accentColor = isWorkshopTab ? 'text-amber-600' : 'text-[#00A9CE]';
+            const accentBg = isWorkshopTab ? 'bg-amber-500' : 'bg-[#00A9CE]';
             const emptyLabel = isWorkshopTab
               ? 'No hay talleres todavía. Creá el primero para comenzar.'
-              : isCampoTab
-              ? 'No hay prácticas CAMPO todavía. Creá la primera: ahí los alumnos suben su bitácora de talleres.'
               : 'No hay módulos. Creá el primero para comenzar.';
 
             if (loadingCourses && filteredMods.length === 0) {
@@ -1849,23 +1983,23 @@ export default function AdminCourses() {
               const modLessons = lessons.filter(l => l.module_id === mod.id).sort((a, b) => a.order_index - b.order_index);
               const isOpen = expandedModule === mod.id;
               return (
-                <div key={mod.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden ${isWorkshopTab ? 'border-amber-100' : isCampoTab ? 'border-violet-100' : 'border-slate-200'}`}>
+                <div key={mod.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden ${isWorkshopTab ? 'border-amber-100' : 'border-slate-200'}`}>
                   {/* Module header */}
                   <div
-                    className={`flex items-center gap-3 p-4 cursor-pointer transition-colors ${isWorkshopTab ? 'hover:bg-amber-50/40' : isCampoTab ? 'hover:bg-violet-50/40' : 'hover:bg-slate-50'}`}
+                    className={`flex items-center gap-3 p-4 cursor-pointer transition-colors ${isWorkshopTab ? 'hover:bg-amber-50/40' : 'hover:bg-slate-50'}`}
                     onClick={() => setExpandedModule(isOpen ? null : mod.id)}
                   >
                     <IoReorderFourOutline size={18} className="text-slate-300" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs font-bold ${isWorkshopTab ? 'text-amber-500' : isCampoTab ? 'text-violet-500' : 'text-slate-400'}`}>
-                          {isWorkshopTab ? '🎯 Taller' : isCampoTab ? '📓 CAMPO' : `Módulo ${mod.order_index}`}
+                        <span className={`text-xs font-bold ${isWorkshopTab ? 'text-amber-500' : 'text-slate-400'}`}>
+                          {isWorkshopTab ? '🎯 Taller' : `Módulo ${mod.order_index}`}
                         </span>
                         {!mod.is_published && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">Oculto</span>}
                       </div>
                       <h4 className="font-bold text-slate-900 truncate">{mod.title}</h4>
                     </div>
-                    <span className="text-xs text-slate-400 font-medium shrink-0">{modLessons.length} {isCampoTab ? 'prácticas' : 'temas'}</span>
+                    <span className="text-xs text-slate-400 font-medium shrink-0">{modLessons.length} temas</span>
                     <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setModuleModal({ open: true, mod, courseId: selectedCourse.id })} className={`p-1.5 text-slate-400 hover:${accentColor}`}>
                         <IoPencilOutline size={14} />
@@ -1879,9 +2013,9 @@ export default function AdminCourses() {
 
                   {/* Lessons */}
                   {isOpen && (
-                    <div className={`border-t ${isWorkshopTab ? 'border-amber-100' : isCampoTab ? 'border-violet-100' : 'border-slate-100'}`}>
+                    <div className={`border-t ${isWorkshopTab ? 'border-amber-100' : 'border-slate-100'}`}>
                       {modLessons.map((lesson, idx) => (
-                        <div key={lesson.id} className={`flex items-center gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50/50 group ${isWorkshopTab ? 'border-amber-50' : isCampoTab ? 'border-violet-50' : 'border-slate-50'}`}>
+                        <div key={lesson.id} className={`flex items-center gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50/50 group ${isWorkshopTab ? 'border-amber-50' : 'border-slate-50'}`}>
                           <span className="text-xs text-slate-400 font-mono w-4 shrink-0">{idx + 1}</span>
                           <IoVideocamOutline size={14} className="text-slate-300 shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -1895,10 +2029,10 @@ export default function AdminCourses() {
                             )}
                           </div>
                           <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => toggleLessonPublished(lesson)} title={lesson.is_published ? 'Ocultar' : 'Publicar'} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : isCampoTab ? 'hover:text-violet-500' : 'hover:text-[#00A9CE]'}`}>
+                            <button onClick={() => toggleLessonPublished(lesson)} title={lesson.is_published ? 'Ocultar' : 'Publicar'} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : 'hover:text-[#00A9CE]'}`}>
                               {lesson.is_published ? <IoEyeOutline size={14} /> : <IoEyeOffOutline size={14} />}
                             </button>
-                            <button onClick={() => setLessonModal({ open: true, lesson, moduleId: mod.id, moduleType: targetType })} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : isCampoTab ? 'hover:text-violet-500' : 'hover:text-[#00A9CE]'}`}>
+                            <button onClick={() => setLessonModal({ open: true, lesson, moduleId: mod.id, moduleType: targetType })} className={`p-1.5 text-slate-400 ${isWorkshopTab ? 'hover:text-amber-500' : 'hover:text-[#00A9CE]'}`}>
                               <IoPencilOutline size={14} />
                             </button>
                             <button onClick={() => deleteLesson(lesson.id)} className="p-1.5 text-slate-400 hover:text-red-500">
@@ -1915,7 +2049,7 @@ export default function AdminCourses() {
                           onClick={() => setLessonModal({ open: true, lesson: null, moduleId: mod.id, moduleType: targetType })}
                           className={`flex items-center gap-1.5 text-xs font-bold hover:underline ${accentColor}`}
                         >
-                          <IoAddOutline size={14} /> {isCampoTab ? 'Agregar práctica' : 'Agregar tema'}
+                          <IoAddOutline size={14} /> Agregar tema
                         </button>
                       </div>
                     </div>
