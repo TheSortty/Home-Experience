@@ -2,10 +2,12 @@ import { createClient } from '@/utils/supabase/server';
 import { normalizeImageUrl } from '@/src/services/imageUrl';
 import { isAdminRole } from '@/src/services/roleService';
 import { lessonDueMs } from '@/src/services/lessonDeadline';
+import { resolveCourseAccess } from '@/src/services/courseAccess';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { IoArrowBackOutline, IoDocumentTextOutline, IoEyeOutline } from 'react-icons/io5';
 import CursoContent, { type CampoClass, type ModuleNode, type ResourceWithContext } from './CursoContent';
+import CursoBloqueado from './CursoBloqueado';
 
 export default async function CursoDetallePage({
   params,
@@ -28,9 +30,8 @@ export default async function CursoDetallePage({
 
   const isOrganizer = isAdminRole(profile.role ?? '');
 
-  // NOTA: Por el momento permitimos que CUALQUIER alumno autenticado acceda
-  // a los cursos publicados, sin requerir enrollment. El RLS de courses ya
-  // garantiza que solo se vean los publicados.
+  // El curso en sí se puede mirar aunque no lo tengas (vidriera). El contenido
+  // no: más abajo cortamos si no hay acceso, y el RLS lo respalda.
   const { data: course } = await supabase
     .from('courses')
     .select('id, title, description, cover_image_url, is_published')
@@ -39,6 +40,14 @@ export default async function CursoDetallePage({
     .maybeSingle();
 
   if (!course) notFound();
+
+  // ── Control de acceso ──────────────────────────────────────────────────────
+  // Sin el curso asignado (course_access), el alumno ve la vidriera en vez del
+  // contenido. Staff y coaches pasan siempre.
+  const access = await resolveCourseAccess(supabase, profile.id, profile.role);
+  if (!access.can(cursoId)) {
+    return <CursoBloqueado course={course} />;
+  }
 
   // Buscamos enrollment opcional para mostrar progreso real si lo tiene.
   const { data: courseCycles } = await supabase

@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import {
   IoArrowBackOutline,
   IoCheckmarkCircle,
@@ -12,6 +12,7 @@ import LessonViewer, { type LessonResource, type LessonVideo } from './LessonVie
 import type { LessonPost } from './LessonForum';
 import type { SubmissionTabData } from '@/src/types/submissions';
 import { lessonDueMs } from '@/src/services/lessonDeadline';
+import { resolveCourseAccess } from '@/src/services/courseAccess';
 import { getStudentThread } from '../../actions';
 
 
@@ -68,9 +69,13 @@ export default async function ClasePage({
   // lessons for review.
   const canPreview = isAdmin;
 
-  // Por el momento permitimos acceder a cualquier clase publicada sin enrollment.
-  // El RLS de lessons/modules/courses ya garantiza que solo se vean las publicadas.
-  // Si hay enrollment se usa para tracking de progreso individual.
+  // Sin acceso al curso no hay clase: se vuelve a la vidriera del programa.
+  // El RLS respalda esto (lessons/lesson_videos/lesson_resources), pero cortamos
+  // acá para no mostrar un 404 confuso.
+  const access = await resolveCourseAccess(supabase, profile?.id, profile?.role);
+  if (!access.can(cursoId)) redirect(`/cursos/${cursoId}`);
+
+  // El enrollment se usa para el tracking de progreso individual.
   const { data: courseCycles } = await supabase
     .from('cycles')
     .select('id')

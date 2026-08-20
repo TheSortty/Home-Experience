@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
+import { resolveCourseAccess } from '@/src/services/courseAccess';
 import ForumClient, { type ForumPost, type CourseTab } from './ForumClient';
 
 export default async function CampusComunidadPage() {
@@ -19,17 +20,20 @@ export default async function CampusComunidadPage() {
     if (profile) {
       profileId = profile.id;
 
-      // All published courses are visible to any campus user — same logic as
-      // the courses page. The enrollment system and the LMS course system are
-      // not yet linked via cycle.course_id, so we load courses directly.
+      // El foro es por curso: sólo se ven (y se escriben) las conversaciones de
+      // los programas a los que la persona tiene acceso. Staff y coaches ven
+      // todos. El RLS de forum_posts sostiene lo mismo del lado de la base.
       const { data: publishedCourses } = await supabase
         .from('courses')
         .select('id, title')
         .eq('is_published', true)
         .order('title');
 
-      const courseIds: string[] = (publishedCourses || []).map((c: any) => c.id);
-      courses = (publishedCourses || []).map((c: any) => ({ id: c.id, title: c.title }));
+      const access = await resolveCourseAccess(supabase, profile.id, profile.role);
+      const visibleCourses = (publishedCourses || []).filter((c: any) => access.can(c.id));
+
+      const courseIds: string[] = visibleCourses.map((c: any) => c.id);
+      courses = visibleCourses.map((c: any) => ({ id: c.id, title: c.title }));
 
       if (courseIds.length > 0) {
         // Load all posts (root + replies) for these courses, joining lesson +

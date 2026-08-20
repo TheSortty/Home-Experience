@@ -286,7 +286,9 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
           </div>
           <button
             onClick={() => setShowNewPost(true)}
-            className="flex items-center justify-center gap-2 bg-[#00A9CE] hover:bg-blue-600 text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm shrink-0"
+            disabled={courses.length === 0}
+            title={courses.length === 0 ? 'El foro se abre cuando tengas un programa asignado' : undefined}
+            className="flex items-center justify-center gap-2 bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-40 disabled:hover:bg-[#00A9CE] text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm shrink-0"
           >
             <IoAddOutline size={18} /> Abrir conversación
           </button>
@@ -344,7 +346,11 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
             <div className="p-12 text-center bg-cream/40 rounded-2xl border border-cream-deep">
               <IoChatbubbleEllipsesOutline size={40} className="mx-auto text-terra-soft mb-3" />
               <p className="text-slate-600 font-serif italic">
-                {search ? 'Nada acá. Probá con otra palabra.' : 'Acá empieza la primera conversación. ¿Querés abrirla vos?'}
+                {courses.length === 0
+                  ? 'El foro se abre junto con tu programa. Cuando te sumes a uno, vas a encontrar acá las conversaciones de tu grupo.'
+                  : search
+                  ? 'Nada acá. Probá con otra palabra.'
+                  : 'Acá empieza la primera conversación. ¿Querés abrirla vos?'}
               </p>
             </div>
           ) : (

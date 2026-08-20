@@ -1,10 +1,15 @@
 import { createClient } from '@/utils/supabase/server';
 import { resolveRole } from '@/src/services/roleService';
-import { getStudentProgress } from '@/src/services/progressService';
+import { getStudentProgress, getLmsCourseProgress, type LmsCourseProgress } from '@/src/services/progressService';
 import { normalizeImageUrl } from '@/src/services/imageUrl';
 import { resolveViewMode } from '@/src/services/campusViewMode';
+import { resolveCourseAccess } from '@/src/services/courseAccess';
+import { CAMPUS_WHATSAPP } from '@/src/services/contact';
 import Link from 'next/link';
-import { IoBookOutline, IoCheckmarkCircleOutline, IoPlayCircleOutline, IoCalendarOutline, IoEyeOutline } from 'react-icons/io5';
+import {
+  IoBookOutline, IoCheckmarkCircleOutline, IoPlayCircleOutline, IoCalendarOutline,
+  IoEyeOutline, IoLockClosedOutline, IoChatbubbleEllipsesOutline,
+} from 'react-icons/io5';
 
 const GRADIENTS = [
   'from-[#00A9CE] to-blue-600',
@@ -80,12 +85,21 @@ export default async function CampusCursosPage({
     hasLms: boolean;
   };
 
-  let courses: CourseCard[] = [];
+  /** Curso publicado al que este alumno NO tiene acceso: se muestra en vidriera. */
+  type LockedCourse = {
+    id: string;
+    title: string;
+    description: string | null;
+    coverImage: string | null;
+  };
+
+  const courses: CourseCard[] = [];
+  const lockedCourses: LockedCourse[] = [];
 
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, role')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -94,13 +108,18 @@ export default async function CampusCursosPage({
     // the alumno actually has access to.
     const canSeeEverything = viewMode === 'organizer';
 
-    // Siempre cargamos TODOS los cursos publicados — visibles para todos.
-    // No depende de profile ni de enrollment.
+    // El catálogo completo se carga siempre: los cursos sin acceso no se
+    // ocultan, se muestran bloqueados (vidriera). Lo que queda fuera de
+    // alcance es el CONTENIDO — eso lo garantiza el RLS.
     const { data: allCourses } = await supabase
       .from('courses')
       .select('id, title, description, cover_image_url')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
+
+    // Quién tiene acceso a qué: asignación directa del organizador
+    // (course_access). Staff y coaches ven todo el catálogo.
+    const access = await resolveCourseAccess(supabase, profile?.id, profile?.role);
 
     // Si hay perfil, mezclamos el progreso real del alumno
     const studentProgressList = profile && !canSeeEverything
@@ -110,10 +129,29 @@ export default async function CampusCursosPage({
       studentProgressList.filter(p => p.courseId).map(p => [p.courseId as string, p])
     );
 
-    courses = (allCourses || []).map(c => {
+    // get_student_progress sólo alcanza los cursos que cuelgan de un ciclo.
+    // Los cursos asignados directo se cuentan sobre el propio curso.
+    const unlinkedCourseIds = (allCourses || [])
+      .filter(c => (canSeeEverything || access.can(c.id)) && !progressByCourse.has(c.id))
+      .map(c => c.id);
+    const lmsProgressByCourse = profile && !canSeeEverything
+      ? await getLmsCourseProgress(supabase, profile.id, unlinkedCourseIds)
+      : new Map<string, LmsCourseProgress>();
+
+    for (const c of (allCourses || [])) {
+      if (!canSeeEverything && !access.can(c.id)) {
+        lockedCourses.push({
+          id: c.id,
+          title: c.title,
+          description: c.description,
+          coverImage: c.cover_image_url,
+        });
+        continue;
+      }
+
       const progress = progressByCourse.get(c.id);
       if (progress) {
-        return {
+        courses.push({
           enrollmentId: progress.enrollmentId,
           enrollmentStatus: progress.enrollmentStatus,
           cycleId: progress.cycleId,
@@ -126,23 +164,28 @@ export default async function CampusCursosPage({
           completedLessons: progress.completedLessons,
           progressPercent: progress.progressPercent,
           hasLms: true,
-        };
+        });
+        continue;
       }
-      return {
+
+      const lms = lmsProgressByCourse.get(c.id);
+      courses.push({
         enrollmentId: `available-${c.id}`,
-        enrollmentStatus: canSeeEverything ? 'active' : 'available',
+        enrollmentStatus: canSeeEverything
+          ? 'active'
+          : lms && lms.progressPercent === 100 ? 'completed' : 'available',
         cycleId: '',
-        cycleName: canSeeEverything ? 'Ciclo Preview' : 'Programa Disponible',
+        cycleName: canSeeEverything ? 'Ciclo Preview' : 'Curso del campus',
         courseId: c.id,
         courseTitle: c.title,
         courseDescription: c.description,
         coverImage: c.cover_image_url,
-        totalLessons: 0,
-        completedLessons: 0,
-        progressPercent: 0,
+        totalLessons: lms?.totalLessons ?? 0,
+        completedLessons: lms?.completedLessons ?? 0,
+        progressPercent: lms?.progressPercent ?? 0,
         hasLms: true,
-      };
-    });
+      });
+    }
   }
 
   const filtered =
@@ -192,7 +235,11 @@ export default async function CampusCursosPage({
         {filtered.length === 0 ? (
           <div className="col-span-3 bg-cream border-2 border-dashed border-cream-deep rounded-2xl p-12 text-center">
             <IoBookOutline size={40} className="mx-auto text-terra-soft mb-3" />
-            <p className="text-slate-600 font-serif italic">Por ahora no hay nada en esta categoría.</p>
+            <p className="text-slate-600 font-serif italic">
+              {courses.length === 0 && lockedCourses.length > 0
+                ? 'Todavía no tenés ningún programa asignado. Mirá abajo lo que se está gestando.'
+                : 'Por ahora no hay nada en esta categoría.'}
+            </p>
           </div>
         ) : (
           filtered.map((course, idx) => {
@@ -304,6 +351,79 @@ export default async function CampusCursosPage({
           </div>
         </div>
       </section>
+
+      {/* VIDRIERA — programas del campus a los que todavía no tenés acceso.
+          Se ven (título, portada, de qué va) pero el contenido está cerrado. */}
+      {lockedCourses.length > 0 && (
+        <section className="space-y-5 pt-4">
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <h2 className="font-serif text-xl font-medium tracking-tight text-slate-500 flex items-center gap-2">
+              <IoLockClosedOutline size={16} className="text-slate-400" />
+              Otros caminos posibles
+            </h2>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {lockedCourses.map((course) => {
+              const coverSrc = normalizeImageUrl(course.coverImage, 'w800');
+              return (
+                <div
+                  key={course.id}
+                  className="bg-white/70 rounded-2xl border border-slate-200 overflow-hidden flex flex-col h-full"
+                >
+                  <div className="h-40 relative overflow-hidden bg-slate-200">
+                    {coverSrc && (
+                      <img
+                        src={coverSrc}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover grayscale opacity-50"
+                        referrerPolicy="no-referrer"
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-slate-900/25 backdrop-blur-[2px]" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-11 h-11 rounded-full bg-white/85 flex items-center justify-center shadow-sm">
+                        <IoLockClosedOutline size={20} className="text-slate-500" />
+                      </div>
+                    </div>
+                    <div className="absolute top-3 right-3">
+                      <span className="px-2.5 py-1 bg-slate-900/45 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider">
+                        Sin acceso
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-5 flex flex-col flex-1">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Programa HOME
+                    </span>
+                    <h3 className="text-lg font-bold text-slate-700 mb-2">{course.title}</h3>
+                    {course.description && (
+                      <p className="text-sm text-slate-500 mb-4 line-clamp-2">{course.description}</p>
+                    )}
+
+                    <div className="mt-auto pt-2">
+                      <a
+                        href={`https://wa.me/${CAMPUS_WHATSAPP}?text=${encodeURIComponent(
+                          `¡Hola! Me interesa sumarme a "${course.title}" en el campus de HOME.`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-700 transition-colors"
+                      >
+                        <IoChatbubbleEllipsesOutline size={16} />
+                        Quiero saber más
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

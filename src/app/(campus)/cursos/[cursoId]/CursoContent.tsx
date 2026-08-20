@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   IoCheckmarkCircle,
+  IoChevronDownOutline,
   IoPlayCircleOutline,
   IoDocumentTextOutline,
   IoEllipseOutline,
@@ -300,6 +301,39 @@ function MiniStat({
   );
 }
 
+/**
+ * Plegado de una lista de módulos. Arrancan cerrados salvo `initialOpenId`, así
+ * el índice completo del curso entra en pantalla sin tanto scroll.
+ */
+function useModuleToggles(modules: ModuleNode[], initialOpenId: string | null) {
+  const [openIds, setOpenIds] = useState<Set<string>>(() => (initialOpenId ? new Set([initialOpenId]) : new Set()));
+
+  const toggle = (id: string) => setOpenIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+
+  const allOpen = modules.length > 0 && modules.every((m) => openIds.has(m.id));
+  const toggleAll = () => setOpenIds(allOpen ? new Set() : new Set(modules.map((m) => m.id)));
+
+  return { openIds, toggle, allOpen, toggleAll };
+}
+
+function ToggleAllButton({ allOpen, onClick }: { allOpen: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-xs font-bold text-slate-500 hover:text-[#00A9CE] transition-colors flex items-center gap-1 shrink-0"
+    >
+      <IoChevronDownOutline size={14} className={`transition-transform ${allOpen ? 'rotate-180' : ''}`} />
+      {allOpen ? 'Contraer todo' : 'Expandir todo'}
+    </button>
+  );
+}
+
 function ModulosTab({
   cursoId, modules, completedSet, nextLessonId, isOrganizer,
 }: {
@@ -309,18 +343,37 @@ function ModulosTab({
   nextLessonId: string | null;
   isOrganizer: boolean;
 }) {
+  // Módulo en curso: el primero sin terminar cuyos anteriores están completos.
+  const currentModuleId = useMemo(() => {
+    if (isOrganizer) return null;
+    for (let i = 0; i < modules.length; i++) {
+      const mod = modules[i];
+      const done = mod.lessons.filter((l) => completedSet.has(l.id)).length;
+      if (done < mod.lessons.length && (i === 0 || modules[i - 1].lessons.every((l) => completedSet.has(l.id)))) {
+        return mod.id;
+      }
+    }
+    return null;
+  }, [modules, completedSet, isOrganizer]);
+
+  const { openIds, toggle, allOpen, toggleAll } = useModuleToggles(modules, currentModuleId ?? modules[0]?.id ?? null);
+
   if (modules.length === 0) {
     return <EmptyState icon={<IoSchoolOutline size={36} />} title="Contenido en preparación" message="Los módulos de este programa estarán disponibles pronto." />;
   }
 
   return (
     <div className="space-y-4">
-      {modules.map((mod, modIdx) => {
+      <div className="flex justify-end -mb-1">
+        <ToggleAllButton allOpen={allOpen} onClick={toggleAll} />
+      </div>
+
+      {modules.map((mod) => {
         const modCompleted = mod.lessons.filter((l) => completedSet.has(l.id)).length;
         const modTotal = mod.lessons.length;
-        const isCurrentModule = !isOrganizer
-          && modCompleted < modTotal
-          && (modIdx === 0 || modules[modIdx - 1].lessons.every((l) => completedSet.has(l.id)));
+        const isCurrentModule = mod.id === currentModuleId;
+        const isOpen = openIds.has(mod.id);
+        const hasNext = !isOrganizer && nextLessonId !== null && mod.lessons.some((l) => l.id === nextLessonId);
 
         return (
           <div
@@ -329,10 +382,15 @@ function ModulosTab({
               isCurrentModule ? 'border-l-4 border-l-[#00A9CE] border-slate-200' : 'border-slate-200'
             }`}
           >
-            <div className={`p-5 border-b flex justify-between items-center ${
-              isCurrentModule ? 'bg-white border-slate-100' : 'bg-slate-50 border-slate-200'
-            }`}>
-              <div>
+            <button
+              type="button"
+              onClick={() => toggle(mod.id)}
+              aria-expanded={isOpen}
+              className={`w-full text-left p-5 flex justify-between items-center gap-4 transition-colors ${
+                isCurrentModule ? 'bg-white hover:bg-slate-50' : 'bg-slate-50 hover:bg-slate-100'
+              } ${isOpen ? `border-b ${isCurrentModule ? 'border-slate-100' : 'border-slate-200'}` : ''}`}
+            >
+              <div className="min-w-0">
                 <p className={`text-xs font-bold uppercase tracking-widest mb-1 ${
                   isCurrentModule ? 'text-[#00A9CE]' : 'text-slate-500'
                 }`}>
@@ -341,70 +399,83 @@ function ModulosTab({
                 </p>
                 <h3 className="text-lg font-bold text-slate-900">{mod.title}</h3>
               </div>
-              {isOrganizer ? (
-                <div className="text-xs font-bold text-amber-600">{modTotal} temas</div>
-              ) : modCompleted === modTotal && modTotal > 0 ? (
-                <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
-                  <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
-                </div>
-              ) : (
-                <div className={`font-bold text-sm ${isCurrentModule ? 'text-[#00A9CE]' : 'text-slate-500'}`}>
-                  {modCompleted}/{modTotal}
-                </div>
-              )}
-            </div>
+              <div className="flex items-center gap-3 shrink-0">
+                {!isOpen && hasNext && (
+                  <span className="hidden sm:inline text-xs font-bold bg-[#00A9CE]/10 text-[#00A9CE] px-2 py-1 rounded">
+                    Continuar acá
+                  </span>
+                )}
+                {isOrganizer ? (
+                  <div className="text-xs font-bold text-amber-600">{modTotal} temas</div>
+                ) : modCompleted === modTotal && modTotal > 0 ? (
+                  <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
+                    <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
+                  </div>
+                ) : (
+                  <div className={`font-bold text-sm ${isCurrentModule ? 'text-[#00A9CE]' : 'text-slate-500'}`}>
+                    {modCompleted}/{modTotal}
+                  </div>
+                )}
+                <IoChevronDownOutline
+                  size={20}
+                  className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                />
+              </div>
+            </button>
 
-            <div className="divide-y divide-slate-100">
-              {mod.lessons.map((lesson) => {
-                const isDone = !isOrganizer && completedSet.has(lesson.id);
-                const isNext = !isOrganizer && lesson.id === nextLessonId;
-                return (
-                  <Link
-                    key={lesson.id}
-                    href={`/cursos/${cursoId}/${lesson.id}`}
-                    className={`flex items-center justify-between p-4 transition-colors group ${
-                      isNext ? 'bg-[#00A9CE]/5 hover:bg-[#00A9CE]/10' : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      {isDone ? (
-                        <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
-                      ) : isNext ? (
-                        <div className="w-6 h-6 rounded-full border-2 border-[#00A9CE] flex items-center justify-center shrink-0">
-                          <div className="w-2 h-2 bg-[#00A9CE] rounded-full" />
+            {isOpen && (
+              <div className="divide-y divide-slate-100">
+                {mod.lessons.map((lesson) => {
+                  const isDone = !isOrganizer && completedSet.has(lesson.id);
+                  const isNext = !isOrganizer && lesson.id === nextLessonId;
+                  return (
+                    <Link
+                      key={lesson.id}
+                      href={`/cursos/${cursoId}/${lesson.id}`}
+                      className={`flex items-center justify-between p-4 transition-colors group ${
+                        isNext ? 'bg-[#00A9CE]/5 hover:bg-[#00A9CE]/10' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        {isDone ? (
+                          <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
+                        ) : isNext ? (
+                          <div className="w-6 h-6 rounded-full border-2 border-[#00A9CE] flex items-center justify-center shrink-0">
+                            <div className="w-2 h-2 bg-[#00A9CE] rounded-full" />
+                          </div>
+                        ) : (
+                          <IoEllipseOutline size={24} className={isOrganizer ? 'text-slate-400 shrink-0' : 'text-slate-300 shrink-0'} />
+                        )}
+                        <div>
+                          <p className={`text-sm font-bold transition-colors ${
+                            isNext ? 'text-[#00A9CE]' : isDone ? 'text-slate-700 group-hover:text-[#00A9CE]' : 'text-slate-900 group-hover:text-[#00A9CE]'
+                          }`}>
+                            {lesson.order_index}. {lesson.title}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                            {lesson.video_url ? (
+                              <>
+                                <IoPlayCircleOutline className="inline" />
+                                Video{lesson.duration_seconds > 0 && ` · ${formatDuration(lesson.duration_seconds)}`}
+                              </>
+                            ) : (
+                              <>
+                                <IoDocumentTextOutline className="inline" /> Lectura
+                              </>
+                            )}
+                          </p>
                         </div>
-                      ) : (
-                        <IoEllipseOutline size={24} className={isOrganizer ? 'text-slate-400 shrink-0' : 'text-slate-300 shrink-0'} />
-                      )}
-                      <div>
-                        <p className={`text-sm font-bold transition-colors ${
-                          isNext ? 'text-[#00A9CE]' : isDone ? 'text-slate-700 group-hover:text-[#00A9CE]' : 'text-slate-900 group-hover:text-[#00A9CE]'
-                        }`}>
-                          {lesson.order_index}. {lesson.title}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                          {lesson.video_url ? (
-                            <>
-                              <IoPlayCircleOutline className="inline" />
-                              Video{lesson.duration_seconds > 0 && ` · ${formatDuration(lesson.duration_seconds)}`}
-                            </>
-                          ) : (
-                            <>
-                              <IoDocumentTextOutline className="inline" /> Lectura
-                            </>
-                          )}
-                        </p>
                       </div>
-                    </div>
-                    {isNext && (
-                      <span className="text-xs font-bold bg-white text-[#00A9CE] px-2 py-1 rounded shadow-sm border border-[#00A9CE]/20 shrink-0">
-                        Continuar
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
+                      {isNext && (
+                        <span className="text-xs font-bold bg-white text-[#00A9CE] px-2 py-1 rounded shadow-sm border border-[#00A9CE]/20 shrink-0">
+                          Continuar
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
@@ -421,79 +492,109 @@ function TalleresTab({
   nextLessonId: string | null;
   isOrganizer: boolean;
 }) {
+  // Abre el taller donde está la próxima clase; si no hay, el primero.
+  const initialOpenId = useMemo(() => {
+    if (!isOrganizer && nextLessonId) {
+      const withNext = workshopModules.find((m) => m.lessons.some((l) => l.id === nextLessonId));
+      if (withNext) return withNext.id;
+    }
+    return workshopModules[0]?.id ?? null;
+  }, [workshopModules, nextLessonId, isOrganizer]);
+
+  const { openIds, toggle, allOpen, toggleAll } = useModuleToggles(workshopModules, initialOpenId);
+
   if (workshopModules.length === 0) {
     return <EmptyState icon={<IoFlashOutline size={36} />} title="Sin talleres todavía" message="Cuando se publiquen talleres complementarios al programa, los vas a ver aquí." />;
   }
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-500 -mb-1">Módulos prácticos que complementan el programa.</p>
+      <div className="flex justify-between items-center gap-4 -mb-1">
+        <p className="text-sm text-slate-500">Módulos prácticos que complementan el programa.</p>
+        <ToggleAllButton allOpen={allOpen} onClick={toggleAll} />
+      </div>
       {workshopModules.map((mod) => {
         const modCompleted = !isOrganizer ? mod.lessons.filter((l) => completedSet.has(l.id)).length : 0;
         const modTotal = mod.lessons.length;
         const allDone = !isOrganizer && modCompleted === modTotal && modTotal > 0;
+        const isOpen = openIds.has(mod.id);
         return (
           <div key={mod.id} className="bg-white rounded-2xl border border-l-4 border-amber-200 border-l-amber-400 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-amber-100 bg-amber-50/40 flex justify-between items-center">
-              <div>
+            <button
+              type="button"
+              onClick={() => toggle(mod.id)}
+              aria-expanded={isOpen}
+              className={`w-full text-left p-5 bg-amber-50/40 hover:bg-amber-50 transition-colors flex justify-between items-center gap-4 ${
+                isOpen ? 'border-b border-amber-100' : ''
+              }`}
+            >
+              <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-widest mb-1 text-amber-600">🎯 Taller</p>
                 <h3 className="text-lg font-bold text-slate-900">{mod.title}</h3>
               </div>
-              {isOrganizer ? (
-                <div className="text-xs font-bold text-amber-600">{modTotal} temas</div>
-              ) : allDone ? (
-                <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
-                  <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
-                </div>
-              ) : (
-                <div className="font-bold text-sm text-amber-600">{modCompleted}/{modTotal}</div>
-              )}
-            </div>
-            <div className="divide-y divide-amber-50">
-              {mod.lessons.map((lesson) => {
-                const isDone = !isOrganizer && completedSet.has(lesson.id);
-                const isNext = !isOrganizer && lesson.id === nextLessonId;
-                return (
-                  <Link
-                    key={lesson.id}
-                    href={`/cursos/${cursoId}/${lesson.id}`}
-                    className={`flex items-center justify-between p-4 transition-colors group ${
-                      isNext ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      {isDone ? (
-                        <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
-                      ) : isNext ? (
-                        <div className="w-6 h-6 rounded-full border-2 border-amber-400 flex items-center justify-center shrink-0">
-                          <div className="w-2 h-2 bg-amber-400 rounded-full" />
+              <div className="flex items-center gap-3 shrink-0">
+                {isOrganizer ? (
+                  <div className="text-xs font-bold text-amber-600">{modTotal} temas</div>
+                ) : allDone ? (
+                  <div className="text-emerald-500 font-bold text-sm flex items-center gap-1">
+                    <IoCheckmarkCircle size={20} /> {modTotal}/{modTotal}
+                  </div>
+                ) : (
+                  <div className="font-bold text-sm text-amber-600">{modCompleted}/{modTotal}</div>
+                )}
+                <IoChevronDownOutline
+                  size={20}
+                  className={`text-amber-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                />
+              </div>
+            </button>
+            {isOpen && (
+              <div className="divide-y divide-amber-50">
+                {mod.lessons.map((lesson) => {
+                  const isDone = !isOrganizer && completedSet.has(lesson.id);
+                  const isNext = !isOrganizer && lesson.id === nextLessonId;
+                  return (
+                    <Link
+                      key={lesson.id}
+                      href={`/cursos/${cursoId}/${lesson.id}`}
+                      className={`flex items-center justify-between p-4 transition-colors group ${
+                        isNext ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        {isDone ? (
+                          <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
+                        ) : isNext ? (
+                          <div className="w-6 h-6 rounded-full border-2 border-amber-400 flex items-center justify-center shrink-0">
+                            <div className="w-2 h-2 bg-amber-400 rounded-full" />
+                          </div>
+                        ) : (
+                          <IoEllipseOutline size={24} className="text-amber-200 shrink-0" />
+                        )}
+                        <div>
+                          <p className={`text-sm font-bold transition-colors ${
+                            isNext ? 'text-amber-600' : isDone ? 'text-slate-700 group-hover:text-amber-600' : 'text-slate-900 group-hover:text-amber-600'
+                          }`}>
+                            {lesson.order_index}. {lesson.title}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                            {lesson.video_url ? (
+                              <><IoPlayCircleOutline className="inline" /> Video{lesson.duration_seconds > 0 && ` · ${formatDuration(lesson.duration_seconds)}`}</>
+                            ) : (
+                              <><IoDocumentTextOutline className="inline" /> Lectura</>
+                            )}
+                          </p>
                         </div>
-                      ) : (
-                        <IoEllipseOutline size={24} className="text-amber-200 shrink-0" />
-                      )}
-                      <div>
-                        <p className={`text-sm font-bold transition-colors ${
-                          isNext ? 'text-amber-600' : isDone ? 'text-slate-700 group-hover:text-amber-600' : 'text-slate-900 group-hover:text-amber-600'
-                        }`}>
-                          {lesson.order_index}. {lesson.title}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                          {lesson.video_url ? (
-                            <><IoPlayCircleOutline className="inline" /> Video{lesson.duration_seconds > 0 && ` · ${formatDuration(lesson.duration_seconds)}`}</>
-                          ) : (
-                            <><IoDocumentTextOutline className="inline" /> Lectura</>
-                          )}
-                        </p>
                       </div>
-                    </div>
-                    {isNext && (
-                      <span className="text-xs font-bold bg-white text-amber-600 px-2 py-1 rounded shadow-sm border border-amber-200 shrink-0">
-                        Continuar
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
+                      {isNext && (
+                        <span className="text-xs font-bold bg-white text-amber-600 px-2 py-1 rounded shadow-sm border border-amber-200 shrink-0">
+                          Continuar
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}

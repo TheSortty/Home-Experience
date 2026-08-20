@@ -1,15 +1,16 @@
 import React from 'react';
 import Link from 'next/link';
 import {
-  IoPlayCircleOutline, IoCheckmarkCircleOutline, IoFlameOutline,
+  IoPlayCircleOutline, IoDocumentTextOutline, IoCheckmarkCircleOutline, IoFlameOutline,
   IoTimeOutline, IoChevronForwardOutline, IoBookOutline, IoCalendarOutline,
   IoEyeOutline,
 } from 'react-icons/io5';
 import { createClient } from '@/utils/supabase/server';
 import { resolveRole } from '@/src/services/roleService';
-import { getStudentProgress } from '@/src/services/progressService';
+import { getStudentProgress, getLmsCourseProgress, type LmsCourseProgress } from '@/src/services/progressService';
 import { normalizeImageUrl } from '@/src/services/imageUrl';
 import { resolveViewMode } from '@/src/services/campusViewMode';
+import { resolveCourseAccess } from '@/src/services/courseAccess';
 import QuoteOfTheDay from '../_components/QuoteOfTheDay';
 
 const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -73,7 +74,13 @@ export default async function CampusDashboardPage({
   let enrollments: any[] = [];
   let completedCount = 0;
   let totalLessonsCount = 0;
-  let nextLesson: { lessonId: string; lessonTitle: string; courseId: string; moduleName: string; cycleName: string; videoUrl: string | null } | null = null;
+  // `mediaLabel` es lo que la tarjeta muestra cuando la clase no tiene video:
+  // el tipo de material adjunto ("PDF") o, si no hay adjuntos, "Lectura".
+  let nextLesson: {
+    lessonId: string; lessonTitle: string; courseId: string;
+    moduleName: string; cycleName: string;
+    videoUrl: string | null; mediaLabel: string;
+  } | null = null;
   let upcomingSessions: any[] = [];
 
   if (user) {
@@ -82,11 +89,11 @@ export default async function CampusDashboardPage({
     // crashing the Worker response.
 
     // Profile ────────────────────────────────────────────────────────────────
-    let profile: { first_name: string | null; id: string } | null = null;
+    let profile: { first_name: string | null; id: string; role: string | null } | null = null;
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('first_name, id')
+        .select('first_name, id, role')
         .eq('user_id', user.id)
         .maybeSingle();
       profile = data;
@@ -97,12 +104,17 @@ export default async function CampusDashboardPage({
     const canSeeEverything = viewMode === 'organizer';
 
     // Courses ────────────────────────────────────────────────────────────────
+    // Sólo los programas que la persona tiene asignados. Los demás existen y se
+    // ven bloqueados, pero en la vidriera de /cursos, no en su tablero.
     let publishedCourses: any[] = [];
     try {
       const { data: allCourses } = await supabase
         .from('courses')
         .select('id, title, cover_image_url, is_published');
-      publishedCourses = (allCourses || []).filter((c: any) => c.is_published);
+      const access = await resolveCourseAccess(supabase, profile?.id, profile?.role);
+      publishedCourses = (allCourses || []).filter(
+        (c: any) => c.is_published && (canSeeEverything || access.can(c.id))
+      );
     } catch { /* safe default: [] */ }
 
     // Student progress ───────────────────────────────────────────────────────
@@ -128,19 +140,49 @@ export default async function CampusDashboardPage({
           moduleName: prog.nextModuleTitle || 'Módulo',
           cycleName: prog.cycleName || 'Programa',
           videoUrl: null,
+          mediaLabel: 'Lectura',
         };
       }
     }
 
-    // Construir enrollments con TODOS los cursos publicados (no solo los del alumno)
+    // get_student_progress sólo alcanza los cursos que cuelgan de un ciclo. Los
+    // cursos asignados directo (course_access) se cuentan sobre el propio curso.
+    const unlinkedCourseIds = publishedCourses
+      .filter((c: any) => !progressByCourse.has(c.id))
+      .map((c: any) => c.id);
+    const lmsProgressByCourse = profile?.id && !canSeeEverything
+      ? await getLmsCourseProgress(supabase, profile.id, unlinkedCourseIds)
+          .catch(() => new Map<string, LmsCourseProgress>())
+      : new Map<string, LmsCourseProgress>();
+
+    for (const [courseId, lms] of lmsProgressByCourse) {
+      completedCount += lms.completedLessons;
+      totalLessonsCount += lms.totalLessons;
+
+      if (!nextLesson && lms.nextLessonId) {
+        const course = publishedCourses.find((c: any) => c.id === courseId);
+        nextLesson = {
+          lessonId: lms.nextLessonId,
+          lessonTitle: lms.nextLessonTitle || 'Continuar lección',
+          courseId,
+          moduleName: lms.nextModuleTitle || 'Módulo',
+          cycleName: course?.title || 'Curso del campus',
+          videoUrl: null,
+          mediaLabel: 'Lectura',
+        };
+      }
+    }
+
+    // Construir enrollments con los cursos que la persona tiene asignados
     enrollments = publishedCourses.map(c => {
       const prog = progressByCourse.get(c.id);
+      const lms = lmsProgressByCourse.get(c.id);
       return {
         id: prog?.enrollmentId ?? `available-${c.id}`,
         status: prog?.enrollmentStatus ?? (canSeeEverything ? 'active' : 'available'),
         cycles: {
           id: prog?.cycleId ?? '',
-          name: prog?.cycleName ?? (canSeeEverything ? 'Ciclo Preview' : 'Programa Disponible'),
+          name: prog?.cycleName ?? (canSeeEverything ? 'Ciclo Preview' : 'Curso del campus'),
           course_id: c.id,
           courses: {
             id: c.id,
@@ -148,20 +190,31 @@ export default async function CampusDashboardPage({
             cover_image_url: c.cover_image_url,
           },
         },
-        progressPercent: prog?.progressPercent ?? 0,
+        progressPercent: prog?.progressPercent ?? lms?.progressPercent ?? 0,
       };
     });
 
     // Next lesson video URL ──────────────────────────────────────────────────
+    // La tarjeta muestra el play sólo si hay video; si no, anuncia el material
+    // adjunto (PDF o lo que sea) para no prometer un reproductor que no existe.
     if (nextLesson?.lessonId) {
       try {
         const { data: lessData } = await supabase
           .from('lessons')
-          .select('video_url')
+          .select('video_url, lesson_resources(type)')
           .eq('id', nextLesson.lessonId)
           .single();
         if (lessData?.video_url) nextLesson.videoUrl = lessData.video_url;
-      } catch { /* safe default: null videoUrl */ }
+
+        if (!nextLesson.videoUrl) {
+          const types: string[] = ((lessData as any)?.lesson_resources ?? [])
+            .map((r: any) => (r.type ?? '').toLowerCase())
+            .filter(Boolean);
+          if (types.length > 0) {
+            nextLesson.mediaLabel = types.every((t) => t === 'pdf') ? 'PDF' : 'Material';
+          }
+        }
+      } catch { /* safe default: sin video y sin material */ }
     }
 
     // Upcoming sessions ──────────────────────────────────────────────────────
@@ -319,8 +372,17 @@ export default async function CampusDashboardPage({
               ) : (
                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-[#00A9CE]" />
               )}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <IoPlayCircleOutline size={64} className="text-white/90 group-hover:scale-110 transition-transform duration-300 drop-shadow-lg" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                {nextLesson.videoUrl ? (
+                  <IoPlayCircleOutline size={64} className="text-white/90 group-hover:scale-110 transition-transform duration-300 drop-shadow-lg" />
+                ) : (
+                  <>
+                    <IoDocumentTextOutline size={56} className="text-white/90 group-hover:scale-110 transition-transform duration-300 drop-shadow-lg" />
+                    <span className="text-white/80 text-xs font-bold uppercase tracking-widest">
+                      {nextLesson.mediaLabel}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
             <div className="p-6 flex-1 flex flex-col justify-center">

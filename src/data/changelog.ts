@@ -15,6 +15,23 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '1.9',
+    date: '6 ago 2026',
+    title: 'Material propio en el campus y acceso por programa',
+    description: 'El material deja de depender de links externos y cada persona ve sólo los programas que tiene asignados.',
+    items: [
+      { type: 'nuevo',    text: 'Los materiales de una clase se suben desde la compu y quedan guardados en el campus: PDF, Word, planillas, imágenes, audio o ZIP, hasta 25 MB por archivo.' },
+      { type: 'nuevo',    text: 'La portada del curso también se sube como imagen, sin tener que pegar una URL de Drive.' },
+      { type: 'mejorado', text: 'El material es privado: se descarga por una ruta autenticada y sólo lo abre quien tiene el programa. Borrar un material también borra el archivo.' },
+      { type: 'nuevo',    text: 'Accesos por curso: el organizador elige alumno por alumno quién ve cada curso del campus, desde la pestaña "Accesos" del curso o desde la ficha del alumno.' },
+      { type: 'nuevo',    text: 'Vidriera: los cursos que todavía no tenés asignados se ven bloqueados, con su portada y de qué van, y un botón para consultar.' },
+      { type: 'mejorado', text: 'Clases, materiales, videos y foro quedan restringidos a quien tiene el curso asignado. Coaches y organizadores siguen viendo todo.' },
+      { type: 'mejorado', text: 'El foro muestra únicamente los cursos de la persona: cada grupo conversa en su espacio.' },
+      { type: 'mejorado', text: 'Los módulos de un curso se pliegan y despliegan: entrás viendo el índice completo, con el módulo en curso abierto, y hay un "Expandir todo".' },
+      { type: 'corregido', text: 'En "Por dónde vas", una clase sin video ya no muestra el botón de reproducir: ahora avisa que es un PDF o material de lectura.' },
+    ],
+  },
+  {
     version: '1.8',
     date: '29 jul 2026',
     title: 'CAMPO: clases sueltas con cuaderno de campo',

@@ -14,7 +14,11 @@ import {
   IoVideocamOutline, IoDocumentTextOutline, IoReorderFourOutline,
   IoCalendarOutline, IoTimeOutline, IoLinkOutline,
   IoFolderOpenOutline, IoMusicalNotesOutline, IoArrowForwardOutline,
+  IoCloudUploadOutline, IoImageOutline, IoPeopleOutline, IoSearchOutline,
 } from 'react-icons/io5';
+import {
+  uploadLessonMaterial, deleteLessonMaterial, uploadCourseCover,
+} from '../../../app/admin/lms/actions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,6 +74,17 @@ type LessonVideoRow = {
 
 type Cycle = { id: string; name: string; course_id: string | null };
 
+type StudentRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  role: string | null;
+};
+
+/** Una asignación (alumno ↔ curso del LMS). Ver migración 000002. */
+type CourseAccessRow = { id: string; profile_id: string; course_id: string };
+
 type CourseSession = {
   id: string;
   course_id: string;
@@ -96,6 +111,12 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 
 const inputCls = 'w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#00A9CE] focus:border-transparent text-slate-900 text-sm';
 const labelCls = 'block text-xs font-bold text-slate-600 mb-1';
+
+// Espejo de los límites de src/services/materialStorage.ts: validamos en el
+// cliente para no subir un archivo que la action va a rechazar igual.
+const MAX_MATERIAL_MB = 25;
+const MAX_FILES_PER_UPLOAD = 5;
+const MATERIAL_ACCEPT = '.pdf,.doc,.docx,.odt,.rtf,.txt,.md,.csv,.ppt,.pptx,.odp,.xls,.xlsx,.ods,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,.svg,.mp3,.m4a,.wav,.ogg,.zip';
 
 // datetime-local ↔ ISO: el input trabaja en hora local del admin (sin huso);
 // siempre convertimos local → ISO al guardar e ISO → local al mostrar.
@@ -131,6 +152,22 @@ function CourseModal({
   const [published, setPublished] = useState(course?.is_published ?? false);
   const [saving, setSaving] = useState(false);
 
+  // Portada subida desde la compu → va a Cloudflare R2. Para un curso nuevo
+  // todavía no hay id, así que el archivo espera y se sube después del insert.
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+
+  const pickCover = (file: File | null) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('La imagen supera los 5 MB permitidos');
+      return;
+    }
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  };
+
   const handleSave = async () => {
     if (!title.trim()) return;
     setSaving(true);
@@ -140,10 +177,20 @@ function CourseModal({
         cover_image_url: coverUrl.trim() || null, is_published: published,
       };
 
+      let courseId = course?.id;
       if (course) {
         await restUpdate('courses', payload, { id: `eq.${course.id}` });
       } else {
-        await restInsert('courses', payload, { returning: 'minimal' });
+        const created = await restInsert<Course>('courses', payload);
+        courseId = created?.id;
+      }
+
+      if (coverFile && courseId) {
+        const fd = new FormData();
+        fd.append('courseId', courseId);
+        fd.append('file', coverFile);
+        const res = await uploadCourseCover(fd);
+        if ('error' in res) toast.error(res.error);
       }
 
       toast.success(course ? 'Curso actualizado.' : 'Curso creado.');
@@ -173,8 +220,51 @@ function CourseModal({
             <textarea rows={3} className={inputCls} value={desc} onChange={e => setDesc(e.target.value)} />
           </div>
           <div>
-            <label className={labelCls}>URL de imagen de portada</label>
-            <input className={inputCls} value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="https://..." />
+            <label className={labelCls}>Imagen de portada</label>
+            <div className="flex items-start gap-3">
+              <div className="w-28 h-20 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                {coverPreview || normalizeImageUrl(coverUrl, 'w400') ? (
+                  <img
+                    src={coverPreview ?? normalizeImageUrl(coverUrl, 'w400')!}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <IoImageOutline size={22} className="text-slate-300" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 space-y-2">
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+                  className="hidden"
+                  onChange={e => { pickCover(e.target.files?.[0] ?? null); e.target.value = ''; }}
+                />
+                <button
+                  type="button"
+                  onClick={() => coverInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-700 transition-colors"
+                >
+                  <IoCloudUploadOutline size={14} />
+                  {coverFile ? 'Cambiar imagen' : 'Subir imagen'}
+                </button>
+                {coverFile ? (
+                  <p className="text-xs text-emerald-600 font-medium truncate">
+                    {coverFile.name} — se sube al guardar
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-400">JPG, PNG, WEBP o GIF. Hasta 5 MB.</p>
+                )}
+                <input
+                  className={inputCls}
+                  value={coverUrl}
+                  onChange={e => setCoverUrl(e.target.value)}
+                  placeholder="…o pegar una URL externa"
+                />
+              </div>
+            </div>
           </div>
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-slate-700">Publicado (visible para alumnos)</label>
@@ -280,6 +370,7 @@ function LessonModal({
   lesson,
   moduleId,
   moduleType,
+  courseId,
   nextOrder,
   onClose,
   onSaved,
@@ -287,6 +378,7 @@ function LessonModal({
   lesson: Lesson | null;
   moduleId: string;
   moduleType?: string;
+  courseId: string;
   nextOrder: number;
   onClose: () => void;
   onSaved: () => void;
@@ -321,6 +413,14 @@ function LessonModal({
   const [newResUrl, setNewResUrl] = useState('');
   const [newResType, setNewResType] = useState('link');
   const [saving, setSaving] = useState(false);
+
+  // ── Material subido a R2 ──────────────────────────────────────────────────
+  // Si la clase ya existe, el archivo se sube al toque. Si es una clase nueva
+  // todavía no hay lesson_id, así que los archivos esperan y se suben cuando
+  // "Guardar" crea la clase.
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!lesson) return;
@@ -421,6 +521,12 @@ function LessonModal({
         }
       }
 
+      // Archivos elegidos antes de que la clase existiera: ahora sí van a R2.
+      if (pendingFiles.length > 0 && lessonId) {
+        const ok = await uploadFilesTo(lessonId, pendingFiles);
+        if (ok) setPendingFiles([]);
+      }
+
       // Bandeja events
       const actor = await getMyActorInfo();
       if (actor && lessonId) {
@@ -514,11 +620,55 @@ function LessonModal({
 
   const deleteResource = async (id: string) => {
     try {
-      await restDelete('lesson_resources', { id: `eq.${id}` });
+      // La action borra la fila y, si el material vivía en R2, también el objeto.
+      const res = await deleteLessonMaterial(id, courseId);
+      if ('error' in res) { toast.error('Error al eliminar: ' + res.error); return; }
       setResources(prev => prev.filter(r => r.id !== id));
       toast.success('Material eliminado');
     } catch (err: any) {
       toast.error('Error al eliminar: ' + err.message);
+    }
+  };
+
+  /** Sube los archivos a R2 en tandas del máximo que acepta la action. */
+  const uploadFilesTo = async (targetLessonId: string, files: File[]) => {
+    for (let i = 0; i < files.length; i += MAX_FILES_PER_UPLOAD) {
+      const batch = files.slice(i, i + MAX_FILES_PER_UPLOAD);
+      const fd = new FormData();
+      fd.append('lessonId', targetLessonId);
+      fd.append('courseId', courseId);
+      fd.append('lessonTitle', title.trim());
+      batch.forEach(f => fd.append('files', f));
+
+      const res = await uploadLessonMaterial(fd);
+      if ('error' in res) {
+        toast.error(res.error);
+        return false;
+      }
+      setResources(prev => [...prev, ...res.resources]);
+    }
+    return true;
+  };
+
+  const pickFiles = async (selected: File[]) => {
+    const tooBig = selected.find(f => f.size > MAX_MATERIAL_MB * 1024 * 1024);
+    if (tooBig) {
+      toast.error(`"${tooBig.name}" supera los ${MAX_MATERIAL_MB} MB permitidos`);
+      return;
+    }
+
+    // Clase nueva: todavía no hay lesson_id, los archivos esperan al guardado.
+    if (!lesson) {
+      setPendingFiles(prev => [...prev, ...selected]);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const ok = await uploadFilesTo(lesson.id, selected);
+      if (ok) toast.success(selected.length === 1 ? 'Material subido' : `${selected.length} materiales subidos`);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -746,26 +896,72 @@ function LessonModal({
               );
             })}
 
-            {resources.length === 0 && pendingResources.length === 0 && (
+            {/* Archivos elegidos para una clase que todavía no existe */}
+            {pendingFiles.map((f, idx) => (
+              <div key={`file-${idx}`} className="flex items-center gap-2 mb-2 bg-emerald-50/60 border border-emerald-100 rounded-lg p-2">
+                <IoCloudUploadOutline size={14} className="text-emerald-500 shrink-0" />
+                <span className="flex-1 text-sm text-slate-700 truncate">
+                  {f.name} <span className="text-[10px] uppercase font-bold text-emerald-600 opacity-70">(se sube al guardar)</span>
+                </span>
+                <button onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 shrink-0">
+                  <IoTrashOutline size={14} />
+                </button>
+              </div>
+            ))}
+
+            {resources.length === 0 && pendingResources.length === 0 && pendingFiles.length === 0 && (
               <p className="text-xs text-slate-400 italic mb-3">No hay materiales todavía.</p>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mt-3">
-              <input className={`sm:col-span-2 ${inputCls}`} value={newResTitle} onChange={e => setNewResTitle(e.target.value)} placeholder="Nombre del material" />
-              <input className={`sm:col-span-2 ${inputCls}`} value={newResUrl} onChange={e => setNewResUrl(e.target.value)} placeholder="URL de Material (Google Drive Public Link)" />
-              <select className={inputCls} value={newResType} onChange={e => setNewResType(e.target.value)}>
-                <option value="link">Link</option>
-                <option value="pdf">PDF</option>
-                <option value="audio">Audio</option>
-              </select>
-            </div>
+            {/* Subida directa a Cloudflare R2 */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={MATERIAL_ACCEPT}
+              className="hidden"
+              onChange={e => {
+                const selected = Array.from(e.target.files ?? []);
+                e.target.value = '';
+                if (selected.length > 0) pickFiles(selected);
+              }}
+            />
             <button
-              onClick={addResource}
-              disabled={!newResTitle.trim() || !newResUrl.trim()}
-              className="mt-2 flex items-center gap-1 text-xs font-bold text-[#00A9CE] hover:underline disabled:opacity-40"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm font-bold text-slate-600 hover:border-[#00A9CE] hover:text-[#00A9CE] transition-colors disabled:opacity-50"
             >
-              <IoAddOutline size={14} /> Agregar material
+              <IoCloudUploadOutline size={18} />
+              {uploading ? 'Subiendo…' : 'Subir archivos'}
             </button>
+            <p className="mt-1.5 text-[11px] text-slate-400">
+              Quedan guardados en el campus (privados: sólo los ve quien tiene el curso).
+              PDF, Word, planillas, imágenes, audio o ZIP. Hasta {MAX_MATERIAL_MB} MB por archivo.
+            </p>
+
+            {/* Alternativa: link externo */}
+            <details className="mt-3 group">
+              <summary className="text-xs font-bold text-slate-500 cursor-pointer hover:text-slate-700 flex items-center gap-1.5">
+                <IoLinkOutline size={14} /> …o enlazar un material externo
+              </summary>
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 mt-3">
+                <input className={`sm:col-span-2 ${inputCls}`} value={newResTitle} onChange={e => setNewResTitle(e.target.value)} placeholder="Nombre del material" />
+                <input className={`sm:col-span-2 ${inputCls}`} value={newResUrl} onChange={e => setNewResUrl(e.target.value)} placeholder="URL (Google Drive, YouTube…)" />
+                <select className={inputCls} value={newResType} onChange={e => setNewResType(e.target.value)}>
+                  <option value="link">Link</option>
+                  <option value="pdf">PDF</option>
+                  <option value="audio">Audio</option>
+                </select>
+              </div>
+              <button
+                onClick={addResource}
+                disabled={!newResTitle.trim() || !newResUrl.trim()}
+                className="mt-2 flex items-center gap-1 text-xs font-bold text-[#00A9CE] hover:underline disabled:opacity-40"
+              >
+                <IoAddOutline size={14} /> Agregar link
+              </button>
+            </details>
           </div>
         </div>
         <div className="flex justify-end gap-3 p-5 border-t border-slate-100 flex-shrink-0">
@@ -1011,6 +1207,123 @@ function resolveTypeAdmin(r: LessonResource) {
   return TYPE_VISUAL_ADMIN.link;
 }
 
+// ─── Accesos al curso ─────────────────────────────────────────────────────────
+// Quién ve este curso del LMS. Es asignación directa, alumno por alumno: no se
+// deriva de las inscripciones a ciclos (los cursos del campus son contenido
+// propio y no espejan los programas de CRESER).
+
+function AdminCourseAccess({
+  students, grantedIds, busyIds, onGrant, onRevoke, onGrantAll,
+}: {
+  students: StudentRow[];
+  grantedIds: Set<string>;
+  busyIds: Set<string>;
+  onGrant: (profileId: string) => void;
+  onRevoke: (profileId: string) => void;
+  onGrantAll: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [onlyGranted, setOnlyGranted] = useState(false);
+
+  const nameOf = (s: StudentRow) =>
+    `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.email || 'Sin nombre';
+
+  const filtered = students.filter(s => {
+    if (onlyGranted && !grantedIds.has(s.id)) return false;
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return nameOf(s).toLowerCase().includes(q) || (s.email ?? '').toLowerCase().includes(q);
+  });
+
+  const missing = students.filter(s => !grantedIds.has(s.id)).length;
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="p-4 border-b border-slate-100 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p className="text-sm font-bold text-slate-900">
+              {grantedIds.size} de {students.length} alumnos con acceso
+            </p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Sin acceso, el alumno ve el curso bloqueado en el campus (vidriera) y no entra al contenido ni al foro.
+            </p>
+          </div>
+          {missing > 0 && (
+            <button
+              onClick={onGrantAll}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-700 transition-colors shrink-0"
+            >
+              <IoPeopleOutline size={14} /> Dar acceso a los {missing} restantes
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center flex-1 min-w-[200px] bg-slate-100 rounded-lg px-3 py-2">
+            <IoSearchOutline size={16} className="text-slate-400 shrink-0" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar alumno..."
+              className="bg-transparent border-none outline-none flex-1 ml-2 text-sm text-slate-700 placeholder:text-slate-400"
+            />
+          </div>
+          <button
+            onClick={() => setOnlyGranted(v => !v)}
+            className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
+              onlyGranted ? 'bg-[#00A9CE] text-white' : 'bg-slate-100 text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Solo con acceso
+          </button>
+        </div>
+      </div>
+
+      {students.length === 0 ? (
+        <p className="p-8 text-center text-sm text-slate-400 italic">
+          Todavía no hay alumnos cargados en el campus.
+        </p>
+      ) : filtered.length === 0 ? (
+        <p className="p-8 text-center text-sm text-slate-400 italic">
+          Ningún alumno coincide con la búsqueda.
+        </p>
+      ) : (
+        <ul className="divide-y divide-slate-100 max-h-[28rem] overflow-y-auto">
+          {filtered.map(s => {
+            const granted = grantedIds.has(s.id);
+            const busy = busyIds.has(s.id);
+            return (
+              <li key={s.id} className="flex items-center gap-3 px-4 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-800 truncate">{nameOf(s)}</p>
+                  {s.email && <p className="text-xs text-slate-400 truncate">{s.email}</p>}
+                </div>
+                {granted && (
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md shrink-0">
+                    Con acceso
+                  </span>
+                )}
+                <button
+                  onClick={() => (granted ? onRevoke(s.id) : onGrant(s.id))}
+                  disabled={busy}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0 disabled:opacity-40 ${
+                    granted
+                      ? 'text-red-500 hover:bg-red-50'
+                      : 'bg-[#00A9CE] text-white hover:bg-blue-600'
+                  }`}
+                >
+                  {busy ? '…' : granted ? 'Quitar' : 'Dar acceso'}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function AdminCourseResources({
   groups, total, hasInstitutionalContainer, onAdd, onDelete,
 }: {
@@ -1151,6 +1464,8 @@ function AddMaterialModal({
   const [url, setUrl] = useState('');
   const [type, setType] = useState<'link' | 'pdf' | 'audio'>('pdf');
   const [saving, setSaving] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const willAutoCreate = lessonOptions.length === 0;
 
@@ -1187,10 +1502,27 @@ function AddMaterialModal({
   };
 
   const handleSave = async () => {
-    if (!title.trim() || !url.trim()) return;
+    // O se sube un archivo, o se enlaza una URL: siempre con título.
+    if (!title.trim() || (!file && !url.trim())) return;
     setSaving(true);
     try {
       const targetLessonId = await resolveTargetLessonId();
+
+      if (file) {
+        // Archivo → Cloudflare R2 (la action también registra el evento).
+        const fd = new FormData();
+        fd.append('lessonId', targetLessonId);
+        fd.append('courseId', courseId);
+        fd.append('lessonTitle', courseTitle);
+        fd.append('title', title.trim());
+        fd.append('files', file);
+        const res = await uploadLessonMaterial(fd);
+        if ('error' in res) { toast.error(res.error); return; }
+
+        toast.success('Documento institucional subido.');
+        onSaved();
+        return;
+      }
 
       await restInsert('lesson_resources', {
         lesson_id: targetLessonId,
@@ -1260,11 +1592,45 @@ function AddMaterialModal({
             <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: Reglas de convivencia 2026" />
           </div>
           <div>
-            <label className={labelCls}>URL del archivo *</label>
-            <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://drive.google.com/..." />
-            <p className="text-[11px] text-slate-400 mt-1">Drive, Dropbox o cualquier URL pública. Los alumnos lo abrirán en una pestaña nueva.</p>
+            <label className={labelCls}>Archivo *</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={MATERIAL_ACCEPT}
+              className="hidden"
+              onChange={(e) => { setFile(e.target.files?.[0] ?? null); e.target.value = ''; }}
+            />
+            {file ? (
+              <div className="flex items-center gap-2 bg-emerald-50/60 border border-emerald-100 rounded-lg p-2.5">
+                <IoCloudUploadOutline size={16} className="text-emerald-600 shrink-0" />
+                <span className="flex-1 text-sm text-slate-700 truncate">{file.name}</span>
+                <button onClick={() => setFile(null)} className="text-red-400 hover:text-red-600 shrink-0">
+                  <IoTrashOutline size={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 px-3 py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm font-bold text-slate-600 hover:border-emerald-400 hover:text-emerald-600 transition-colors"
+              >
+                <IoCloudUploadOutline size={18} /> Subir archivo
+              </button>
+            )}
+            <p className="text-[11px] text-slate-400 mt-1">
+              Se guarda en el campus, privado: sólo lo ve quien tiene el programa. Hasta {MAX_MATERIAL_MB} MB.
+            </p>
           </div>
-          <div>
+          <details className="group">
+            <summary className="text-xs font-bold text-slate-500 cursor-pointer hover:text-slate-700 flex items-center gap-1.5">
+              <IoLinkOutline size={14} /> …o enlazar una URL externa
+            </summary>
+            <div className="mt-2">
+              <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://drive.google.com/..." disabled={!!file} />
+              <p className="text-[11px] text-slate-400 mt-1">Drive, Dropbox o cualquier URL pública. Los alumnos lo abrirán en una pestaña nueva.</p>
+            </div>
+          </details>
+          <div className={file ? 'hidden' : ''}>
             <label className={labelCls}>Tipo</label>
             <div className="grid grid-cols-3 gap-2">
               {([
@@ -1295,10 +1661,10 @@ function AddMaterialModal({
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Cancelar</button>
           <button
             onClick={handleSave}
-            disabled={saving || !title.trim() || !url.trim()}
+            disabled={saving || !title.trim() || (!file && !url.trim())}
             className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg disabled:opacity-50 hover:bg-emerald-700 transition-colors"
           >
-            {saving ? 'Guardando...' : 'Guardar documento'}
+            {saving ? (file ? 'Subiendo...' : 'Guardando...') : 'Guardar documento'}
           </button>
         </div>
       </div>
@@ -1332,9 +1698,14 @@ export default function AdminCourses() {
   const [newSessionLocation, setNewSessionLocation] = useState('');
   const [newSessionMandatory, setNewSessionMandatory] = useState(true);
   const [savingSession, setSavingSession] = useState(false);
-  const [courseTab, setCourseTab] = useState<'modules' | 'workshop' | 'campo' | 'archivos' | 'calendar'>('modules');
+  const [courseTab, setCourseTab] = useState<'modules' | 'workshop' | 'campo' | 'archivos' | 'calendar' | 'accesos'>('modules');
   const [addMaterialOpen, setAddMaterialOpen] = useState(false);
   const hasLoadedOnceRef = useRef(false);
+
+  // ── Accesos: qué alumno ve qué curso del LMS ──────────────────────────────
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [courseAccess, setCourseAccess] = useState<CourseAccessRow[]>([]);
+  const [accessBusy, setAccessBusy] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async (_isBackgroundRefresh = false) => {
     const isFirstLoad = !hasLoadedOnceRef.current;
@@ -1348,6 +1719,12 @@ export default function AdminCourses() {
         restSelect<Cycle>('cycles', { columns: 'id,name,course_id', order: 'name.asc' }),
         restSelect<CourseSession>('course_sessions', { order: 'session_date.asc' }),
         restSelect<LessonResource>('lesson_resources', { order: 'created_at.asc' }),
+        restSelect<StudentRow>('profiles', {
+          columns: 'id,first_name,last_name,email,role',
+          filters: { role: 'eq.student' },
+          order: 'first_name.asc',
+        }),
+        restSelect<CourseAccessRow>('course_access', { columns: 'id,profile_id,course_id' }),
       ]);
 
       const get = (res: PromiseSettledResult<{ data: any[] }>) => res.status === 'fulfilled' ? res.value.data : null;
@@ -1358,6 +1735,8 @@ export default function AdminCourses() {
       const cyclesData = get(results[3]);
       const sessionsData = get(results[4]);
       const resourcesData = get(results[5]);
+      const studentsData = get(results[6]);
+      const accessData = get(results[7]);
 
       if (coursesData) setCourses(coursesData as Course[]);
       if (modulesData) setModules(modulesData as Module[]);
@@ -1365,6 +1744,8 @@ export default function AdminCourses() {
       if (cyclesData) setAllCycles(cyclesData as Cycle[]);
       if (sessionsData) setCourseSessions(sessionsData as CourseSession[]);
       if (resourcesData) setAllResources(resourcesData as LessonResource[]);
+      if (studentsData) setStudents(studentsData as StudentRow[]);
+      if (accessData) setCourseAccess(accessData as CourseAccessRow[]);
 
       hasLoadedOnceRef.current = true;
     } catch (error: any) {
@@ -1454,6 +1835,78 @@ export default function AdminCourses() {
       toast.success('Estado actualizado');
     } catch (err: any) {
       toast.error('Error al actualizar estado: ' + err.message);
+    }
+  };
+
+  // ── Accesos al curso seleccionado ─────────────────────────────────────────
+
+  const grantedProfileIds = new Set(
+    selectedCourse
+      ? courseAccess.filter(a => a.course_id === selectedCourse.id).map(a => a.profile_id)
+      : []
+  );
+
+  const grantAccess = async (profileId: string) => {
+    if (!selectedCourse) return;
+    setAccessBusy(prev => new Set(prev).add(profileId));
+    try {
+      const actor = await getMyActorInfo();
+      const row = await restInsert<CourseAccessRow>('course_access', {
+        profile_id: profileId,
+        course_id: selectedCourse.id,
+        granted_by: actor?.profileId ?? null,
+      });
+      if (row) setCourseAccess(prev => [...prev, row]);
+      toast.success('Acceso otorgado');
+    } catch (err: any) {
+      toast.error('No se pudo dar acceso: ' + (err?.body || err?.message || 'error desconocido'));
+    } finally {
+      setAccessBusy(prev => { const next = new Set(prev); next.delete(profileId); return next; });
+    }
+  };
+
+  const revokeAccess = async (profileId: string) => {
+    if (!selectedCourse) return;
+    setAccessBusy(prev => new Set(prev).add(profileId));
+    try {
+      await restDelete('course_access', {
+        profile_id: `eq.${profileId}`,
+        course_id: `eq.${selectedCourse.id}`,
+      });
+      setCourseAccess(prev =>
+        prev.filter(a => !(a.profile_id === profileId && a.course_id === selectedCourse.id))
+      );
+      toast.success('Acceso quitado');
+    } catch (err: any) {
+      toast.error('No se pudo quitar el acceso: ' + (err?.body || err?.message || 'error desconocido'));
+    } finally {
+      setAccessBusy(prev => { const next = new Set(prev); next.delete(profileId); return next; });
+    }
+  };
+
+  const grantAccessToAll = async () => {
+    if (!selectedCourse) return;
+    const missing = students.filter(s => !grantedProfileIds.has(s.id));
+    if (missing.length === 0) return;
+    if (!confirm(`¿Dar acceso a "${selectedCourse.title}" a ${missing.length} alumno(s)?`)) return;
+    try {
+      const actor = await getMyActorInfo();
+      await restBulkInsert(
+        'course_access',
+        missing.map(s => ({
+          profile_id: s.id,
+          course_id: selectedCourse.id,
+          granted_by: actor?.profileId ?? null,
+        }))
+      );
+      // El bulk insert vuelve sin filas: releemos para tener los ids reales.
+      const { data } = await restSelect<CourseAccessRow>('course_access', {
+        columns: 'id,profile_id,course_id',
+      });
+      setCourseAccess(data);
+      toast.success(`${missing.length} alumno(s) con acceso`);
+    } catch (err: any) {
+      toast.error('No se pudo dar acceso: ' + (err?.body || err?.message || 'error desconocido'));
     }
   };
 
@@ -1817,6 +2270,15 @@ export default function AdminCourses() {
                 )}
               </button>
               <button
+                onClick={() => setCourseTab('accesos')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'accesos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <span className="text-base leading-none">🔑</span> Accesos
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${courseTab === 'accesos' ? 'bg-slate-100 text-slate-600' : 'bg-slate-200 text-slate-500'}`}>
+                  {grantedProfileIds.size}
+                </span>
+              </button>
+              <button
                 onClick={() => setCourseTab('calendar')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${courseTab === 'calendar' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
@@ -1871,6 +2333,17 @@ export default function AdminCourses() {
               setNewDate={setNewSessionDate} setNewTime={setNewSessionTime} setNewLabel={setNewSessionLabel}
               setNewLocation={setNewSessionLocation} setNewMandatory={setNewSessionMandatory}
               onAdd={addCourseSession}
+            />
+          )}
+
+          {courseTab === 'accesos' && (
+            <AdminCourseAccess
+              students={students}
+              grantedIds={grantedProfileIds}
+              busyIds={accessBusy}
+              onGrant={grantAccess}
+              onRevoke={revokeAccess}
+              onGrantAll={grantAccessToAll}
             />
           )}
 
@@ -2132,6 +2605,7 @@ export default function AdminCourses() {
           lesson={lessonModal.lesson}
           moduleId={lessonModal.moduleId}
           moduleType={lessonModal.moduleType ?? modules.find(m => m.id === lessonModal.moduleId)?.module_type}
+          courseId={modules.find(m => m.id === lessonModal.moduleId)?.course_id ?? selectedCourse?.id ?? ''}
           nextOrder={lessons.filter(l => l.module_id === lessonModal.moduleId).length + 1}
           onClose={() => setLessonModal(null)}
           onSaved={() => { setLessonModal(null); fetchData(true); }}

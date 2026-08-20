@@ -8,6 +8,12 @@ import {
   buildReviewKey, putEntregaObject, deleteEntregaObjects,
   isAllowedFile, MAX_FILE_BYTES, MAX_FILES_PER_SUBMISSION,
 } from '@/src/services/entregasStorage';
+import {
+  buildMaterialKey, buildCourseImageKey, putMaterialObject, deleteMaterialObjects,
+  putPublicImage, deletePublicImage, isAllowedMaterial, isAllowedImage,
+  MAX_MATERIAL_BYTES, MAX_MATERIAL_FILES, MAX_IMAGE_BYTES,
+} from '@/src/services/materialStorage';
+import { materialDownloadHref, materialTypeOf } from '@/src/services/materialDownload';
 import type { Database } from '@/src/types/database.types';
 import type {
   SubmissionThread, SubmissionStatus, Submission,
@@ -388,6 +394,191 @@ export async function postReviewerChatMessage(
 
   if (error) return { error: error.message };
   return { success: true };
+}
+
+// ── material descargable: subida directa a Cloudflare R2 ─────────────────────
+// Antes el material eran links pegados a mano (Google Drive). Ahora el coach /
+// organizador sube el archivo y queda en R2, privado: `file_url` apunta a
+// /api/materiales/download, que autoriza con el RLS del alumno.
+
+export type UploadedResource = {
+  id: string;
+  lesson_id: string;
+  title: string;
+  file_url: string;
+  type: string;
+  created_at?: string;
+};
+
+export async function uploadLessonMaterial(
+  formData: FormData,
+): Promise<{ error: string } | { success: true; resources: UploadedResource[] }> {
+  const { supabase, profile } = await assertReviewer();
+
+  const lessonId = formData.get('lessonId') as string;
+  const courseId = formData.get('courseId') as string;
+  const lessonTitle = (formData.get('lessonTitle') as string | null) ?? '';
+  // Título elegido a mano: sólo aplica cuando se sube un único archivo.
+  const customTitle = (formData.get('title') as string | null)?.trim() || '';
+  if (!lessonId || !courseId) return { error: 'Falta la clase o el curso' };
+
+  const files = formData.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) return { error: 'No se recibió ningún archivo' };
+  if (files.length > MAX_MATERIAL_FILES) {
+    return { error: `Máximo ${MAX_MATERIAL_FILES} archivos por vez` };
+  }
+  for (const f of files) {
+    if (f.size > MAX_MATERIAL_BYTES) {
+      return { error: `"${f.name}" supera los ${Math.round(MAX_MATERIAL_BYTES / 1024 / 1024)} MB permitidos` };
+    }
+    if (!isAllowedMaterial(f.name)) {
+      return { error: `"${f.name}" tiene un formato no permitido` };
+    }
+  }
+
+  const uploadedKeys: string[] = [];
+  const resources: UploadedResource[] = [];
+
+  try {
+    for (const file of files) {
+      const key = buildMaterialKey({
+        courseId,
+        lessonId,
+        fileId: crypto.randomUUID(),
+        fileName: file.name,
+      });
+      await putMaterialObject(key, await file.arrayBuffer(), file.type);
+      uploadedKeys.push(key);
+
+      // El título por defecto es el nombre del archivo sin extensión.
+      const title = (files.length === 1 && customTitle)
+        ? customTitle
+        : (file.name.replace(/\.[^.]+$/, '') || file.name);
+
+      const { data, error } = await supabase
+        .from('lesson_resources')
+        .insert({
+          lesson_id: lessonId,
+          title,
+          file_url: materialDownloadHref(key),
+          type: materialTypeOf(file.name),
+          storage_key: key,
+          file_name: file.name,
+          content_type: file.type || null,
+          size_bytes: file.size,
+          uploaded_by: profile.id,
+        })
+        .select('id, lesson_id, title, file_url, type, created_at')
+        .single();
+
+      if (error) throw new Error(error.message);
+      resources.push(data as UploadedResource);
+
+      await logEventServer(supabase, {
+        type: 'content.material_published',
+        actorProfileId: profile.id,
+        actorRole: profile.role,
+        targetKind: 'lesson_resource',
+        targetId: (data as UploadedResource).id,
+        details: {
+          actorName: `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || null,
+          materialTitle: title,
+          materialType: materialTypeOf(file.name),
+          lessonId,
+          lessonTitle,
+        },
+      });
+    }
+  } catch (err) {
+    // Limpiamos los objetos ya subidos para no dejar basura en el bucket.
+    await deleteMaterialObjects(uploadedKeys);
+    if (resources.length > 0) {
+      await supabase.from('lesson_resources').delete().in('id', resources.map(r => r.id));
+    }
+    console.error('[materiales] upload failed:', err);
+    return { error: 'No se pudo subir el material. Probá de nuevo.' };
+  }
+
+  revalidatePath(`/admin/lms/${courseId}`);
+  revalidatePath(`/cursos/${courseId}`);
+  revalidatePath(`/cursos/${courseId}/${lessonId}`);
+  return { success: true, resources };
+}
+
+/** Borra la fila y, si el material vivía en R2, también el objeto. */
+export async function deleteLessonMaterial(
+  resourceId: string,
+  courseId: string,
+): Promise<{ error: string } | { success: true }> {
+  const { supabase } = await assertReviewer();
+
+  const { data: row } = await supabase
+    .from('lesson_resources')
+    .select('id, lesson_id, storage_key')
+    .eq('id', resourceId)
+    .maybeSingle();
+
+  const { error } = await supabase.from('lesson_resources').delete().eq('id', resourceId);
+  if (error) return { error: error.message };
+
+  const storageKey = (row as any)?.storage_key as string | null | undefined;
+  if (storageKey) await deleteMaterialObjects([storageKey]);
+
+  revalidatePath(`/admin/lms/${courseId}`);
+  revalidatePath(`/cursos/${courseId}`);
+  return { success: true };
+}
+
+// ── portada del curso: imagen subida a R2 (bucket público) ───────────────────
+
+export async function uploadCourseCover(
+  formData: FormData,
+): Promise<{ error: string } | { success: true; url: string }> {
+  const { supabase } = await assertReviewer();
+
+  const courseId = formData.get('courseId') as string;
+  const file = formData.get('file') as File | null;
+  if (!courseId) return { error: 'Falta el curso' };
+  if (!file || file.size === 0) return { error: 'No se recibió ninguna imagen' };
+  if (file.size > MAX_IMAGE_BYTES) {
+    return { error: `La imagen supera los ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)} MB permitidos` };
+  }
+  if (!isAllowedImage(file.name)) {
+    return { error: 'Formato no permitido (JPG, PNG, WEBP, GIF o AVIF)' };
+  }
+
+  // Portada anterior: si también era nuestra, la borramos para no acumular.
+  const { data: course } = await supabase
+    .from('courses')
+    .select('cover_image_url')
+    .eq('id', courseId)
+    .maybeSingle();
+
+  let url: string;
+  try {
+    const key = buildCourseImageKey({
+      courseId,
+      fileId: crypto.randomUUID(),
+      fileName: file.name,
+    });
+    url = await putPublicImage(key, await file.arrayBuffer(), file.type);
+  } catch (err) {
+    console.error('[portadas] upload failed:', err);
+    return { error: 'No se pudo subir la imagen. Probá de nuevo.' };
+  }
+
+  const { error } = await supabase
+    .from('courses')
+    .update({ cover_image_url: url })
+    .eq('id', courseId);
+  if (error) return { error: error.message };
+
+  await deletePublicImage((course as any)?.cover_image_url ?? null);
+
+  revalidatePath(`/admin/lms/${courseId}`);
+  revalidatePath('/cursos');
+  revalidatePath(`/cursos/${courseId}`);
+  return { success: true, url };
 }
 
 // ── thread: full submission thread for a student (reviewer view) ─────────────

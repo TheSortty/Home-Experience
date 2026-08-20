@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
-import { restSelect, restInsert, restUpsert, restUpdate, restRpc } from '../../../services/supabaseRest';
+import { restSelect, restInsert, restUpsert, restUpdate, restDelete, restRpc } from '../../../services/supabaseRest';
 import { StudentProgramProgress } from '../../../services/progressService';
 import CheckIcon from '../../../ui/icons/CheckIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
@@ -254,6 +254,13 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     const [lmsProgress, setLmsProgress] = useState<StudentProgramProgress[]>([]);
     const [isLoadingLms, setIsLoadingLms] = useState(false);
 
+    // ── Accesos al LMS ──
+    // Qué cursos del campus ve este alumno. Es asignación directa (course_access),
+    // independiente de sus inscripciones a ciclos de CRESER.
+    const [lmsCourses, setLmsCourses] = useState<{ id: string; title: string; is_published: boolean }[]>([]);
+    const [grantedCourseIds, setGrantedCourseIds] = useState<Set<string>>(new Set());
+    const [accessBusyCourse, setAccessBusyCourse] = useState<string | null>(null);
+
     // Program Notes State
     const [programNotes, setProgramNotes] = useState<{ id: string, content: string, created_at: string }[]>([]);
     const [newNoteContent, setNewNoteContent] = useState('');
@@ -296,10 +303,50 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
     useEffect(() => {
         if (detailTab === 'METAS') fetchGoals(student.id);
-        if (detailTab === 'PROGRESO') fetchLmsProgress(student.id);
+        if (detailTab === 'PROGRESO') { fetchLmsProgress(student.id); fetchCourseAccess(student.id); }
         if (detailTab === 'CARTA' && plEnrollment) fetchCarta(plEnrollment.id);
         if (detailTab === 'PLANILLA_PL' && plEnrollment) fetchCheckins(plEnrollment.id);
     }, [detailTab, student.id, plEnrollment?.id]);
+
+    const fetchCourseAccess = async (profileId: string) => {
+        try {
+            const [{ data: courses }, { data: access }] = await Promise.all([
+                restSelect<{ id: string; title: string; is_published: boolean }>('courses', {
+                    columns: 'id,title,is_published',
+                    order: 'title.asc',
+                }),
+                restSelect<{ course_id: string }>('course_access', {
+                    columns: 'course_id',
+                    filters: { profile_id: `eq.${profileId}` },
+                }),
+            ]);
+            setLmsCourses(courses);
+            setGrantedCourseIds(new Set(access.map(a => a.course_id)));
+        } catch (err) {
+            console.error('[StudentDetailModal] no se pudieron leer los accesos al LMS:', err);
+        }
+    };
+
+    const toggleCourseAccess = async (courseId: string, grant: boolean) => {
+        setAccessBusyCourse(courseId);
+        try {
+            if (grant) {
+                await restInsert('course_access', { profile_id: student.id, course_id: courseId }, { returning: 'minimal' });
+                setGrantedCourseIds(prev => new Set(prev).add(courseId));
+            } else {
+                await restDelete('course_access', {
+                    profile_id: `eq.${student.id}`,
+                    course_id: `eq.${courseId}`,
+                });
+                setGrantedCourseIds(prev => { const next = new Set(prev); next.delete(courseId); return next; });
+            }
+        } catch (err: any) {
+            console.error('[StudentDetailModal] no se pudo cambiar el acceso:', err);
+            window.alert('No se pudo cambiar el acceso: ' + (err?.body || err?.message || 'error desconocido'));
+        } finally {
+            setAccessBusyCourse(null);
+        }
+    };
 
     const fetchLmsProgress = async (profileId: string) => {
         setIsLoadingLms(true);
@@ -706,6 +753,51 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                             {/* LMS Progress Tab */}
                             {detailTab === 'PROGRESO' && (
                                 <div className="space-y-6">
+                                    {/* Accesos: qué cursos del campus ve este alumno.
+                                        Sin acceso, el curso le aparece bloqueado (vidriera). */}
+                                    {student.user_id && lmsCourses.length > 0 && (
+                                        <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
+                                            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Acceso a cursos del campus</p>
+                                                    <p className="text-xs text-slate-500 mt-0.5">
+                                                        Los cursos sin marcar le aparecen bloqueados, con su portada y un botón para consultar.
+                                                    </p>
+                                                </div>
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-1 rounded shrink-0">
+                                                    {grantedCourseIds.size} / {lmsCourses.length}
+                                                </span>
+                                            </div>
+                                            <ul className="divide-y divide-slate-100">
+                                                {lmsCourses.map(c => {
+                                                    const granted = grantedCourseIds.has(c.id);
+                                                    const busy = accessBusyCourse === c.id;
+                                                    return (
+                                                        <li key={c.id} className="flex items-center gap-3 px-5 py-2.5">
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium text-slate-800 truncate">{c.title}</p>
+                                                                {!c.is_published && (
+                                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Borrador</p>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => toggleCourseAccess(c.id, !granted)}
+                                                                disabled={busy}
+                                                                className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors shrink-0 disabled:opacity-40 ${
+                                                                    granted
+                                                                        ? 'bg-emerald-50 text-emerald-700 hover:bg-red-50 hover:text-red-600'
+                                                                        : 'bg-slate-100 text-slate-500 hover:bg-[#00A9CE] hover:text-white'
+                                                                }`}
+                                                            >
+                                                                {busy ? '…' : granted ? 'Con acceso' : 'Sin acceso'}
+                                                            </button>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
+                                        </div>
+                                    )}
+
                                     {!student.user_id ? (
                                         <div className="py-16 text-center bg-slate-50 border border-dashed border-slate-200 rounded-sm">
                                             <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Sin acceso al campus</p>

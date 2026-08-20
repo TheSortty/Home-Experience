@@ -186,6 +186,45 @@ export type Database = {
           },
         ]
       }
+      course_access: {
+        Row: {
+          course_id: string
+          granted_at: string
+          granted_by: string | null
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          course_id: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          course_id?: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_access_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_access_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           cover_image_url: string | null
@@ -652,28 +691,43 @@ export type Database = {
       }
       lesson_resources: {
         Row: {
+          content_type: string | null
           created_at: string
+          file_name: string | null
           file_url: string
           id: string
           lesson_id: string
+          size_bytes: number | null
+          storage_key: string | null
           title: string
           type: string | null
+          uploaded_by: string | null
         }
         Insert: {
+          content_type?: string | null
           created_at?: string
+          file_name?: string | null
           file_url: string
           id?: string
           lesson_id: string
+          size_bytes?: number | null
+          storage_key?: string | null
           title: string
           type?: string | null
+          uploaded_by?: string | null
         }
         Update: {
+          content_type?: string | null
           created_at?: string
+          file_name?: string | null
           file_url?: string
           id?: string
           lesson_id?: string
+          size_bytes?: number | null
+          storage_key?: string | null
           title?: string
           type?: string | null
+          uploaded_by?: string | null
         }
         Relationships: [
           {
@@ -681,6 +735,13 @@ export type Database = {
             columns: ["lesson_id"]
             isOneToOne: false
             referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_resources_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
