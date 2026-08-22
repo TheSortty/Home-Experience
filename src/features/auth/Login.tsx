@@ -107,7 +107,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       {/* Brand mark at top */}
       <div className="absolute -top-20 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
         <div className="text-3xl font-black tracking-tighter text-white drop-shadow-[0_4px_20px_rgba(0,169,206,0.4)]">
-          HOME<span className="text-[#00A9CE]">.</span>
+          HOME
         </div>
         <span className="text-[10px] font-bold tracking-[0.3em] text-[#8BD8DF]/70 uppercase">
           Management System

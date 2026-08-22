@@ -719,7 +719,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ onBack }) => {
         <div className="min-h-screen bg-slate-50 py-8 px-4 md:py-12 md:px-8 flex flex-col items-center" ref={topRef}>
             {/* Header / Nav */}
             <div className="w-full max-w-5xl flex justify-between items-center mb-8">
-                <div className="text-2xl font-black tracking-tighter text-slate-900">HOME<span className="text-blue-600">.</span></div>
+                <div className="text-2xl font-black tracking-tighter text-slate-900">HOME</div>
                 <button onClick={onBack} className="text-slate-400 hover:text-slate-900 transition-colors p-2">
                     <span className="sr-only">Cerrar</span>
                     <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>

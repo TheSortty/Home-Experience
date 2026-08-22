@@ -59,7 +59,7 @@ const Header: React.FC<HeaderProps> = ({ onLoginClick }) => {
         <a href="#home" className="flex items-center gap-3 group" onClick={handleSmoothScroll} data-interactive="true">
           <Image src="/logo-circle.png" alt="Home Experience" width={40} height={40} priority className="w-10 h-10 group-hover:scale-105 transition-transform" />
           <span className="text-xl font-bold tracking-widest text-slate-900">
-            HOME<span className="text-blue-600">.</span>
+            HOME
           </span>
         </a>
 

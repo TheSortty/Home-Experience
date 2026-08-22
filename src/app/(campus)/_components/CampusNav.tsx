@@ -74,7 +74,7 @@ export default function CampusNav({ role }: Props) {
           <aside className="flex flex-col w-72 max-w-[85vw] h-full bg-white shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <span className="text-xl font-black tracking-tighter text-[#00A9CE]">
-                HOME<span className="text-slate-900">.</span>
+                HOME
               </span>
               <button
                 onClick={() => setMobileOpen(false)}

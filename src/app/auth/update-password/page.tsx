@@ -100,7 +100,7 @@ export default function UpdatePasswordPage() {
   return (
     <div className="relative w-full z-10 flex flex-col items-center">
       <div className="absolute -top-16 text-3xl font-black tracking-tighter text-[#00A9CE] mb-4">
-        HOME<span className="text-slate-900">.</span>
+        HOME
       </div>
 
       <div className="w-full max-w-md mx-auto">

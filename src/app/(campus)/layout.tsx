@@ -63,7 +63,7 @@ export default async function CampusLayout({ children }: { children: React.React
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
             <span className="text-xl font-black tracking-tighter text-[#00A9CE]">
-              HOME<span className="text-slate-900">.</span>
+              HOME
             </span>
           </Link>
 

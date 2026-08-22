@@ -54,7 +54,7 @@ export const UpdatePassword: React.FC<UpdatePasswordProps> = ({ onSuccess }) => 
   return (
     <div className="login-page relative z-[100]">
       <div className="logo-link">
-        <div className="text-3xl font-black tracking-tighter text-[#00A9CE]">HOME<span className="text-white">.</span></div>
+        <div className="text-3xl font-black tracking-tighter text-[#00A9CE]">HOME</div>
       </div>
 
       <div className="section">

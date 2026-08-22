@@ -217,7 +217,7 @@ export default function AdminShell({ children }: AdminShellProps) {
       >
         <div className="p-8 border-b border-white/5 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">HOME <span className="text-blue-500">.</span></h1>
+            <h1 className="text-2xl font-bold tracking-tight text-white">HOME</h1>
             <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-[0.2em]">Management System</p>
           </div>
           <button
