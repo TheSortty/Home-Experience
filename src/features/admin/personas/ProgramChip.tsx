@@ -8,6 +8,8 @@ interface Props {
   size?: 'sm' | 'md';
   /** When provided, shows a small × to unlink (desvincular) the program. */
   onRemove?: () => void;
+  /** When provided, shows a ⇄ to move the enrolment to another CRESER camada. */
+  onMove?: () => void;
 }
 
 const STATUS_DOT: Record<ProgramChipData['status'], string> = {
@@ -21,7 +23,7 @@ const CATEGORY_STYLES: Record<'creser' | 'campus', { bg: string; text: string; b
   campus: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
 };
 
-export default function ProgramChip({ program, size = 'sm', onRemove }: Props) {
+export default function ProgramChip({ program, size = 'sm', onRemove, onMove }: Props) {
   const category = categorizeCycle(program.cycleType);
   const styles = CATEGORY_STYLES[category];
   const dot = STATUS_DOT[program.status];
@@ -42,6 +44,19 @@ export default function ProgramChip({ program, size = 'sm', onRemove }: Props) {
           <span className="opacity-70 font-medium normal-case tracking-normal"> · {subLabel}</span>
         )}
       </span>
+      {onMove && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onMove(); }}
+          className="ml-0.5 flex items-center justify-center w-3.5 h-3.5 rounded-full hover:bg-blue-600 hover:text-white text-current opacity-60 hover:opacity-100 transition-colors"
+          title="Mover de camada"
+          aria-label="Mover de camada"
+        >
+          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5" />
+          </svg>
+        </button>
+      )}
       {onRemove && (
         <button
           type="button"

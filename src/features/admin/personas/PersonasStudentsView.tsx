@@ -10,6 +10,7 @@ import TrashIcon from '../../../ui/icons/TrashIcon';
 import ProgramChip, { NoProgramChip } from './ProgramChip';
 import { categorizeCycle, type PersonaStudent, type ProgramChipData, type ProgramCategory } from './types';
 import AssignProgramModal from './AssignProgramModal';
+import MoveCycleModal from './MoveCycleModal';
 
 type Scope = 'all' | 'creser' | 'campus';
 type ViewMode = 'table' | 'grid';
@@ -38,6 +39,9 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
 
   // Assign program modal state (1 o varios alumnos)
   const [studentsToAssign, setStudentsToAssign] = useState<PersonaStudent[] | null>(null);
+
+  // Mover una inscripción CRESER de camada (ej: la cargaron en la 54 y va en la 55)
+  const [enrollmentToMove, setEnrollmentToMove] = useState<{ student: PersonaStudent; program: ProgramChipData } | null>(null);
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -136,6 +140,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
           else if (e.status === 'graduated' || e.status === 'completed') derivedStatus = 'GRADUATED';
           return {
             id: e.id,
+            cycleId: cId || null,
             cycleName: e.cycle?.name || 'Desconocido',
             cycleType: e.cycle?.type || 'initial',
             status: derivedStatus,
@@ -340,6 +345,12 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
     }
   };
 
+  // Mover de camada — sólo aplica a CRESER; el Campus LMS se maneja por curso.
+  const handleMove = (student: PersonaStudent, program: ProgramChipData) => {
+    if (program.category !== 'creser' || !program.cycleId) return;
+    setEnrollmentToMove({ student, program });
+  };
+
   // ─── Filtering ───────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
@@ -484,6 +495,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
               onInvite={openInvite}
               onAssign={(s) => setStudentsToAssign([s])}
               onUnlink={handleUnlink}
+              onMove={handleMove}
               initials={initials}
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
@@ -497,6 +509,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
               onInvite={openInvite}
               onAssign={(s) => setStudentsToAssign([s])}
               onUnlink={handleUnlink}
+              onMove={handleMove}
               initials={initials}
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
@@ -516,6 +529,13 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
             const found = students.find(st => st.id === s.id);
             if (found) { setStudentToDelete(found); setIsConfirmDeleteOpen(true); }
           }}
+          onMoveCycle={(prog) => {
+            const found = students.find(st => st.id === selectedStudent.id);
+            const chip = found?.programs.find(p => p.enrollmentId === prog.id);
+            if (!found || !chip) return;
+            setSelectedStudent(null); // el modal de mover se apila encima si no
+            handleMove(found, chip);
+          }}
         />
       )}
 
@@ -525,6 +545,16 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
           students={studentsToAssign}
           onClose={() => setStudentsToAssign(null)}
           onAssigned={() => { fetchData(true); setStudentsToAssign(null); clearSelection(); }}
+        />
+      )}
+
+      {/* Mover inscripción CRESER de camada */}
+      {enrollmentToMove && (
+        <MoveCycleModal
+          student={enrollmentToMove.student}
+          program={enrollmentToMove.program}
+          onClose={() => setEnrollmentToMove(null)}
+          onMoved={() => { fetchData(true); setEnrollmentToMove(null); }}
         />
       )}
 
@@ -596,7 +626,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
 // ─── Sub-views ────────────────────────────────────────────────────────────────
 
 function TableView({
-  students, onSelect, onInvite, onAssign, onUnlink, initials,
+  students, onSelect, onInvite, onAssign, onUnlink, onMove, initials,
   selectedIds, onToggleSelect, onToggleAll, allSelected,
 }: {
   students: PersonaStudent[];
@@ -604,6 +634,7 @@ function TableView({
   onInvite: (s: PersonaStudent) => void;
   onAssign: (s: PersonaStudent) => void;
   onUnlink: (s: PersonaStudent, p: ProgramChipData) => void;
+  onMove: (s: PersonaStudent, p: ProgramChipData) => void;
   initials: (s: PersonaStudent) => string;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
@@ -684,7 +715,12 @@ function TableView({
               <td>
                 <div className="flex flex-wrap gap-1.5 max-w-[320px]" onClick={(e) => e.stopPropagation()}>
                   {s.programs.length === 0 ? <NoProgramChip /> : s.programs.map((p) => (
-                    <ProgramChip key={p.enrollmentId} program={p} onRemove={() => onUnlink(s, p)} />
+                    <ProgramChip
+                      key={p.enrollmentId}
+                      program={p}
+                      onRemove={() => onUnlink(s, p)}
+                      onMove={p.category === 'creser' && p.cycleId ? () => onMove(s, p) : undefined}
+                    />
                   ))}
                 </div>
               </td>
@@ -728,7 +764,7 @@ function TableView({
 }
 
 function GridView({
-  students, onSelect, onInvite, onAssign, onUnlink, initials,
+  students, onSelect, onInvite, onAssign, onUnlink, onMove, initials,
   selectedIds, onToggleSelect,
 }: {
   students: PersonaStudent[];
@@ -736,6 +772,7 @@ function GridView({
   onInvite: (s: PersonaStudent) => void;
   onAssign: (s: PersonaStudent) => void;
   onUnlink: (s: PersonaStudent, p: ProgramChipData) => void;
+  onMove: (s: PersonaStudent, p: ProgramChipData) => void;
   initials: (s: PersonaStudent) => string;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
@@ -781,7 +818,12 @@ function GridView({
 
             <div className="flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
               {s.programs.length === 0 ? <NoProgramChip /> : s.programs.slice(0, 4).map(p => (
-                <ProgramChip key={p.enrollmentId} program={p} onRemove={() => onUnlink(s, p)} />
+                <ProgramChip
+                      key={p.enrollmentId}
+                      program={p}
+                      onRemove={() => onUnlink(s, p)}
+                      onMove={p.category === 'creser' && p.cycleId ? () => onMove(s, p) : undefined}
+                    />
               ))}
               {s.programs.length > 4 && (
                 <span className="text-[10px] font-bold text-slate-400 uppercase">+{s.programs.length - 4}</span>

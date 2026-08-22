@@ -8,6 +8,7 @@ import TrashIcon from '../../../ui/icons/TrashIcon';
 
 export interface ProgramHistoryItem {
     id: string;
+    cycleId?: string | null;
     cycleName: string;
     cycleType: string;
     status: 'ACTIVE' | 'CONFLICT' | 'GRADUATED';
@@ -17,6 +18,9 @@ export interface ProgramHistoryItem {
     paymentInfo?: { amount: number; method: string; status: string; paidAt: string } | null;
     notes?: string;
 }
+
+/** Tipos de ciclo que son CRESER — espeja CRESER_CYCLE_TYPES en admin/personas/types.ts. */
+const CRESER_TYPES = new Set(['initial', 'advanced', 'plan_lider']);
 
 const PAYMENT_METHODS = [
     { value: 'transfer', label: 'Transferencia' },
@@ -234,6 +238,8 @@ interface StudentDetailModalProps {
     onSoftDelete?: (id: string) => void;
     onRestore?: (id: string) => void;
     onPermanentDelete?: (student: StudentForModal) => void;
+    /** Mover esta inscripción de camada (sólo CRESER). Sin esto no se muestra el botón. */
+    onMoveCycle?: (program: ProgramHistoryItem) => void;
     role?: 'admin' | 'sysadmin';
 }
 
@@ -243,6 +249,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     onSoftDelete,
     onRestore,
     onPermanentDelete,
+    onMoveCycle,
     role = 'admin',
 }) => {
     const [detailTab, setDetailTab] = useState('PERSONAL');
@@ -668,9 +675,23 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                             <span className="text-2xl font-bold text-slate-800 block leading-tight mb-2">{prog.cycleName}</span>
                                                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{prog.cycleType === 'plan_lider' ? 'PROGRAMA LIDER' : prog.cycleType}</span>
                                                         </div>
-                                                        <span className={`text-[10px] font-bold px-3 py-1 rounded-sm uppercase tracking-wider border ${prog.status === 'ACTIVE' ? 'text-emerald-700 bg-emerald-100 border-emerald-200' : prog.status === 'CONFLICT' ? 'text-red-700 bg-red-100 border-red-200' : 'text-slate-700 bg-slate-200 border-slate-300'}`}>
-                                                            {prog.status === 'ACTIVE' ? 'Cursando' : prog.status === 'CONFLICT' ? 'En Conflicto' : 'Graduado'}
-                                                        </span>
+                                                        <div className="flex items-center gap-3">
+                                                            {onMoveCycle && CRESER_TYPES.has(prog.cycleType) && (
+                                                                <button
+                                                                    onClick={() => onMoveCycle(prog)}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-600 hover:text-white transition-colors"
+                                                                    title="Mover esta inscripción a otra camada de CRESER"
+                                                                >
+                                                                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5" />
+                                                                    </svg>
+                                                                    Mover de camada
+                                                                </button>
+                                                            )}
+                                                            <span className={`text-[10px] font-bold px-3 py-1 rounded-sm uppercase tracking-wider border ${prog.status === 'ACTIVE' ? 'text-emerald-700 bg-emerald-100 border-emerald-200' : prog.status === 'CONFLICT' ? 'text-red-700 bg-red-100 border-red-200' : 'text-slate-700 bg-slate-200 border-slate-300'}`}>
+                                                                {prog.status === 'ACTIVE' ? 'Cursando' : prog.status === 'CONFLICT' ? 'En Conflicto' : 'Graduado'}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                     
                                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
