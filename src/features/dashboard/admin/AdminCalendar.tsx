@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restInsert, restUpdate, restDelete, restUpsert, restRpc, getCurrentUserId } from '../../../services/supabaseRest';
+import { syncSessionToCalendars, removeSessionFromCalendars } from '../../../app/admin/calendario/actions';
 import { logEvent, getMyActorInfo } from '../../../services/activityEvents';
 import toast from 'react-hot-toast';
 import UsersIcon from '../../../ui/icons/UsersIcon';
@@ -373,6 +374,14 @@ const AdminCalendar: React.FC = () => {
             setIsAddingSession(false);
             openCycleDetail(selectedCycle);
             toast.success('Sesión agregada');
+
+            // Los alumnos que conectaron su Google Calendar la reciben ahora.
+            if (created?.id) {
+                const sync = await syncSessionToCalendars('cycle_session', created.id);
+                if (sync.result && sync.result.created > 0) {
+                    toast.success(`Agendada en ${sync.result.created} calendario(s) de Google`);
+                }
+            }
         } catch (error: any) {
             toast.error('Error al agregar sesión: ' + error.message);
         }
@@ -381,6 +390,9 @@ const AdminCalendar: React.FC = () => {
     const handleDeleteSession = async (sessionId: string) => {
         if (!selectedCycle) return;
         try {
+            // Antes de borrar la fila: después ya no podríamos saber a quién
+            // le habíamos agendado el encuentro.
+            await removeSessionFromCalendars('cycle_session', sessionId);
             await restDelete('attendance', { cycle_session_id: `eq.${sessionId}` });
             await restDelete('cycle_sessions', { id: `eq.${sessionId}` });
             openCycleDetail(selectedCycle);

@@ -1,6 +1,8 @@
 import { createClient } from '@/utils/supabase/server';
 import { IoCalendarOutline } from 'react-icons/io5';
 import CalendarView, { type CalendarSession } from './_components/CalendarView';
+import GoogleCalendarCard, { type GoogleCalendarStatus } from './_components/GoogleCalendarCard';
+import { resolveCourseAccess } from '@/src/services/courseAccess';
 
 // Buenos Aires "today" as YYYY-MM-DD — the source of truth for past/future split.
 function todayInArgentinaISO(): string {
@@ -13,30 +15,57 @@ function todayInArgentinaISO(): string {
   return fmt.format(new Date()); // en-CA gives YYYY-MM-DD
 }
 
-export default async function CampusCalendarioPage() {
+export default async function CampusCalendarioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const sp = await searchParams;
+  const gcalNotice = typeof sp.gcal === 'string' ? sp.gcal : null;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   let sessions: CalendarSession[] = [];
+  let gcalStatus: GoogleCalendarStatus = {
+    connected: false, googleEmail: null, syncedEvents: 0, lastError: null,
+  };
 
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id')
+      .select('id, role')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    // ── 1) Encuentros de cursos publicados (visibles para todos) ──────────
-    // Por el momento todos los alumnos ven los cursos publicados, así que
-    // también pueden ver los encuentros agendados de esos cursos.
-    const { data: visibleCourses } = await supabase
+    // Estado de la conexión con Google. La RPC no expone los tokens.
+    try {
+      const { data: statusRows } = await supabase.rpc('my_google_calendar_status');
+      const row = Array.isArray(statusRows) ? statusRows[0] : statusRows;
+      if (row) {
+        gcalStatus = {
+          connected: Boolean(row.connected),
+          googleEmail: row.google_email ?? null,
+          syncedEvents: Number(row.synced_events ?? 0),
+          lastError: row.last_error ?? null,
+        };
+      }
+    } catch { /* la migración 000003 todavía no corrió: card en "no conectado" */ }
+
+    // ── 1) Encuentros de los cursos que la persona tiene asignados ────────
+    // Un curso bloqueado no muestra sus jornadas: la vidriera enseña de qué va
+    // el programa, no su agenda.
+    const { data: publishedCourses } = await supabase
       .from('courses')
       .select('id, title')
       .eq('is_published', true);
 
+    const access = await resolveCourseAccess(supabase, profile?.id, profile?.role);
+    const visibleCourses = (publishedCourses || []).filter((c: any) => access.can(c.id));
+
     const courseTitleById: Record<string, string> = {};
-    (visibleCourses || []).forEach((c: any) => { courseTitleById[c.id] = c.title; });
-    const visibleCourseIds = (visibleCourses || []).map((c: any) => c.id);
+    visibleCourses.forEach((c: any) => { courseTitleById[c.id] = c.title; });
+    const visibleCourseIds = visibleCourses.map((c: any) => c.id);
 
     if (visibleCourseIds.length > 0) {
       const { data: courseSessions } = await supabase
@@ -133,6 +162,8 @@ export default async function CampusCalendarioPage() {
           Las fechas en las que vamos a estar juntos.
         </p>
       </header>
+
+      <GoogleCalendarCard status={gcalStatus} notice={gcalNotice} />
 
       <div className="flex-1 min-h-0">
         <CalendarView sessions={sessions} todayISO={todayISO} />

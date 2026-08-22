@@ -19,6 +19,7 @@ import {
 import {
   uploadLessonMaterial, deleteLessonMaterial, uploadCourseCover,
 } from '../../../app/admin/lms/actions';
+import { syncSessionToCalendars, removeSessionFromCalendars } from '../../../app/admin/calendario/actions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1975,6 +1976,14 @@ export default function AdminCourses() {
       setNewSessionMandatory(true);
       fetchData(true);
       toast.success('Encuentro agregado');
+
+      // Los alumnos del curso que conectaron su Google Calendar lo reciben ahora.
+      if (created?.id) {
+        const sync = await syncSessionToCalendars('course_session', created.id);
+        if (sync.result && sync.result.created > 0) {
+          toast.success(`Agendado en ${sync.result.created} calendario(s) de Google`);
+        }
+      }
     } catch (err: any) {
       toast.error('Error al agregar encuentro: ' + err.message);
     } finally {
@@ -1985,6 +1994,8 @@ export default function AdminCourses() {
   const deleteCourseSession = async (sessionId: string) => {
     if (!confirm('¿Eliminar este encuentro?')) return;
     try {
+      // Antes de borrar la fila: después no sabríamos a quién se lo agendamos.
+      await removeSessionFromCalendars('course_session', sessionId);
       await restDelete('course_sessions', { id: `eq.${sessionId}` });
       setCourseSessions(prev => prev.filter(s => s.id !== sessionId));
       toast.success('Encuentro eliminado');

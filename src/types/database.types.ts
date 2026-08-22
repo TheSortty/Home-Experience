@@ -1701,6 +1701,17 @@ export type Database = {
       }
       current_user_role: { Args: never; Returns: string }
       get_my_profile_id: { Args: never; Returns: string }
+      my_google_calendar_status: {
+        Args: never
+        Returns: {
+          connected: boolean
+          google_email: string | null
+          connected_at: string | null
+          last_sync_at: string | null
+          last_error: string | null
+          synced_events: number
+        }[]
+      }
       get_student_progress: {
         Args: { p_profile_id?: string }
         Returns: {
