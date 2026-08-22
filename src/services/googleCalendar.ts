@@ -65,7 +65,7 @@ export function buildConsentUrl(origin: string, state: string, loginHint?: strin
     client_id: clientId,
     redirect_uri: redirectUri(origin),
     response_type: 'code',
-    scope: `${GOOGLE_CALENDAR_SCOPE} https://www.googleapis.com/auth/userinfo.email`,
+    scope: `openid email ${GOOGLE_CALENDAR_SCOPE}`,
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
@@ -138,7 +138,13 @@ export async function revokeToken(token: string): Promise<void> {
   }).catch(() => undefined);
 }
 
-/** Lee el email del id_token sin validar firma: viene directo de Google por TLS. */
+/**
+ * Lee el email del id_token sin validar firma: viene directo de Google por TLS.
+ *
+ * Google sólo devuelve id_token si el consentimiento pidió el scope `openid`;
+ * con `userinfo.email` a secas la respuesta no lo trae y nos quedábamos sin
+ * saber qué cuenta conectó el alumno. Por eso buildConsentUrl pide `openid email`.
+ */
 function emailFromIdToken(idToken?: string): string | null {
   if (!idToken) return null;
   try {
