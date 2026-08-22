@@ -109,7 +109,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         <div className="text-3xl font-black tracking-tighter text-white drop-shadow-[0_4px_20px_rgba(0,169,206,0.4)]">
           HOME
         </div>
-        <span className="text-[10px] font-bold tracking-[0.3em] text-[#8BD8DF]/70 uppercase">
+        <span className="text-[10px] font-bold tracking-[0.3em] text-[#8BD8DF] uppercase">
           Management System
         </span>
       </div>
@@ -131,21 +131,21 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                         <div className="section text-center">
                           {!isForgotView ? (
                             <div className="mb-6 flex flex-col items-center gap-2">
-                              <span className="inline-flex items-center gap-2 text-[10px] font-bold tracking-[0.4em] uppercase text-[#8BD8DF]/80">
-                                <span className="w-6 h-px bg-[#8BD8DF]/40" />
+                              <span className="inline-flex items-center gap-2 text-[10px] font-bold tracking-[0.4em] uppercase text-[#8BD8DF]">
+                                <span className="w-6 h-px bg-[#8BD8DF]/70" />
                                 Acceso
-                                <span className="w-6 h-px bg-[#8BD8DF]/40" />
+                                <span className="w-6 h-px bg-[#8BD8DF]/70" />
                               </span>
                               <h1 className="font-serif text-5xl font-bold tracking-tight text-white leading-none">
                                 CAMPUS
                               </h1>
-                              <p className="text-xs text-white/50 font-medium tracking-wide">
+                              <p className="text-xs text-white/75 font-medium tracking-wide">
                                 Ingresá con tu cuenta de Home
                               </p>
                             </div>
                           ) : (
                             <div className="mb-6 flex flex-col items-center gap-2">
-                              <span className="text-[10px] font-bold tracking-[0.4em] uppercase text-[#8BD8DF]/80">
+                              <span className="text-[10px] font-bold tracking-[0.4em] uppercase text-[#8BD8DF]">
                                 Recuperación
                               </span>
                               <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight text-white leading-tight">
@@ -156,7 +156,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
                           <form onSubmit={isForgotView ? handleResetPassword : handleLoginSubmit}>
                             {isForgotView && (
-                                <p className="text-sm text-white/70 mb-4 px-4 text-center">
+                                <p className="text-sm text-white/85 mb-4 px-4 text-center">
                                     Ingrese el correo electrónico con el cual desea recuperar su contraseña.
                                 </p>
                             )}
@@ -195,10 +195,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                                   <button 
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white focus:outline-none flex items-center justify-center p-2"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white focus:outline-none flex items-center justify-center p-2"
                                   >
                                     {showPassword ? (
-                                      <span className="w-5 h-5 text-white/50 flex items-center justify-center">
+                                      <span className="w-5 h-5 flex items-center justify-center">
                                         <IoEyeOffOutline size={20} />
                                       </span>
                                     ) : (
@@ -211,7 +211,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                             )}
 
                             {error && (
-                              <div className="text-red-400 text-sm mt-4 font-medium px-4">
+                              <div className="text-red-300 text-sm mt-4 font-medium px-4">
                                 {error}
                               </div>
                             )}
@@ -232,9 +232,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                           {!isForgotView && (
                               <div className="mt-6 flex flex-col gap-4">
                                 <div className="mt-6 mb-6 flex items-center justify-center">
-                                  <div className="h-[1px] w-full bg-white/10" />
-                                  <span className="px-4 text-xs font-medium text-white/50 uppercase tracking-wider">O</span>
-                                  <div className="h-[1px] w-full bg-white/10" />
+                                  <div className="h-[1px] w-full bg-white/25" />
+                                  <span className="px-4 text-xs font-medium text-white/70 uppercase tracking-wider">O</span>
+                                  <div className="h-[1px] w-full bg-white/25" />
                                 </div>
                                 <button
                                   type="button"
@@ -256,7 +256,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                                     setError('');
                                 }} 
                                 type="button" 
-                                className="text-white hover:text-[#00A9CE] transition-colors text-sm"
+                                className="text-white hover:text-[#8BD8DF] underline decoration-white/30 underline-offset-4 hover:decoration-[#8BD8DF] transition-colors text-sm"
                             >
                                 {isForgotView ? 'Volver al inicio de sesión' : '¿Olvidaste tu contraseña?'}
                             </button>
