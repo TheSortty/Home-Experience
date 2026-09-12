@@ -11,7 +11,7 @@ import {
   IoListOutline, IoGridOutline, IoTrashOutline,
 } from 'react-icons/io5';
 import { supabase } from '../../../services/supabaseClient';
-import { restSelect, restInsert, restRpc } from '../../../services/supabaseRest';
+import { restSelect, restUpsert, restRpc } from '../../../services/supabaseRest';
 import { getMyActorInfo } from '../../../services/activityEvents';
 import type { ActivityEventType, ActivityTargetKind } from '../../../services/activityEvents';
 import { composeHeadline, entityLink } from '../../../services/activityHeadlines';
@@ -199,20 +199,28 @@ export default function AdminActivity({ onUnreadChange }: Props) {
       const actor = await getMyActorInfo();
       if (actor) myProfileIdRef.current = actor.profileId;
 
-      const [eventsRes, readsRes] = await Promise.all([
-        restSelect<ActivityEvent>('staff_activity_events', {
-          columns: 'id,created_at,event_type,actor_profile_id,actor_role,subject_profile_id,target_kind,target_id,details',
-          order: 'created_at.desc',
-          limit: PAGE_SIZE,
-        }),
-        actor
-          ? restSelect<ReadRow>('staff_activity_event_reads', {
-              columns: 'event_id',
-              filters: { profile_id: `eq.${actor.profileId}` },
-              limit: 1000,
-            })
-          : Promise.resolve({ data: [], count: null }),
-      ]);
+      const eventsRes = await restSelect<ActivityEvent>('staff_activity_events', {
+        columns: 'id,created_at,event_type,actor_profile_id,actor_role,subject_profile_id,target_kind,target_id,details',
+        order: 'created_at.desc',
+        limit: PAGE_SIZE,
+      });
+
+      // Las lecturas se piden acotadas a los eventos que se van a pintar. Traer
+      // "las primeras 1000 lecturas de la cuenta" servía sólo mientras hubiera
+      // menos de 1000: pasado ese punto PostgREST devolvía un recorte sin orden
+      // — en la práctica el más viejo — que no incluía los eventos recientes,
+      // y el feed los mostraba sin leer aunque estuvieran marcados en la base.
+      const eventIds = eventsRes.data.map(e => e.id);
+      const readsRes = actor && eventIds.length > 0
+        ? await restSelect<ReadRow>('staff_activity_event_reads', {
+            columns: 'event_id',
+            filters: {
+              profile_id: `eq.${actor.profileId}`,
+              event_id: `in.(${eventIds.join(',')})`,
+            },
+            limit: eventIds.length,
+          })
+        : { data: [] as ReadRow[], count: null };
 
       setEvents(eventsRes.data);
       setReadIds(new Set(readsRes.data.map(r => r.event_id)));
@@ -296,10 +304,13 @@ export default function AdminActivity({ onUnreadChange }: Props) {
     if (!myProfileIdRef.current) return;
     setReadIds(prev => new Set(prev).add(eventId));
     try {
-      await restInsert(
+      // Upsert y no insert: readIds sólo cubre la página cargada, así que un
+      // evento ya leído en otra sesión llegaría acá como nuevo y el insert
+      // moriría con 409 contra la PK (event_id, profile_id).
+      await restUpsert(
         'staff_activity_event_reads',
         { event_id: eventId, profile_id: myProfileIdRef.current },
-        { returning: 'minimal' }
+        { onConflict: 'event_id,profile_id', returning: 'minimal' }
       );
     } catch (err) {
       console.warn('[AdminActivity] markRead failed', err);
@@ -308,33 +319,28 @@ export default function AdminActivity({ onUnreadChange }: Props) {
 
   const markAllRead = async () => {
     if (!myProfileIdRef.current) return;
+
+    // El marcado lo resuelve el servidor (INSERT ... SELECT con ON CONFLICT DO
+    // NOTHING) en vez de armarse acá con los ids de los eventos: el cliente no
+    // ve más allá de la página cargada, y esa lista parcial era justamente lo
+    // que hacía fallar el lote entero por duplicados.
+    const previousReadIds = readIds;
+    const previousUnread = trueUnreadCount;
+
+    setReadIds(new Set(events.map(e => e.id)));
+    setTrueUnreadCount(0);
+
     try {
-      // Fetch ALL event IDs (not just the loaded PAGE_SIZE)
-      const { data: allIds } = await restSelect<{ id: string }>('staff_activity_events', {
-        columns: 'id',
-      });
-      if (!allIds || allIds.length === 0) return;
-
-      // Filter to only those not already marked as read
-      const unreadIds = allIds.map(r => r.id).filter(id => !readIds.has(id));
-      if (unreadIds.length === 0) return;
-
-      // Optimistically update local state
-      setReadIds(prev => {
-        const next = new Set(prev);
-        unreadIds.forEach(id => next.add(id));
-        return next;
-      });
-      setTrueUnreadCount(0);
-
-      // Insert reads for all unread events
-      await restInsert(
-        'staff_activity_event_reads',
-        unreadIds.map(id => ({ event_id: id, profile_id: myProfileIdRef.current })),
-        { returning: 'minimal' }
-      );
+      await restRpc<number>('staff_activity_mark_all_read');
+      // Releer el contador real en lugar de asumir 0: un coach sólo marca lo
+      // que tiene a cargo, así que puede quedarle pendiente algo fuera de su
+      // alcance.
+      await refreshTrueUnread();
     } catch (err) {
       console.warn('[AdminActivity] markAllRead failed', err);
+      // Sin esto la UI mentía: mostraba todo leído mientras la base seguía igual.
+      setReadIds(previousReadIds);
+      setTrueUnreadCount(previousUnread);
     }
   };
 
