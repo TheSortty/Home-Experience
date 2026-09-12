@@ -110,7 +110,11 @@ function DueDateBanner({ data }: { data: SubmissionTabData }) {
 
 const MAX_FILES = 8;
 const MAX_MB = 5;
-const ACCEPT = '.pdf,.doc,.docx,.odt,.rtf,.txt,.md,.csv,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.tif,.tiff';
+// Extensions alone are not enough: on Android, the "Files"/Drive/etc. picker maps
+// `accept` to MIME types internally, and that mapping is unreliable for office
+// formats — documents end up greyed out or hidden entirely. Pairing each
+// extension with its MIME type keeps them selectable from any provider.
+const ACCEPT = '.pdf,application/pdf,.doc,application/msword,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.odt,application/vnd.oasis.opendocument.text,.rtf,application/rtf,.txt,text/plain,.md,text/markdown,.csv,text/csv,.ppt,application/vnd.ms-powerpoint,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.xls,application/vnd.ms-excel,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.jpg,.jpeg,image/jpeg,.png,image/png,.webp,image/webp,.heic,image/heic,.heif,image/heif,.gif,image/gif,.bmp,image/bmp,.tif,.tiff,image/tiff';
 
 function fmtSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
