@@ -94,7 +94,7 @@ export default function ReviewForm({
             <input
               ref={fileRef}
               type="file"
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.ppt,.pptx"
+              accept=".pdf,application/pdf,.doc,application/msword,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.jpg,.jpeg,image/jpeg,.png,image/png,.ppt,application/vnd.ms-powerpoint,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
               className="text-xs text-slate-600"
             />
             {existingReview?.revised_file_name && (
