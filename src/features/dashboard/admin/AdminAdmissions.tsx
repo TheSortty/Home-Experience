@@ -19,6 +19,15 @@ interface Registration {
     is_deleted?: boolean;
 }
 
+interface OnlinePayment {
+    id: string;
+    amount: number | null;
+    paid_at: string | null;
+    item_code: string | null;
+    installments: number | null;
+    payer_email: string | null;
+}
+
 interface Cycle {
     id: string;
     name: string;
@@ -43,6 +52,11 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     const [paymentConfirmed, setPaymentConfirmed] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState('MERCADO_PAGO'); // 'MERCADO_PAGO', 'TRANSFER', 'CASH'
     const [paymentAmount, setPaymentAmount] = useState<string>('');
+    /** Pago de Mercado Pago ya acreditado por el webhook, todavía sin vincular
+     *  a esta inscripción. Si existe, se VINCULA en vez de insertar uno nuevo:
+     *  de lo contrario la misma plata quedaba cargada dos veces. */
+    const [onlinePayment, setOnlinePayment] = useState<OnlinePayment | null>(null);
+    const [useOnlinePayment, setUseOnlinePayment] = useState(true);
     const [selectedCycleId, setSelectedCycleId] = useState('');
     const [selectedCycleId2, setSelectedCycleId2] = useState(''); // For Combos
     const [detailTab, setDetailTab] = useState('PERSONAL');
@@ -138,6 +152,51 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
     const unformatAmount = (val: string) => {
         return val.replace(/\./g, '');
     };
+
+    // ── Pago online ya acreditado ────────────────────────────────────────────
+    // Se busca por el mail del pagador porque el checkout es público: alguien
+    // puede pagar sin tener cuenta, y ahí el mail es lo único que ata el pago
+    // con la solicitud. Sólo se traen los que no están vinculados a nada.
+    useEffect(() => {
+        setOnlinePayment(null);
+        setUseOnlinePayment(true);
+        if (!selectedRegistration?.email) return;
+
+        let cancelled = false;
+        (async () => {
+            try {
+                const { data } = await restSelect<OnlinePayment>('payments', {
+                    columns: 'id,amount,paid_at,item_code,installments,payer_email',
+                    filters: {
+                        method: 'eq.mercadopago',
+                        status: 'eq.paid',
+                        submission_id: 'is.null',
+                        enrollment_id: 'is.null',
+                        payer_email: `ilike.${selectedRegistration.email}`,
+                    },
+                    order: 'paid_at.desc',
+                    limit: 1,
+                });
+                if (cancelled) return;
+                const found = data[0];
+                if (!found) return;
+                setOnlinePayment(found);
+                // Ya cobrado: se da por verificado y se completa el monto real,
+                // para que nadie lo tipee de nuevo y lo tipee distinto.
+                setPaymentConfirmed(true);
+                setPaymentMethod('MERCADO_PAGO');
+                if (found.amount != null) {
+                    setPaymentAmount(formatAmount(String(Math.round(Number(found.amount)))));
+                }
+            } catch (err) {
+                // Que no se caiga la confirmación por esto: sin el aviso, el
+                // admin carga el pago a mano como venía haciendo.
+                console.warn('[AdminAdmissions] no se pudo buscar el pago online', err);
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [selectedRegistration?.id, selectedRegistration?.email]);
 
     const fetchTrashCount = async () => {
         // Removed separate query, managed via local array state
@@ -307,15 +366,29 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                 const amountValue = Number(unformatAmount(paymentAmount)) || 0;
 
                 // 1. Registrar el Pago del ciclo principal
+                const linkingOnline = Boolean(onlinePayment) && useOnlinePayment;
                 try {
-                    await restInsert('payments', {
-                        submission_id: selectedRegistration.id,
-                        enrollment_id: data.enrollment_id,
-                        amount: amountValue,
-                        method: normalizedMethod,
-                        status: 'paid',
-                        paid_at: new Date().toISOString(),
-                    }, { returning: 'minimal' });
+                    if (linkingOnline && onlinePayment) {
+                        // El webhook ya lo registró: acá sólo se le cuelga la
+                        // inscripción. Insertar otra fila duplicaría la plata.
+                        await restUpdate('payments',
+                            {
+                                submission_id: selectedRegistration.id,
+                                enrollment_id: data.enrollment_id,
+                                updated_at: new Date().toISOString(),
+                            },
+                            { id: `eq.${onlinePayment.id}` },
+                        );
+                    } else {
+                        await restInsert('payments', {
+                            submission_id: selectedRegistration.id,
+                            enrollment_id: data.enrollment_id,
+                            amount: amountValue,
+                            method: normalizedMethod,
+                            status: 'paid',
+                            paid_at: new Date().toISOString(),
+                        }, { returning: 'minimal' });
+                    }
                 } catch (payErr) {
                     console.error('Error recording payment', payErr);
                 }
@@ -838,6 +911,40 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                             <div>
                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">1. Verificación de Cobro</h4>
                                 <div className="space-y-4">
+                                    {onlinePayment && (
+                                        <div className="rounded-sm border border-emerald-200 bg-emerald-50 p-4 animate-fade-in">
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div>
+                                                    <p className="text-sm font-bold text-emerald-800">
+                                                        Pagó por Mercado Pago
+                                                        {onlinePayment.amount != null && ` · $${Number(onlinePayment.amount).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}
+                                                    </p>
+                                                    <p className="text-xs text-emerald-700 mt-1">
+                                                        {onlinePayment.paid_at
+                                                            ? new Date(onlinePayment.paid_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+                                                            : 'fecha desconocida'}
+                                                        {Number(onlinePayment.installments) > 1 && ` · ${onlinePayment.installments} cuotas`}
+                                                        {onlinePayment.payer_email && ` · ${onlinePayment.payer_email}`}
+                                                    </p>
+                                                </div>
+                                                <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={useOnlinePayment}
+                                                        onChange={e => setUseOnlinePayment(e.target.checked)}
+                                                        className="w-4 h-4 text-emerald-600 rounded-sm border-emerald-300 focus:ring-emerald-500"
+                                                    />
+                                                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Vincular</span>
+                                                </label>
+                                            </div>
+                                            <p className="text-[11px] text-emerald-600 mt-3 leading-relaxed">
+                                                {useOnlinePayment
+                                                    ? 'Este cobro se va a vincular a la inscripción. No se carga un pago nuevo.'
+                                                    : 'Destildado: se va a cargar un pago aparte y el cobro online queda suelto. Usalo sólo si no es la misma persona.'}
+                                            </p>
+                                        </div>
+                                    )}
+
                                     <label className="flex items-center gap-4 cursor-pointer group">
                                         <input
                                             type="checkbox"
@@ -869,7 +976,10 @@ const AdminAdmissions: React.FC<AdminAdmissionsProps> = ({ searchTerm = '' }) =>
                                                     value={paymentAmount}
                                                     onChange={e => setPaymentAmount(formatAmount(e.target.value))}
                                                     placeholder="Ej: 50.000"
-                                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400 font-mono"
+                                                    // Al vincular manda el monto que cobró Mercado Pago; editarlo acá
+                                                    // no cambiaría nada, así que mejor que no parezca editable.
+                                                    readOnly={Boolean(onlinePayment) && useOnlinePayment}
+                                                    className={`w-full p-2.5 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400 font-mono ${(onlinePayment && useOnlinePayment) ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-slate-50'}`}
                                                 />
                                             </div>
                                         </div>
