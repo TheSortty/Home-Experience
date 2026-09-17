@@ -8,7 +8,7 @@ import {
   IoMegaphoneOutline, IoCalendarOutline, IoVideocamOutline,
   IoDocumentTextOutline, IoCloseOutline, IoArrowForwardOutline,
   IoCheckmarkDoneOutline, IoTimeOutline, IoSearchOutline,
-  IoArrowBackOutline, IoFilterOutline, IoTrashOutline,
+  IoArrowBackOutline, IoFilterOutline, IoTrashOutline, IoCashOutline,
 } from 'react-icons/io5';
 import { restSelect } from '@/src/services/supabaseRest';
 import type { ActivityEventType, ActivityTargetKind } from '@/src/services/activityEvents';
@@ -31,7 +31,7 @@ interface ActivityEvent {
 export interface CourseTab { id: string; title: string }
 
 type DatePreset = 'today' | 'week' | 'month' | 'all';
-type CategoryFilter = 'all' | 'content' | 'access' | 'submissions' | 'reviews' | 'forum';
+type CategoryFilter = 'all' | 'content' | 'access' | 'submissions' | 'reviews' | 'forum' | 'payments';
 
 // ─── Vocabulary ────────────────────────────────────────────────────────────────
 
@@ -47,6 +47,7 @@ const CATEGORY_OF: Record<ActivityEventType, CategoryFilter> = {
   'coach.work_returned':         'reviews',
   'coach.work_approved':         'reviews',
   'admin.submission_deleted':    'submissions',
+  'payment.approved':            'payments',
 };
 
 const CATEGORIES: { id: CategoryFilter; label: string }[] = [
@@ -56,6 +57,7 @@ const CATEGORIES: { id: CategoryFilter; label: string }[] = [
   { id: 'submissions', label: 'Entregas' },
   { id: 'reviews',     label: 'Devoluciones' },
   { id: 'forum',       label: 'Foro' },
+  { id: 'payments',    label: 'Pagos' },
 ];
 
 const DATE_PRESETS: { id: DatePreset; label: string }[] = [
@@ -83,6 +85,7 @@ const VISUALS: Record<ActivityEventType, CardVisuals> = {
   'coach.work_returned':         { icon: IoCheckmarkDoneOutline, accent: 'bg-emerald-50 text-emerald-600', border: 'border-l-emerald-400' },
   'coach.work_approved':         { icon: IoCheckmarkDoneOutline, accent: 'bg-green-50 text-green-600',     border: 'border-l-green-500' },
   'admin.submission_deleted':    { icon: IoTrashOutline,         accent: 'bg-red-50 text-red-600',         border: 'border-l-red-400' },
+  'payment.approved':            { icon: IoCashOutline,          accent: 'bg-lime-50 text-lime-700',       border: 'border-l-lime-500' },
 };
 
 // ─── Time helpers ───────────────────────────────────────────────────────────────
@@ -209,7 +212,7 @@ export default function ActivityTimelineClient({ courses }: Props) {
 
   // ── Summary counts ────────────────────────────────────────────────────────────
   const summary = useMemo(() => {
-    const counts: Record<CategoryFilter, number> = { all: 0, content: 0, access: 0, submissions: 0, reviews: 0, forum: 0 };
+    const counts: Record<CategoryFilter, number> = { all: 0, content: 0, access: 0, submissions: 0, reviews: 0, forum: 0, payments: 0 };
     for (const ev of events) {
       counts.all++;
       const cat = CATEGORY_OF[ev.event_type];

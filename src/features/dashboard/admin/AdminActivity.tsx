@@ -8,11 +8,11 @@ import {
   IoMegaphoneOutline, IoCalendarOutline, IoVideocamOutline,
   IoDocumentTextOutline, IoCloseOutline, IoArrowForwardOutline,
   IoCheckmarkDoneOutline, IoTimeOutline, IoSearchOutline,
-  IoTrashOutline,
+  IoTrashOutline, IoCashOutline,
 } from 'react-icons/io5';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restUpsert, restRpc } from '../../../services/supabaseRest';
-import { getMyActorInfo } from '../../../services/activityEvents';
+import { getMyActorInfo, notifyActivityRead } from '../../../services/activityEvents';
 import type { ActivityEventType, ActivityTargetKind } from '../../../services/activityEvents';
 import { composeHeadline, entityLink } from '../../../services/activityHeadlines';
 
@@ -32,7 +32,7 @@ interface ActivityEvent {
 
 interface ReadRow { event_id: string }
 
-type CategoryFilter = 'all' | 'content' | 'access' | 'submissions' | 'reviews' | 'forum';
+type CategoryFilter = 'all' | 'content' | 'access' | 'submissions' | 'reviews' | 'forum' | 'payments';
 
 // ─── Vocabulary maps ──────────────────────────────────────────────────────────
 
@@ -48,6 +48,7 @@ const CATEGORY_OF: Record<ActivityEventType, CategoryFilter> = {
   'coach.work_returned':         'reviews',
   'coach.work_approved':         'reviews',
   'admin.submission_deleted':    'submissions',
+  'payment.approved':            'payments',
 };
 
 /** Un bloque por categoría, cada uno con su propio mini-feed — en vez de un
@@ -58,6 +59,7 @@ const CATEGORY_BLOCKS: { id: Exclude<CategoryFilter, 'all'>; label: string; icon
   { id: 'content',     label: 'Contenido',     icon: IoDocumentTextOutline,  accent: 'bg-indigo-50 text-indigo-600' },
   { id: 'access',      label: 'Descargas',     icon: IoEyeOutline,           accent: 'bg-amber-50 text-amber-600' },
   { id: 'forum',       label: 'Foro',          icon: IoMegaphoneOutline,     accent: 'bg-violet-50 text-violet-600' },
+  { id: 'payments',    label: 'Pagos',         icon: IoCashOutline,          accent: 'bg-lime-50 text-lime-700' },
 ];
 const BLOCK_PREVIEW_SIZE = 3;
 
@@ -79,6 +81,7 @@ const VISUALS: Record<ActivityEventType, CardVisuals> = {
   'coach.work_returned':         { icon: IoCheckmarkDoneOutline,   accent: 'bg-emerald-50 text-emerald-600',   border: 'border-l-emerald-400' },
   'coach.work_approved':         { icon: IoCheckmarkDoneOutline,   accent: 'bg-green-50 text-green-600',       border: 'border-l-green-500' },
   'admin.submission_deleted':    { icon: IoTrashOutline,           accent: 'bg-red-50 text-red-600',           border: 'border-l-red-400' },
+  'payment.approved':            { icon: IoCashOutline,            accent: 'bg-lime-50 text-lime-700',         border: 'border-l-lime-500' },
 };
 
 function timeAgo(dateStr: string): string {
@@ -272,7 +275,7 @@ export default function AdminActivity({ onUnreadChange }: Props) {
 
   // ── Unread by category for chip counters ─────────────────────────────────
   const unreadByCategory = useMemo(() => {
-    const out: Record<CategoryFilter, number> = { all: 0, content: 0, access: 0, submissions: 0, reviews: 0, forum: 0 };
+    const out: Record<CategoryFilter, number> = { all: 0, content: 0, access: 0, submissions: 0, reviews: 0, forum: 0, payments: 0 };
     for (const ev of events) {
       if (readIds.has(ev.id)) continue;
       out.all += 1;
@@ -289,7 +292,7 @@ export default function AdminActivity({ onUnreadChange }: Props) {
 
   const eventsByCategory = useMemo(() => {
     const out: Record<Exclude<CategoryFilter, 'all'>, ActivityEvent[]> = {
-      content: [], access: [], submissions: [], reviews: [], forum: [],
+      content: [], access: [], submissions: [], reviews: [], forum: [], payments: [],
     };
     for (const ev of activeEvents) {
       const cat = CATEGORY_OF[ev.event_type];
@@ -317,6 +320,7 @@ export default function AdminActivity({ onUnreadChange }: Props) {
         { event_id: eventId, profile_id: myProfileIdRef.current },
         { onConflict: 'event_id,profile_id', returning: 'minimal' }
       );
+      notifyActivityRead();
     } catch (err) {
       console.warn('[AdminActivity] markRead failed', err);
     }
@@ -348,6 +352,7 @@ export default function AdminActivity({ onUnreadChange }: Props) {
 
     try {
       await restRpc<number>('staff_activity_mark_all_read');
+      notifyActivityRead();
       // Releer el contador real en lugar de asumir 0: un coach sólo marca lo
       // que tiene a cargo, así que puede quedarle pendiente algo fuera de su
       // alcance.

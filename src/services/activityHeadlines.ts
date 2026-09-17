@@ -66,10 +66,32 @@ export function composeHeadline(ev: ActivityEventSlim): { title: string; seconda
         title: `${actor} eliminó una entrega`,
         secondary: `${d.fileCount ? `${d.fileCount} archivo${Number(d.fileCount) !== 1 ? 's' : ''}` : 'entrega'}${d.version ? ` · v${d.version}` : ''}`,
       };
+    case 'payment.approved': {
+      // Sin actorName: el evento lo genera el webhook, no una persona.
+      const who = d.payerName || d.payerEmail || 'Alguien';
+      const amount = typeof d.amount === 'number'
+        ? `$${d.amount.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`
+        : null;
+      const cuotas = Number(d.installments) > 1 ? `${d.installments} cuotas` : null;
+      return {
+        title: `${who} pagó${amount ? ` ${amount}` : ''} por Mercado Pago`,
+        secondary: [PAYMENT_ITEM_LABEL[d.itemCode as string] ?? null, cuotas]
+          .filter(Boolean).join(' · ') || null,
+      };
+    }
     default:
       return { title: 'Evento', secondary: null };
   }
 }
+
+/** Espeja PAYMENT_ITEMS de pricing.ts, en versión corta para la bandeja. */
+const PAYMENT_ITEM_LABEL: Record<string, string> = {
+  initial:    'Nivel INICIAL',
+  advanced:   'Nivel AVANZADO',
+  leadership: 'Programa de Liderazgo',
+  combo_1:    'Combo INICIAL + AVANZADO',
+  combo_2:    'Combo completo',
+};
 
 export function entityLink(ev: ActivityEventSlim): { href: string; label: string } | null {
   const d = ev.details || {};
@@ -87,6 +109,8 @@ export function entityLink(ev: ActivityEventSlim): { href: string; label: string
       return { href: '/calendario', label: 'Ver calendario' };
     case 'forum_post':
       return { href: '/comunidad', label: 'Ir al foro' };
+    case 'payment':
+      return { href: '/admin/inscripciones', label: 'Ver inscripciones' };
     default:
       return null;
   }

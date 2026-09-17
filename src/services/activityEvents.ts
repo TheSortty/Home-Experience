@@ -26,7 +26,8 @@ export type ActivityEventType =
   | 'coach.material_accessed'
   | 'coach.work_returned'
   | 'coach.work_approved'
-  | 'admin.submission_deleted';
+  | 'admin.submission_deleted'
+  | 'payment.approved';
 
 export type ActivityTargetKind =
   | 'lesson_resource'
@@ -35,7 +36,8 @@ export type ActivityTargetKind =
   | 'cycle_session'
   | 'submission'
   | 'submission_review'
-  | 'forum_post';
+  | 'forum_post'
+  | 'payment';
 
 export interface LogEventArgs {
   type: ActivityEventType;
@@ -164,4 +166,18 @@ export async function getMyActorInfo(): Promise<ActorInfo | null> {
     console.warn('[activityEvents] Failed to resolve actor info', err);
     return null;
   }
+}
+
+/**
+ * Aviso de "marqué actividad como leída", del feed al badge del AdminShell.
+ *
+ * Va por window y no por realtime: staff_activity_event_reads no está en la
+ * publicación supabase_realtime, y aunque lo estuviera, marcar todo genera una
+ * fila por evento — un mensaje por cada una para refrescar un solo contador.
+ */
+export const ACTIVITY_READ_EVENT = 'admin:activity-read';
+
+export function notifyActivityRead(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(ACTIVITY_READ_EVENT));
 }

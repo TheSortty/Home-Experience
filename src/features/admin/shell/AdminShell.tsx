@@ -12,6 +12,7 @@ import DocumentIcon from '../../../ui/icons/DocumentIcon';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restRpc } from '../../../services/supabaseRest';
+import { ACTIVITY_READ_EVENT } from '../../../services/activityEvents';
 
 import { CHANGELOG } from '@/src/data/changelog';
 import '../../dashboard/admin/admin-reboot.css';
@@ -126,8 +127,11 @@ export default function AdminShell({ children }: AdminShellProps) {
     const channel = supabase.channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions' }, () => refreshPendingAdmissions())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'staff_activity_events' }, () => refreshUnreadActivity())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'staff_activity_event_reads' }, () => refreshUnreadActivity())
       .subscribe();
+    // Ojo: no hay listener sobre staff_activity_event_reads porque esa tabla no
+    // está en la publicación supabase_realtime, así que nunca emitió nada. El
+    // aviso de "ya lo leí" llega por el evento ACTIVITY_READ_EVENT de abajo, que
+    // además evita el chubasco de un mensaje por fila al marcar todo de una.
 
     const onVisible = () => {
       if (!document.hidden) {
@@ -136,11 +140,20 @@ export default function AdminShell({ children }: AdminShellProps) {
       }
     };
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener(ACTIVITY_READ_EVENT, refreshUnreadActivity);
     return () => {
       supabase.removeChannel(channel);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener(ACTIVITY_READ_EVENT, refreshUnreadActivity);
     };
   }, [isAdmin, refreshPendingAdmissions, refreshUnreadActivity]);
+
+  // El shell es un layout: navegar entre secciones no lo vuelve a montar, así
+  // que sin esto el badge se quedaba con el número del primer render.
+  useEffect(() => {
+    if (!isAdmin) return;
+    refreshUnreadActivity();
+  }, [pathname, isAdmin, refreshUnreadActivity]);
 
   // ─── Admin avatar ─────────────────────────────────────────────────────────
   useEffect(() => {
