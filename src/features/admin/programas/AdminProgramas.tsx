@@ -8,7 +8,7 @@ import {
   IoAddOutline, IoCalendarOutline, IoPeopleOutline, IoBookOutline,
   IoSchoolOutline, IoChevronForwardOutline, IoTrashOutline,
   IoArrowBackCircleOutline, IoCheckmarkCircleOutline, IoTimeOutline,
-  IoEllipsisHorizontalOutline,
+  IoEllipsisHorizontalOutline, IoSearchOutline, IoCloseOutline,
 } from 'react-icons/io5';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restInsert, restUpdate, restDelete, getCurrentUserId } from '../../../services/supabaseRest';
@@ -43,7 +43,7 @@ const TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> 
 export default function AdminProgramas() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const searchTerm = searchParams.get('q') ?? '';
+  const [searchTerm, setSearchTerm] = useState('');
   const tabParam = searchParams.get('tab') as ProgramTab | null;
   const [activeTab, setActiveTab] = useState<ProgramTab>(tabParam === 'campus' ? 'campus' : 'creser');
 
@@ -57,15 +57,39 @@ export default function AdminProgramas() {
   return (
     <div className="flex flex-col gap-0 h-full">
       {/* ── Header ── */}
-      <div className="px-6 pt-5 pb-0 shrink-0">
-        <h1 className="text-xl font-bold text-slate-900">Programas</h1>
-        <p className="text-xs text-slate-400 mt-0.5">
-          {activeTab === 'creser' ? 'Ciclos presenciales CRESER' : 'Cursos del Campus Digital'}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 pt-5 pb-0 shrink-0">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-slate-900">Programas</h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {activeTab === 'creser' ? 'Ciclos presenciales CRESER' : 'Cursos del Campus Digital'}
+          </p>
+        </div>
+
+        {activeTab === 'creser' && (
+          <div className="relative w-full sm:w-56 flex-shrink-0">
+            <IoSearchOutline size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar ciclo..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30 focus:border-[#00A9CE]/40"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                aria-label="Limpiar búsqueda"
+              >
+                <IoCloseOutline size={14} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Tabs ── */}
-      <div className="flex items-end gap-0 px-6 pt-4 border-b border-slate-100 shrink-0">
+      <div className="flex items-end gap-0 px-6 pt-4 border-b border-slate-100 shrink-0 overflow-x-auto hide-scrollbar">
         {([
           { id: 'creser' as ProgramTab, label: 'CRESER', icon: <IoSchoolOutline className="w-4 h-4" /> },
           { id: 'campus' as ProgramTab, label: 'Campus LMS', icon: <IoBookOutline className="w-4 h-4" /> },
@@ -75,7 +99,7 @@ export default function AdminProgramas() {
             onClick={() => switchTab(tab.id)}
             className={`
               flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider
-              border-b-2 -mb-px transition-all
+              border-b-2 -mb-px transition-all flex-shrink-0 whitespace-nowrap
               ${activeTab === tab.id
                 ? 'border-[#00A9CE] text-[#00A9CE]'
                 : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200'

@@ -37,8 +37,8 @@ export default function ProgramChip({ program, size = 'sm', onRemove, onMove }: 
       className={`inline-flex items-center gap-1.5 rounded-sm border font-bold uppercase tracking-wider whitespace-nowrap ${padding} ${textSize} ${styles.bg} ${styles.text} ${styles.border}`}
       title={`${typeLabel}${subLabel ? ` · ${subLabel}` : ''} — ${program.status}`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-      <span>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot}`} />
+      <span className={`inline-block truncate ${size === 'md' ? 'max-w-[220px]' : 'max-w-[140px]'}`}>
         {category === 'creser' ? 'CRESER ' : ''}{typeLabel}
         {subLabel && (
           <span className="opacity-70 font-medium normal-case tracking-normal"> · {subLabel}</span>

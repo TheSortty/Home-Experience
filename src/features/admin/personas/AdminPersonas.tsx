@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   IoGridOutline,
   IoListOutline,
@@ -9,6 +9,9 @@ import {
   IoSchoolOutline,
   IoBookOutline,
   IoPersonOutline,
+  IoCloudUploadOutline,
+  IoSearchOutline,
+  IoCloseOutline,
 } from 'react-icons/io5';
 import PersonasStudentsView from './PersonasStudentsView';
 import PersonasCoachesView from './PersonasCoachesView';
@@ -50,8 +53,14 @@ interface Props {
 }
 
 export default function AdminPersonas({ role }: Props) {
-  const searchParams = useSearchParams();
-  const searchTerm = searchParams.get('q') ?? '';
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Debounced: each keystroke would otherwise fire a fresh server query.
+  useEffect(() => {
+    const handle = setTimeout(() => setSearchTerm(searchInput.trim()), 250);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
 
   const [activeTab, setActiveTab] = useState<Tab>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -74,52 +83,82 @@ export default function AdminPersonas({ role }: Props) {
   return (
     <div className="flex flex-col gap-0 h-full">
       {/* ── Header bar ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-6 pt-5 pb-0 shrink-0">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 px-6 pt-5 pb-0 shrink-0">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-slate-900">Personas</h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-400 mt-0.5 truncate">
             {TABS.find(t => t.id === activeTab)?.description}
           </p>
         </div>
 
-        {/* View toggle (only for student tabs; coaches has its own internal toggle) */}
-        {isStudentTab && (
-          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-            <button
-              onClick={() => switchView('table')}
-              title="Vista tabla"
-              className={`p-1.5 rounded-md transition-all ${
-                viewMode === 'table'
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              <IoListOutline className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => switchView('grid')}
-              title="Vista mosaico"
-              className={`p-1.5 rounded-md transition-all ${
-                viewMode === 'grid'
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              <IoGridOutline className="w-4 h-4" />
-            </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative w-full sm:w-56 flex-shrink-0">
+            <IoSearchOutline size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, email o DNI..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30 focus:border-[#00A9CE]/40"
+            />
+            {searchInput && (
+              <button
+                onClick={() => setSearchInput('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                aria-label="Limpiar búsqueda"
+              >
+                <IoCloseOutline size={14} />
+              </button>
+            )}
           </div>
-        )}
+
+          <Link
+            href="/admin/personas/importar"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors flex-shrink-0 whitespace-nowrap"
+          >
+            <IoCloudUploadOutline className="w-4 h-4" />
+            Importar histórico
+          </Link>
+
+          {/* View toggle (only for student tabs; coaches has its own internal toggle) */}
+          {isStudentTab && (
+            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1 flex-shrink-0">
+              <button
+                onClick={() => switchView('table')}
+                title="Vista tabla"
+                className={`p-1.5 rounded-md transition-all ${
+                  viewMode === 'table'
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                <IoListOutline className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => switchView('grid')}
+                title="Vista mosaico"
+                className={`p-1.5 rounded-md transition-all ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                <IoGridOutline className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Tab bar ─────────────────────────────────────────────────────── */}
-      <div className="flex items-end gap-0 px-6 pt-4 border-b border-slate-100 shrink-0">
+      <div className="flex items-end gap-0 px-6 pt-4 border-b border-slate-100 shrink-0 overflow-x-auto hide-scrollbar">
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`
               flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider
-              border-b-2 -mb-px transition-all
+              border-b-2 -mb-px transition-all flex-shrink-0 whitespace-nowrap
               ${activeTab === tab.id
                 ? 'border-[#00A9CE] text-[#00A9CE]'
                 : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200'

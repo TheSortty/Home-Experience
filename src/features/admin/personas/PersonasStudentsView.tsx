@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restUpdate, restDelete, getCurrentUserId } from '../../../services/supabaseRest';
-import StudentDetailModal, { type StudentForModal, AttendanceBadge } from '../../dashboard/admin/StudentDetailModal';
+import StudentDetailModal, { type StudentForModal } from '../../dashboard/admin/StudentDetailModal';
 import TrashIcon from '../../../ui/icons/TrashIcon';
 import ProgramChip, { NoProgramChip } from './ProgramChip';
 import { categorizeCycle, type PersonaStudent, type ProgramChipData, type ProgramCategory } from './types';
@@ -71,6 +71,44 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
     if (isFirstLoad && students.length === 0) setIsLoading(true);
 
     try {
+      // Con años de histórico acumulado, traer TODO el alumnado en cada búsqueda
+      // no escala. Si hay término de búsqueda, primero resolvemos qué profile
+      // ids matchean (nombre/apellido/email/dni vía el índice trigram, o el
+      // nombre de la camada) y recién ahí pedimos el join pesado solo para esos.
+      const term = searchTerm.trim();
+      let matchedIds: string[] | null = null;
+
+      if (term) {
+        const pattern = `ilike.*${term}*`;
+        const [byFirst, byLast, byEmail, byDni, byCycleName] = await Promise.all([
+          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { role: 'eq.student', first_name: pattern } }),
+          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { role: 'eq.student', last_name: pattern } }),
+          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { role: 'eq.student', email: pattern } }),
+          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { role: 'eq.student', dni: pattern } }),
+          restSelect<{ id: string }>('cycles', { columns: 'id', filters: { name: pattern } }),
+        ]);
+
+        const ids = new Set<string>();
+        for (const res of [byFirst, byLast, byEmail, byDni]) for (const row of res.data) ids.add(row.id);
+
+        if (byCycleName.data.length > 0) {
+          const { data: enrolledInMatchedCycles } = await restSelect<{ user_id: string }>('enrollments', {
+            columns: 'user_id',
+            filters: { cycle_id: `in.(${byCycleName.data.map(c => c.id).join(',')})` },
+          });
+          for (const e of enrolledInMatchedCycles) ids.add(e.user_id);
+        }
+
+        matchedIds = Array.from(ids);
+        if (matchedIds.length === 0) {
+          setStudents([]);
+          hasLoadedOnceRef.current = true;
+          setIsLoading(false);
+          fetchTrashCount();
+          return;
+        }
+      }
+
       const { data } = await restSelect<any>('profiles', {
         columns:
           'id,user_id,first_name,last_name,email,phone,avatar_url,is_deleted,' +
@@ -78,6 +116,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
         filters: {
           role: 'eq.student',
           is_deleted: `eq.${trashMode === 'trash'}`,
+          ...(matchedIds ? { id: `in.(${matchedIds.join(',')})` } : {}),
         },
       });
 
@@ -183,7 +222,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
       setIsLoading(false);
       fetchTrashCount();
     }
-  }, [trashMode, fetchTrashCount, students.length]);
+  }, [trashMode, fetchTrashCount, students.length, searchTerm]);
 
   useEffect(() => {
     fetchData();
@@ -353,8 +392,10 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
 
   // ─── Filtering ───────────────────────────────────────────────────────────
 
+  // La búsqueda por texto ya la resolvió fetchData server-side (ver arriba) —
+  // `students` sólo trae gente que matchea cuando hay searchTerm. Acá sólo
+  // quedan los filtros que dependen de datos ya cargados en memoria.
   const filtered = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
     return students.filter(s => {
       // Scope (CRESER / Campus / All)
       if (scope !== 'all') {
@@ -369,18 +410,9 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
         if (st !== statusFilter) return false;
       }
 
-      // Search across name/email/program names
-      if (term) {
-        const haystack = [
-          s.name,
-          s.email,
-          ...s.programs.map(p => `${p.cycleName} ${p.cycleType} ${p.courseTitle || ''}`),
-        ].join(' ').toLowerCase();
-        if (!haystack.includes(term)) return false;
-      }
       return true;
     });
-  }, [students, scope, statusFilter, searchTerm]);
+  }, [students, scope, statusFilter]);
 
   // ─── Selection derived ─────────────────────────────────────────────────────
 
@@ -406,6 +438,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
     name: s.name,
     email: s.email,
     phone: s.phone,
+    avatarUrl: s.avatarUrl,
     programHistory: s.programHistory,
     formData: s.formData,
     medicalInfo: s.medicalInfo,
@@ -647,7 +680,7 @@ function TableView({
     );
   }
   return (
-    <table className="formal-table min-w-[800px]">
+    <table className="formal-table min-w-[420px] md:min-w-[560px]">
       <thead>
         <tr>
           <th className="w-8 text-center">
@@ -661,15 +694,12 @@ function TableView({
           </th>
           <th>Alumno</th>
           <th>Programas</th>
-          <th className="text-center">Campus</th>
-          <th className="text-center">Asistencia</th>
-          <th className="text-center">Pago</th>
-          <th></th>
+          <th className="hidden md:table-cell text-center">Campus</th>
+          <th className="hidden sm:table-cell"></th>
         </tr>
       </thead>
       <tbody>
         {students.map((s) => {
-          const latest = s.programHistory?.[0];
           const hasConflict = s.programs.some(p => p.status === 'CONFLICT');
           const isSel = selectedIds.has(s.id);
           return (
@@ -724,7 +754,7 @@ function TableView({
                   ))}
                 </div>
               </td>
-              <td className="text-center">
+              <td className="hidden md:table-cell text-center">
                 {s.user_id ? (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">✅ Acceso activo</span>
                 ) : (
@@ -736,24 +766,16 @@ function TableView({
                   </button>
                 )}
               </td>
-              <td className="text-center"><AttendanceBadge count={latest?.attendanceCount || 0} total={latest?.totalSessions || 0} /></td>
-              <td className="text-center">
-                {latest?.paymentInfo ? (
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider border ${latest.paymentInfo.status === 'Pagado' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                    {latest.paymentInfo.status === 'Pagado' ? '✅' : '⏳'} {latest.paymentInfo.status}
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-slate-300 font-bold uppercase">Sin registro</span>
+              <td className="hidden sm:table-cell text-center">
+                {s.programs.length === 0 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onAssign(s); }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider border bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-600 hover:text-white transition-colors shadow-sm whitespace-nowrap"
+                    title="Asignar programa"
+                  >
+                    + Programa
+                  </button>
                 )}
-              </td>
-              <td className="text-center">
-                <button
-                  onClick={(e) => { e.stopPropagation(); onAssign(s); }}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wider border bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-600 hover:text-white transition-colors shadow-sm whitespace-nowrap"
-                  title="Asignar programa"
-                >
-                  + Programa
-                </button>
               </td>
             </tr>
           );
