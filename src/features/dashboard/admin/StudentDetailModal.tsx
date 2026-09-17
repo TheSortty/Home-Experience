@@ -5,6 +5,7 @@ import { restSelect, restInsert, restUpsert, restUpdate, restDelete, restRpc } f
 import { StudentProgramProgress } from '../../../services/progressService';
 import CheckIcon from '../../../ui/icons/CheckIcon';
 import TrashIcon from '../../../ui/icons/TrashIcon';
+import { getMyActorInfo } from '../../../services/activityEvents';
 
 export interface ProgramHistoryItem {
     id: string;
@@ -21,6 +22,93 @@ export interface ProgramHistoryItem {
 
 /** Tipos de ciclo que son CRESER — espeja CRESER_CYCLE_TYPES en admin/personas/types.ts. */
 const CRESER_TYPES = new Set(['initial', 'advanced', 'plan_lider']);
+
+/** Campos de `profiles` editables desde Perfil & Contacto — única fuente de verdad, sin duplicar en CRM. */
+interface ExtendedProfileFields {
+    dni: string | null;
+    birth_date: string | null;
+    gender: string | null;
+    address_street: string | null;
+    address_city: string | null;
+    address_province: string | null;
+    current_occupation: string | null;
+    referred_by_name: string | null;
+}
+const EMPTY_EXTENDED_PROFILE: ExtendedProfileFields = {
+    dni: null, birth_date: null, gender: null, address_street: null,
+    address_city: null, address_province: null, current_occupation: null, referred_by_name: null,
+};
+
+/** Entrevista de admisión (`profile_intake`) — vive en Propósito & Sueños, ya no se duplica con formData. */
+interface IntakeFields {
+    intention: string | null;
+    dream1: string | null;
+    dream2: string | null;
+    dream3: string | null;
+    qualities: string | null;
+    context: string | null;
+    energy_leaks: string | null;
+    life_history: string | null;
+    daily_routine: string | null;
+}
+const EMPTY_INTAKE: IntakeFields = {
+    intention: null, dream1: null, dream2: null, dream3: null, qualities: null,
+    context: null, energy_leaks: null, life_history: null, daily_routine: null,
+};
+
+interface ProfileTag { id: string; label: string; color: string }
+interface ProfileNote { id: string; body: string; created_at: string }
+
+interface DetailSection {
+    id: string;
+    label: string;
+    icon: React.ReactNode;
+}
+
+interface DetailSectionGroup {
+    label: string;
+    items: DetailSection[];
+}
+
+/** Secciones del modal de detalle, agrupadas para que el sidebar no sea una lista plana de 11 pestañas. */
+const DETAIL_SECTION_GROUPS: DetailSectionGroup[] = [
+    {
+        label: 'Perfil',
+        items: [
+            {
+                id: 'PERSONAL', label: 'Perfil & Contacto',
+                icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
+            },
+            {
+                id: 'MOTIVACIÓN', label: 'Propósito & Sueños',
+                icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>,
+            },
+            {
+                id: 'SALUD', label: 'Ficha Médica',
+                icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>,
+            },
+        ],
+    },
+    {
+        label: 'Programas',
+        items: [
+            {
+                id: 'PROGRAMAS', label: 'Historial de Programas',
+                icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+            },
+            {
+                id: 'PROGRESO', label: 'Progreso LMS',
+                icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>,
+            },
+            {
+                id: 'CAMPUS', label: 'Campus (Beta)',
+                icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>,
+            },
+        ],
+    },
+];
+
+const findDetailGroup = (id: string) => DETAIL_SECTION_GROUPS.find(g => g.items.some(s => s.id === id));
 
 const PAYMENT_METHODS = [
     { value: 'transfer', label: 'Transferencia' },
@@ -194,12 +282,139 @@ const EnrollmentPayments: React.FC<{ enrollmentId: string; initialPaymentStatus?
     );
 };
 
+const OUTCOME_STATUS_OPTIONS = [
+    { value: '', label: 'Sin definir' },
+    { value: 'employed', label: 'Empleado/a' },
+    { value: 'entrepreneur', label: 'Emprendiendo' },
+    { value: 'studying', label: 'Estudiando' },
+    { value: 'seeking', label: 'Buscando' },
+    { value: 'other', label: 'Otro' },
+] as const;
+
+/**
+ * Seguimiento de egresado para una inscripción puntual (outcome_status, notas,
+ * testimonio, próximo seguimiento). Sólo tiene sentido mostrarlo cuando la
+ * inscripción está GRADUATED — qué le pasó DESPUÉS de ese programa concreto.
+ */
+const EnrollmentOutcome: React.FC<{ enrollmentId: string }> = ({ enrollmentId }) => {
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [status, setStatus] = useState('');
+    const [notes, setNotes] = useState('');
+    const [testimonial, setTestimonial] = useState('');
+    const [followUpAt, setFollowUpAt] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
+            try {
+                const { data } = await restSelect<any>('enrollments', {
+                    columns: 'outcome_status,outcome_notes,testimonial,follow_up_at',
+                    filters: { id: `eq.${enrollmentId}` },
+                    limit: 1,
+                });
+                if (cancelled) return;
+                const row = data[0];
+                if (row) {
+                    setStatus(row.outcome_status ?? '');
+                    setNotes(row.outcome_notes ?? '');
+                    setTestimonial(row.testimonial ?? '');
+                    setFollowUpAt(row.follow_up_at ?? '');
+                }
+            } catch (err) {
+                console.error('[EnrollmentOutcome] load failed', err);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [enrollmentId]);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            await restUpdate('enrollments', {
+                outcome_status: status || null,
+                outcome_notes: notes.trim() || null,
+                testimonial: testimonial.trim() || null,
+                follow_up_at: followUpAt || null,
+            }, { id: `eq.${enrollmentId}` });
+            toast.success('Seguimiento de egresado guardado');
+        } catch (err: any) {
+            toast.error('Error al guardar: ' + (err?.message ?? 'desconocido'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) return null;
+
+    return (
+        <div className="bg-emerald-50/60 border border-emerald-100 rounded-lg p-6 mb-10">
+            <div className="flex items-center gap-2 mb-4">
+                <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <h4 className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Seguimiento de egresado — {'"'}qué le pasó después{'"'}</h4>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Situación actual</label>
+                    <select
+                        value={status}
+                        onChange={e => setStatus(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                    >
+                        {OUTCOME_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Próximo seguimiento</label>
+                    <input
+                        type="date"
+                        value={followUpAt}
+                        onChange={e => setFollowUpAt(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                    />
+                </div>
+            </div>
+            <div className="space-y-3 mb-4">
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Notas de seguimiento</label>
+                    <textarea
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200 resize-none"
+                    />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Testimonio</label>
+                    <textarea
+                        value={testimonial}
+                        onChange={e => setTestimonial(e.target.value)}
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200 resize-none"
+                    />
+                </div>
+            </div>
+            <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm disabled:opacity-50"
+            >
+                {saving ? 'Guardando…' : 'Guardar seguimiento'}
+            </button>
+        </div>
+    );
+};
+
 export interface StudentForModal {
     id: string;
     user_id: string | null;
     name: string;
     email: string;
     phone: string;
+    avatarUrl?: string | null;
     programHistory: ProgramHistoryItem[];
     formData: any;
     medicalInfo: any | null; // typing as any for simplicity here to match usage
@@ -231,6 +446,40 @@ export const AttendanceBadge: React.FC<{ count: number; total: number }> = ({ co
         </div>
     );
 };
+
+const StatCell: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+    <div className="px-4 sm:px-8 py-3 sm:py-4">
+        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+        <p className="text-sm sm:text-base font-bold text-slate-800 capitalize truncate">{children}</p>
+    </div>
+);
+
+const ExtendedField: React.FC<{
+    label: string;
+    value: string | null;
+    onChange: (v: string) => void;
+    type?: string;
+    multiline?: boolean;
+}> = ({ label, value, onChange, type = 'text', multiline = false }) => (
+    <div>
+        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{label}</label>
+        {multiline ? (
+            <textarea
+                value={value ?? ''}
+                onChange={e => onChange(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-sm focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30 focus:border-[#00A9CE]/40 resize-none"
+            />
+        ) : (
+            <input
+                type={type}
+                value={value ?? ''}
+                onChange={e => onChange(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-sm focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30 focus:border-[#00A9CE]/40"
+            />
+        )}
+    </div>
+);
 
 interface StudentDetailModalProps {
     student: StudentForModal;
@@ -267,6 +516,28 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     const [lmsCourses, setLmsCourses] = useState<{ id: string; title: string; is_published: boolean }[]>([]);
     const [grantedCourseIds, setGrantedCourseIds] = useState<Set<string>>(new Set());
     const [accessBusyCourse, setAccessBusyCourse] = useState<string | null>(null);
+
+    // ── Datos extendidos de perfil (profiles) — única fuente editable, ya no se duplica en CRM ──
+    const [extendedProfile, setExtendedProfile] = useState<ExtendedProfileFields>(EMPTY_EXTENDED_PROFILE);
+    const [isLoadingExtended, setIsLoadingExtended] = useState(false);
+    const [isSavingExtended, setIsSavingExtended] = useState(false);
+
+    // ── Entrevista de admisión (profile_intake) — vive en Propósito & Sueños ──
+    const [intake, setIntake] = useState<IntakeFields>(EMPTY_INTAKE);
+    const [isLoadingIntake, setIsLoadingIntake] = useState(false);
+    const [isSavingIntake, setIsSavingIntake] = useState(false);
+
+    // ── Tags + notas de perfil — viven en Perfil & Contacto ──
+    const [allTags, setAllTags] = useState<ProfileTag[]>([]);
+    const [myTagIds, setMyTagIds] = useState<Set<string>>(new Set());
+    const [tagPickerOpen, setTagPickerOpen] = useState(false);
+    const [newTagLabel, setNewTagLabel] = useState('');
+    const [isLoadingTags, setIsLoadingTags] = useState(false);
+
+    const [profileNotes, setProfileNotes] = useState<ProfileNote[]>([]);
+    const [newProfileNote, setNewProfileNote] = useState('');
+    const [isSavingProfileNote, setIsSavingProfileNote] = useState(false);
+    const [isLoadingProfileNotes, setIsLoadingProfileNotes] = useState(false);
 
     // Program Notes State
     const [programNotes, setProgramNotes] = useState<{ id: string, content: string, created_at: string }[]>([]);
@@ -308,12 +579,180 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         if (activeProgramId) fetchProgramNotes(activeProgramId);
     }, [activeProgramId]);
 
+    // Cada pestaña se trae una sola vez por alumno — volver a una pestaña ya vista
+    // no debería tener que esperar un fetch de nuevo, así se siente fluido al navegar.
+    const loadedTabsRef = React.useRef<Set<string>>(new Set());
+    useEffect(() => { loadedTabsRef.current = new Set(); }, [student.id]);
+
     useEffect(() => {
-        if (detailTab === 'METAS') fetchGoals(student.id);
-        if (detailTab === 'PROGRESO') { fetchLmsProgress(student.id); fetchCourseAccess(student.id); }
-        if (detailTab === 'CARTA' && plEnrollment) fetchCarta(plEnrollment.id);
-        if (detailTab === 'PLANILLA_PL' && plEnrollment) fetchCheckins(plEnrollment.id);
-    }, [detailTab, student.id, plEnrollment?.id]);
+        const key = `${student.id}:${detailTab}`;
+        if (loadedTabsRef.current.has(key)) return;
+
+        if (detailTab === 'PERSONAL') { fetchExtendedProfile(student.id); fetchTags(student.id); fetchProfileNotes(student.id); }
+        else if (detailTab === 'MOTIVACIÓN') fetchIntake(student.id);
+        else if (detailTab === 'PROGRESO') { fetchLmsProgress(student.id); fetchCourseAccess(student.id); }
+        else return;
+
+        loadedTabsRef.current.add(key);
+    }, [detailTab, student.id]);
+
+    // Seguimiento / Carta / Planilla Magna viven dentro del historial del programa Plan Líder,
+    // no como pestañas propias — se traen cuando ese programa está seleccionado.
+    const [plSubTab, setPlSubTab] = useState<'METAS' | 'CARTA' | 'PLANILLA_PL'>('METAS');
+    useEffect(() => {
+        if (!plEnrollment || activeProgramId !== plEnrollment.id) return;
+        const key = `${student.id}:PL:${plSubTab}`;
+        if (loadedTabsRef.current.has(key)) return;
+
+        if (plSubTab === 'METAS') fetchGoals(student.id);
+        else if (plSubTab === 'CARTA') fetchCarta(plEnrollment.id);
+        else if (plSubTab === 'PLANILLA_PL') fetchCheckins(plEnrollment.id);
+
+        loadedTabsRef.current.add(key);
+    }, [activeProgramId, plSubTab, plEnrollment?.id, student.id]);
+
+    const fetchExtendedProfile = async (profileId: string) => {
+        setIsLoadingExtended(true);
+        try {
+            const { data } = await restSelect<ExtendedProfileFields>('profiles', {
+                columns: 'dni,birth_date,gender,address_street,address_city,address_province,current_occupation,referred_by_name',
+                filters: { id: `eq.${profileId}` }, limit: 1,
+            });
+            if (data[0]) setExtendedProfile(data[0]);
+        } catch (err) {
+            console.error('[StudentDetailModal] fetchExtendedProfile failed', err);
+        } finally {
+            setIsLoadingExtended(false);
+        }
+    };
+
+    const handleSaveExtendedProfile = async () => {
+        setIsSavingExtended(true);
+        try {
+            await restUpdate('profiles', {
+                dni: extendedProfile.dni?.trim() || null,
+                birth_date: extendedProfile.birth_date || null,
+                gender: extendedProfile.gender?.trim() || null,
+                address_street: extendedProfile.address_street?.trim() || null,
+                address_city: extendedProfile.address_city?.trim() || null,
+                address_province: extendedProfile.address_province?.trim() || null,
+                current_occupation: extendedProfile.current_occupation?.trim() || null,
+                referred_by_name: extendedProfile.referred_by_name?.trim() || null,
+            }, { id: `eq.${student.id}` });
+            toast.success('Datos guardados');
+        } catch (err: any) {
+            toast.error('Error al guardar: ' + (err?.message ?? 'desconocido'));
+        } finally {
+            setIsSavingExtended(false);
+        }
+    };
+
+    const fetchIntake = async (profileId: string) => {
+        setIsLoadingIntake(true);
+        try {
+            const { data } = await restSelect<IntakeFields>('profile_intake', { columns: '*', filters: { profile_id: `eq.${profileId}` }, limit: 1 });
+            if (data[0]) setIntake(data[0]);
+        } catch (err) {
+            console.error('[StudentDetailModal] fetchIntake failed', err);
+        } finally {
+            setIsLoadingIntake(false);
+        }
+    };
+
+    const handleSaveIntake = async () => {
+        setIsSavingIntake(true);
+        try {
+            await restUpsert('profile_intake', { profile_id: student.id, ...intake }, { onConflict: 'profile_id', returning: 'minimal' });
+            toast.success('Entrevista guardada');
+        } catch (err: any) {
+            toast.error('Error al guardar: ' + (err?.message ?? 'desconocido'));
+        } finally {
+            setIsSavingIntake(false);
+        }
+    };
+
+    const fetchTags = async (profileId: string) => {
+        setIsLoadingTags(true);
+        try {
+            const [{ data: tags }, { data: profileTags }] = await Promise.all([
+                restSelect<ProfileTag>('tags', { columns: 'id,label,color', order: 'label.asc', limit: 500 }),
+                restSelect<{ tag_id: string }>('profile_tags', { columns: 'tag_id', filters: { profile_id: `eq.${profileId}` }, limit: 500 }),
+            ]);
+            setAllTags(tags);
+            setMyTagIds(new Set(profileTags.map(t => t.tag_id)));
+        } catch (err) {
+            console.error('[StudentDetailModal] fetchTags failed', err);
+        } finally {
+            setIsLoadingTags(false);
+        }
+    };
+
+    const handleAddTag = async (tagId: string) => {
+        setTagPickerOpen(false);
+        try {
+            const actor = await getMyActorInfo();
+            await restInsert('profile_tags', { profile_id: student.id, tag_id: tagId, added_by: actor?.profileId ?? null }, { returning: 'minimal' });
+            setMyTagIds(prev => new Set(prev).add(tagId));
+        } catch (err: any) {
+            toast.error('Error al agregar el tag: ' + (err?.message ?? 'desconocido'));
+        }
+    };
+
+    const handleRemoveTag = async (tagId: string) => {
+        try {
+            await restDelete('profile_tags', { profile_id: `eq.${student.id}`, tag_id: `eq.${tagId}` });
+            setMyTagIds(prev => { const next = new Set(prev); next.delete(tagId); return next; });
+        } catch (err: any) {
+            toast.error('Error al sacar el tag: ' + (err?.message ?? 'desconocido'));
+        }
+    };
+
+    const handleCreateTag = async () => {
+        const label = newTagLabel.trim();
+        if (!label) return;
+        try {
+            const created = await restInsert<ProfileTag>('tags', { label }, { returning: 'representation' });
+            if (created) {
+                setAllTags(prev => [...prev, created].sort((a, b) => a.label.localeCompare(b.label)));
+                await handleAddTag(created.id);
+            }
+            setNewTagLabel('');
+        } catch (err: any) {
+            toast.error('Error al crear el tag: ' + (err?.message ?? 'desconocido'));
+        }
+    };
+
+    const fetchProfileNotes = async (profileId: string) => {
+        setIsLoadingProfileNotes(true);
+        try {
+            const { data } = await restSelect<ProfileNote>('profile_notes', {
+                columns: 'id,body,created_at', filters: { profile_id: `eq.${profileId}` }, order: 'created_at.desc', limit: 200,
+            });
+            setProfileNotes(data);
+        } catch (err) {
+            console.error('[StudentDetailModal] fetchProfileNotes failed', err);
+        } finally {
+            setIsLoadingProfileNotes(false);
+        }
+    };
+
+    const handleAddProfileNote = async () => {
+        const body = newProfileNote.trim();
+        if (!body) return;
+        setIsSavingProfileNote(true);
+        try {
+            const actor = await getMyActorInfo();
+            const created = await restInsert<ProfileNote>('profile_notes', {
+                profile_id: student.id, body, author_profile_id: actor?.profileId ?? null,
+            }, { returning: 'representation' });
+            if (created) setProfileNotes(prev => [created, ...prev]);
+            setNewProfileNote('');
+        } catch (err: any) {
+            toast.error('Error al guardar la nota: ' + (err?.message ?? 'desconocido'));
+        } finally {
+            setIsSavingProfileNote(false);
+        }
+    };
 
     const fetchCourseAccess = async (profileId: string) => {
         try {
@@ -514,94 +953,125 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     };
 
     const latestProgram = student.programHistory?.[0];
+    const hasConflict = student.programHistory?.some(p => p.status === 'CONFLICT');
+    const overallStatus: 'CONFLICT' | 'ACTIVE' | 'GRADUATED' | 'NONE' =
+        hasConflict ? 'CONFLICT' : latestProgram ? latestProgram.status : 'NONE';
+    const STATUS_STYLES: Record<typeof overallStatus, { label: string; classes: string }> = {
+        CONFLICT: { label: 'En conflicto', classes: 'bg-rose-50 text-rose-700 border-rose-200' },
+        ACTIVE: { label: 'Activo', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+        GRADUATED: { label: 'Graduado', classes: 'bg-slate-100 text-slate-600 border-slate-200' },
+        NONE: { label: 'Sin programa', classes: 'bg-slate-100 text-slate-400 border-slate-200' },
+    };
+    const statusStyle = STATUS_STYLES[overallStatus];
+    const initials = student.name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || '?';
+    const paymentLabel = latestProgram?.paymentInfo
+        ? latestProgram.paymentInfo.status
+        : (latestProgram ? 'Sin registro' : '—');
 
     return createPortal(
         <div className="full-screen-modal-overlay" onClick={onClose}>
             <div className="formal-modal max-w-5xl w-full p-0 flex flex-col h-[85vh] animate-scale-in shadow-2xl" onClick={e => e.stopPropagation()}>
-                
-                {/* Header */}
-                <div className="p-8 border-b border-slate-100 bg-white flex justify-between items-center relative overflow-hidden">
+
+                {/* Header — identidad primero */}
+                <div className="border-b border-slate-100 bg-white relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-full -mr-32 -mt-32 opacity-50"></div>
-                    <div className="relative z-10">
-                        <h3 className="text-3xl font-bold text-slate-900 tracking-tight leading-none">{student.name}</h3>
-                        <div className="flex items-center gap-4 mt-3">
-                            <p className="text-xs font-bold text-blue-600 uppercase tracking-[0.2em]">{student.email}</p>
-                            <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">ID: {student.id.substring(0, 8).toUpperCase()}</p>
+
+                    <div className="p-4 sm:p-8 pb-5 sm:pb-6 flex items-start gap-4 sm:gap-5 relative z-10">
+                        {student.avatarUrl ? (
+                            <img src={student.avatarUrl} alt={student.name} className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover shrink-0 ring-1 ring-slate-100" />
+                        ) : (
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 text-white font-bold flex items-center justify-center shrink-0 text-lg sm:text-xl ring-1 ring-slate-100">
+                                {initials}
+                            </div>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <h3 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-none truncate">{student.name}</h3>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider border ${statusStyle.classes}`}>
+                                    {statusStyle.label}
+                                </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
+                                <p className="text-xs font-bold text-blue-600 uppercase tracking-[0.15em] truncate">{student.email}</p>
+                                <span className="hidden sm:block w-1 h-1 bg-slate-200 rounded-full"></span>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{latestProgram?.cycleName || 'Sin programa asignado'}</p>
+                            </div>
                         </div>
-                    </div>
-                    <div className="flex items-center gap-6 relative z-10">
-                        <div className="text-right">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Programa Actual</p>
-                            <span className="px-4 py-1.5 bg-slate-900 text-white text-[11px] font-bold rounded-sm uppercase tracking-[0.1em]">
-                                {latestProgram?.cycleName || 'SIN ASIGNAR'}
-                            </span>
-                        </div>
+
                         <button
                             onClick={onClose}
-                            className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:text-slate-900 transition-all border border-slate-100"
+                            className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:text-slate-900 transition-all border border-slate-100 flex-shrink-0"
                         >
                             ✕
                         </button>
                     </div>
+
+                    {/* Stats — lo que antes había que ir a buscar tab por tab */}
+                    <div className="grid grid-cols-3 divide-x divide-slate-100 relative z-10 border-t border-slate-100">
+                        <StatCell label="Asistencia">
+                            {latestProgram && latestProgram.totalSessions > 0
+                                ? `${Math.round((latestProgram.attendanceCount / latestProgram.totalSessions) * 100)}%`
+                                : 'N/A'}
+                        </StatCell>
+                        <StatCell label="Pago">
+                            {paymentLabel}
+                        </StatCell>
+                        <StatCell label="Programas">
+                            {student.programHistory?.length ?? 0}
+                        </StatCell>
+                    </div>
                 </div>
 
                 {/* Body with Sidebar */}
-                <div className="flex flex-1 overflow-hidden bg-slate-50/30">
-                    
-                    {/* Left Tabs Sidebar */}
-                    <div className="w-64 bg-slate-50 border-r border-slate-100 p-6 flex flex-col justify-between overflow-y-auto">
-                        <div className="space-y-2 relative">
-                            {[
-                                {
-                                    id: 'PERSONAL', label: 'Perfil & Contacto', sysadmin: false,
-                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                },
-                                {
-                                    id: 'MOTIVACIÓN', label: 'Propósito & Sueños', sysadmin: false,
-                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-                                },
-                                {
-                                    id: 'SALUD', label: 'Ficha Médica', sysadmin: false,
-                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
-                                },
-                                {
-                                    id: 'PROGRAMAS', label: 'Historial CRESER', sysadmin: false,
-                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                },
-                                {
-                                    id: 'PROGRESO', label: 'Progreso LMS', sysadmin: false,
-                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-                                },
-                                {
-                                    id: 'METAS', label: 'Seguimiento', sysadmin: true,
-                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-                                },
-                                {
-                                    id: 'CARTA', label: 'Carta PL', sysadmin: true,
-                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                },
-                                {
-                                    id: 'PLANILLA_PL', label: 'Planilla Magna', sysadmin: true,
-                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                                },
-                                {
-                                    id: 'CAMPUS', label: 'Campus (Beta)', sysadmin: true,
-                                    icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                },
-                            ].filter(s => !s.sysadmin || role === 'sysadmin').map(section => (
-                                <button
-                                    key={section.id}
-                                    onClick={() => setDetailTab(section.id)}
-                                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all ${detailTab === section.id
-                                        ? 'bg-white text-blue-600 shadow-md shadow-slate-200/50 border border-slate-100 translate-x-1'
-                                        : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                                        }`}
-                                >
-                                    {section.icon}
-                                    {section.label}
-                                </button>
-                            ))}
+                <div className="flex flex-col md:flex-row flex-1 overflow-hidden bg-slate-50/30">
+
+                    {/* Mobile: flat horizontal-scroll tab strip */}
+                    <div className="md:hidden flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50 overflow-x-auto hide-scrollbar shrink-0">
+                        {DETAIL_SECTION_GROUPS.flatMap(g => g.items).map(section => (
+                            <button
+                                key={section.id}
+                                onClick={() => setDetailTab(section.id)}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-sm text-[10px] font-bold uppercase tracking-widest whitespace-nowrap flex-shrink-0 transition-all ${
+                                    detailTab === section.id
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-white text-slate-400 border border-slate-200'
+                                }`}
+                            >
+                                {section.icon}
+                                {section.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Left Tabs Sidebar (desktop) */}
+                    <div className="hidden md:flex w-64 bg-slate-50 border-r border-slate-100 p-6 flex-col justify-between overflow-y-auto">
+                        <div className="space-y-5 relative">
+                            {DETAIL_SECTION_GROUPS.map(group => {
+                                const items = group.items;
+                                return (
+                                    <div key={group.label}>
+                                        <p className="px-4 mb-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-300">
+                                            {group.label}
+                                        </p>
+                                        <div className="space-y-1">
+                                            {items.map(section => (
+                                                <button
+                                                    key={section.id}
+                                                    onClick={() => setDetailTab(section.id)}
+                                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all ${detailTab === section.id
+                                                        ? 'bg-white text-blue-600 shadow-md shadow-slate-200/50 border border-slate-100 translate-x-1'
+                                                        : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                                                        }`}
+                                                >
+                                                    {section.icon}
+                                                    {section.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         <div className="p-4 mt-8 bg-white border border-slate-100 rounded-sm">
@@ -614,36 +1084,173 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     </div>
 
                     {/* Right Content Area */}
-                    <div className="flex-1 overflow-y-auto p-12 bg-white">
+                    <div className="flex-1 overflow-y-auto p-5 sm:p-8 md:p-12 bg-white">
                         <div className="max-w-4xl mx-auto">
-                            
-                            <div className="mb-12">
+
+                            <div className="mb-8 md:mb-12">
                                 <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-3">
-                                    {detailTab === 'PERSONAL'    && 'Sección 01'}
-                                    {detailTab === 'MOTIVACIÓN'  && 'Sección 02'}
-                                    {detailTab === 'SALUD'       && 'Sección 03'}
-                                    {detailTab === 'OTROS'       && 'Sección 04'}
-                                    {detailTab === 'PROGRAMAS'   && 'Sección 05'}
-                                    {detailTab === 'PROGRESO'    && 'Sección 06'}
-                                    {detailTab === 'METAS'       && 'Sección 07'}
-                                    {detailTab === 'CARTA'       && <span className="text-purple-600">SYSADMIN · Sección 08</span>}
-                                    {detailTab === 'PLANILLA_PL' && <span className="text-purple-600">SYSADMIN · Sección 09</span>}
-                                    {detailTab === 'CAMPUS'      && <span className="text-purple-600">SYSADMIN · Sección 10</span>}
+                                    {findDetailGroup(detailTab)?.label}
                                 </h4>
                                 <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
                                     {detailTab === 'PERSONAL'    && 'Información de Contacto y Perfil'}
                                     {detailTab === 'MOTIVACIÓN'  && 'Propósito, Sueños y Metas'}
                                     {detailTab === 'SALUD'       && 'Historial Médico y Emergencias'}
-                                    {detailTab === 'OTROS'       && 'Información Adicional Recopilada'}
-                                    {detailTab === 'PROGRAMAS'   && 'Historial de Programas CRESER'}
+                                    {detailTab === 'PROGRAMAS'   && 'Historial de Programas'}
                                     {detailTab === 'PROGRESO'    && 'Progreso en el Campus (LMS)'}
-                                    {detailTab === 'METAS'       && 'Seguimiento de Plan Líder'}
-                                    {detailTab === 'CARTA'       && 'Carta de Enrolamiento — Plan Líder'}
-                                    {detailTab === 'PLANILLA_PL' && 'Planilla Magna — Seguimiento 13 Semanas'}
                                     {detailTab === 'CAMPUS'      && 'Campus Digital (Beta)'}
                                 </h2>
                                 <div className="h-1 w-12 bg-blue-600 mt-6 rounded-full"></div>
                             </div>
+
+                            {/* Datos de perfil — única fuente editable de estos campos (antes duplicados en CRM) */}
+                            {detailTab === 'PERSONAL' && (
+                                <div className="mb-12 pb-12 border-b border-slate-100">
+                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-5">Datos de perfil</p>
+                                    {isLoadingExtended ? (
+                                        <p className="text-xs text-slate-400">Cargando…</p>
+                                    ) : (
+                                        <>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-5">
+                                                <ExtendedField label="DNI" value={extendedProfile.dni} onChange={v => setExtendedProfile(p => ({ ...p, dni: v }))} />
+                                                <ExtendedField label="Fecha de nacimiento" type="date" value={extendedProfile.birth_date} onChange={v => setExtendedProfile(p => ({ ...p, birth_date: v }))} />
+                                                <ExtendedField label="Género" value={extendedProfile.gender} onChange={v => setExtendedProfile(p => ({ ...p, gender: v }))} />
+                                                <ExtendedField label="Ocupación" value={extendedProfile.current_occupation} onChange={v => setExtendedProfile(p => ({ ...p, current_occupation: v }))} />
+                                                <ExtendedField label="Dirección" value={extendedProfile.address_street} onChange={v => setExtendedProfile(p => ({ ...p, address_street: v }))} />
+                                                <ExtendedField label="Ciudad" value={extendedProfile.address_city} onChange={v => setExtendedProfile(p => ({ ...p, address_city: v }))} />
+                                                <ExtendedField label="Provincia" value={extendedProfile.address_province} onChange={v => setExtendedProfile(p => ({ ...p, address_province: v }))} />
+                                                <ExtendedField label="Recomendado por" value={extendedProfile.referred_by_name} onChange={v => setExtendedProfile(p => ({ ...p, referred_by_name: v }))} />
+                                            </div>
+                                            <button
+                                                onClick={handleSaveExtendedProfile}
+                                                disabled={isSavingExtended}
+                                                className="mt-6 px-5 py-2.5 bg-slate-900 hover:bg-slate-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm disabled:opacity-50 transition-colors"
+                                            >
+                                                {isSavingExtended ? 'Guardando…' : 'Guardar datos'}
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Tags + notas — lo que hacía "CRM" a esta ficha: poder marcar y anotar a la persona */}
+                            {detailTab === 'PERSONAL' && (
+                                <div className="space-y-8">
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Tags</p>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            {allTags.filter(t => myTagIds.has(t.id)).length === 0 && !isLoadingTags && (
+                                                <span className="text-xs text-slate-400 italic">Sin tags todavía.</span>
+                                            )}
+                                            {allTags.filter(t => myTagIds.has(t.id)).map(tag => (
+                                                <span key={tag.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                                                    {tag.label}
+                                                    <button onClick={() => handleRemoveTag(tag.id)} className="text-slate-400 hover:text-red-500" aria-label="Sacar tag">×</button>
+                                                </span>
+                                            ))}
+                                            <div className="relative">
+                                                <button
+                                                    onClick={() => setTagPickerOpen(v => !v)}
+                                                    className="px-2.5 py-1 rounded-full text-[11px] font-bold border border-dashed border-slate-300 text-slate-500 hover:border-slate-400"
+                                                >
+                                                    + Agregar
+                                                </button>
+                                                {tagPickerOpen && (
+                                                    <div className="absolute z-10 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-lg p-2 space-y-1">
+                                                        {allTags.filter(t => !myTagIds.has(t.id)).map(tag => (
+                                                            <button
+                                                                key={tag.id}
+                                                                onClick={() => handleAddTag(tag.id)}
+                                                                className="w-full text-left px-2 py-1.5 text-xs rounded-md hover:bg-slate-50"
+                                                            >
+                                                                {tag.label}
+                                                            </button>
+                                                        ))}
+                                                        {allTags.filter(t => !myTagIds.has(t.id)).length === 0 && (
+                                                            <p className="text-xs text-slate-400 italic px-2 py-1">No hay más tags existentes.</p>
+                                                        )}
+                                                        <div className="flex items-center gap-1 pt-1 border-t border-slate-100">
+                                                            <input
+                                                                value={newTagLabel}
+                                                                onChange={e => setNewTagLabel(e.target.value)}
+                                                                onKeyDown={e => { if (e.key === 'Enter') handleCreateTag(); }}
+                                                                placeholder="Crear tag nuevo…"
+                                                                className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded-md"
+                                                            />
+                                                            <button onClick={handleCreateTag} className="px-2 py-1 text-xs font-bold text-[#00A9CE]">Crear</button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Notas</p>
+                                        <div className="flex items-start gap-2 mb-4">
+                                            <textarea
+                                                value={newProfileNote}
+                                                onChange={e => setNewProfileNote(e.target.value)}
+                                                placeholder="Agregar una nota…"
+                                                rows={2}
+                                                className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30 resize-none"
+                                            />
+                                            <button
+                                                onClick={handleAddProfileNote}
+                                                disabled={isSavingProfileNote || !newProfileNote.trim()}
+                                                className="shrink-0 px-4 py-2 bg-slate-900 hover:bg-slate-700 text-white text-xs font-bold rounded-lg disabled:opacity-50"
+                                            >
+                                                {isSavingProfileNote ? '…' : 'Agregar'}
+                                            </button>
+                                        </div>
+                                        {isLoadingProfileNotes ? (
+                                            <p className="text-xs text-slate-400">Cargando…</p>
+                                        ) : profileNotes.length === 0 ? (
+                                            <p className="text-xs text-slate-400 italic">Sin notas todavía.</p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {profileNotes.map(note => (
+                                                    <div key={note.id} className="bg-slate-50 border border-slate-100 rounded-lg px-4 py-2.5">
+                                                        <p className="text-[10px] text-slate-400 mb-1">
+                                                            {new Date(note.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                        </p>
+                                                        <p className="text-sm text-slate-700 whitespace-pre-line">{note.body}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Entrevista de admisión — única fuente editable (antes duplicada como formData de solo lectura) */}
+                            {detailTab === 'MOTIVACIÓN' && (
+                                <div>
+                                    {isLoadingIntake ? (
+                                        <p className="text-xs text-slate-400">Cargando…</p>
+                                    ) : (
+                                        <div className="space-y-6">
+                                            <ExtendedField multiline label="¿Qué querés llevarte?" value={intake.intention} onChange={v => setIntake(p => ({ ...p, intention: v }))} />
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-5">
+                                                <ExtendedField label="Sueño principal" value={intake.dream1} onChange={v => setIntake(p => ({ ...p, dream1: v }))} />
+                                                <ExtendedField label="Segundo sueño" value={intake.dream2} onChange={v => setIntake(p => ({ ...p, dream2: v }))} />
+                                                <ExtendedField label="Tercer sueño" value={intake.dream3} onChange={v => setIntake(p => ({ ...p, dream3: v }))} />
+                                            </div>
+                                            <ExtendedField multiline label="Cualidades" value={intake.qualities} onChange={v => setIntake(p => ({ ...p, qualities: v }))} />
+                                            <ExtendedField multiline label="Contexto actual" value={intake.context} onChange={v => setIntake(p => ({ ...p, context: v }))} />
+                                            <ExtendedField multiline label="Un día tuyo" value={intake.daily_routine} onChange={v => setIntake(p => ({ ...p, daily_routine: v }))} />
+                                            <ExtendedField multiline label="Fugas de energía" value={intake.energy_leaks} onChange={v => setIntake(p => ({ ...p, energy_leaks: v }))} />
+                                            <ExtendedField multiline label="Historia de vida" value={intake.life_history} onChange={v => setIntake(p => ({ ...p, life_history: v }))} />
+                                            <button
+                                                onClick={handleSaveIntake}
+                                                disabled={isSavingIntake}
+                                                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm disabled:opacity-50 transition-colors"
+                                            >
+                                                {isSavingIntake ? 'Guardando…' : 'Guardar entrevista'}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Render logic based on Detail Tab */}
                             {detailTab === 'PROGRAMAS' && (
@@ -704,6 +1311,8 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                         </div>
                                                     </div>
 
+                                                    {prog.status === 'GRADUATED' && <EnrollmentOutcome enrollmentId={prog.id} />}
+
                                                     {/* Advanced Notes Section */}
                                                     <div>
                                                         <div className="flex justify-between items-end mb-4">
@@ -760,6 +1369,222 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                             )}
                                                         </div>
                                                     </div>
+
+                                                    {prog.cycleType === 'plan_lider' && (
+                                                        <div className="mt-10 pt-8 border-t border-dashed border-purple-200">
+                                                            <div className="flex items-center justify-between mb-5">
+                                                                <span className="text-[9px] font-black text-purple-500 uppercase tracking-widest px-2 py-0.5 bg-purple-50 border border-purple-200 rounded-sm">Plan Líder</span>
+                                                            </div>
+                                                            <div className="flex gap-1 mb-6 border-b border-slate-100 overflow-x-auto hide-scrollbar">
+                                                                {([
+                                                                    { id: 'METAS', label: 'Seguimiento' },
+                                                                    { id: 'CARTA', label: 'Carta PL' },
+                                                                    { id: 'PLANILLA_PL', label: 'Planilla Magna' },
+                                                                ] as const).map(t => (
+                                                                    <button
+                                                                        key={t.id}
+                                                                        onClick={() => setPlSubTab(t.id)}
+                                                                        className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest border-b-2 -mb-px transition-all whitespace-nowrap ${
+                                                                            plSubTab === t.id ? 'border-purple-500 text-purple-600' : 'border-transparent text-slate-400 hover:text-slate-600'
+                                                                        }`}
+                                                                    >
+                                                                        {t.label}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                    {plSubTab === 'METAS' && (
+                                                        <div>
+                                                            <div className="flex justify-end mb-8">
+                                                                <button className="px-5 py-2.5 bg-slate-900 text-white text-[10px] font-bold uppercase tracking-wider rounded-sm hover:bg-black transition-all shadow-md">
+                                                                    + Registrar Nueva Meta
+                                                                </button>
+                                                            </div>
+                                                            {isLoadingGoals ? (
+                                                                <p className="text-center text-slate-400 py-10 font-bold uppercase tracking-widest text-[10px]">Cargando metas...</p>
+                                                            ) : studentGoals.length === 0 ? (
+                                                                <div className="text-center py-20 bg-slate-50 border border-dashed border-slate-200 rounded-md flex flex-col items-center">
+                                                                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-6 border border-slate-100 shadow-sm text-slate-300">
+                                                                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                                                                    </div>
+                                                                    <p className="text-slate-500 font-bold text-sm uppercase tracking-wider mb-2">Sin metas registradas</p>
+                                                                    <p className="text-xs text-slate-400 max-w-sm mx-auto">El alumno no ha definido metas para su Plan Líder actual o no está inscripto en un programa de seguimiento.</p>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="space-y-4">
+                                                                    {studentGoals.map(goal => (
+                                                                        <div key={goal.id} className="border border-slate-100 rounded-sm p-6 bg-white shadow-sm flex gap-6 hover:border-blue-200 transition-colors">
+                                                                            <div className={`mt-1 w-10 h-10 rounded-sm flex items-center justify-center border ${goal.status === 'achieved' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-slate-50 border-slate-200 text-slate-300'}`}>
+                                                                                <CheckIcon className="w-5 h-5" />
+                                                                            </div>
+                                                                            <div className="flex-1">
+                                                                                <div className="flex justify-between items-start">
+                                                                                    <h5 className={`font-bold text-slate-800 text-base leading-relaxed ${goal.status === 'achieved' ? 'line-through opacity-40' : ''}`}>
+                                                                                        {goal.goal_description}
+                                                                                    </h5>
+                                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4 px-3 py-1 bg-slate-50 border rounded-sm">{goal.target_date || 'Sin fecha'}</span>
+                                                                                </div>
+                                                                                {goal.staff_feedback && (
+                                                                                    <div className="mt-5 bg-blue-50/50 p-4 border-l-2 border-blue-400 rounded-r-sm text-sm text-blue-800">
+                                                                                        <span className="font-bold uppercase text-[9px] block mb-2 opacity-60 tracking-widest">Respuesta / Feedback de Staff</span>
+                                                                                        {goal.staff_feedback}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {/* ── TAB: CARTA DE ENROLAMIENTO (SYSADMIN) ──────────────────── */}
+                                                    {plSubTab === 'CARTA' && (
+                                                        <div className="space-y-8">
+                                                            {!plEnrollment ? (
+                                                                <div className="py-16 text-center bg-slate-50 border border-dashed border-slate-200 rounded-sm">
+                                                                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Sin etapa PL activa</p>
+                                                                    <p className="text-xs text-slate-400 mt-1">El alumno no tiene un enrollment en Plan Líder.</p>
+                                                                </div>
+                                                            ) : isLoadingCarta ? (
+                                                                <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-purple-100 border-t-purple-500 rounded-full animate-spin" /></div>
+                                                            ) : (
+                                                                <>
+                                                                    {/* Identidad */}
+                                                                    <div className="bg-purple-50 border border-purple-100 rounded-sm p-1">
+                                                                        <p className="text-[9px] font-black text-purple-500 uppercase tracking-widest px-4 pt-3 pb-1">Identidad & Contrato</p>
+                                                                        <div className="p-4 space-y-4">
+                                                                            {[{key: 'contrato', label: 'Yo soy...'}, {key: 'estiramiento', label: 'Mi estiramiento es...'}, {key: 'nabo_descripcion', label: 'Mi patrón limitante (Nabo)'}, {key: 'equipo_asistencia', label: 'El equipo me ayuda a...'}].map(f => (
+                                                                                <div key={f.key}>
+                                                                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">{f.label}</p>
+                                                                                    <textarea
+                                                                                        rows={2}
+                                                                                        className="w-full p-3 bg-white border border-slate-200 rounded-sm text-sm text-slate-700 focus:outline-none focus:border-purple-400 resize-none"
+                                                                                        value={cartaDraft[f.key] || ''}
+                                                                                        onChange={e => setCartaDraft((p: any) => ({...p, [f.key]: e.target.value}))}
+                                                                                    />
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                        
+                                                                    {/* Metas por área */}
+                                                                    <div>
+                                                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Metas por Área de Vida</p>
+                                                                        <div className="space-y-4">
+                                                                            {GOAL_AREAS.map(area => {
+                                                                                const areaData = (cartaDraft.goals_data || {})[area.key] || {goal: '', purpose: '', actions: [], metrics: ''};
+                                                                                return (
+                                                                                    <div key={area.key} className="border border-slate-100 rounded-sm overflow-hidden">
+                                                                                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
+                                                                                            <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">{area.label}</p>
+                                                                                        </div>
+                                                                                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                                            {[{k:'goal', l:'Meta'}, {k:'purpose', l:'Para qué'}, {k:'metrics', l:'Métrica'}].map(f2 => (
+                                                                                                <div key={f2.k} className={f2.k === 'metrics' ? 'md:col-span-2' : ''}>
+                                                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{f2.l}</p>
+                                                                                                    <input
+                                                                                                        type="text"
+                                                                                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-purple-400"
+                                                                                                        value={areaData[f2.k] || ''}
+                                                                                                        onChange={e => setCartaDraft((p: any) => ({
+                                                                                                            ...p,
+                                                                                                            goals_data: {...(p.goals_data || {}), [area.key]: {...areaData, [f2.k]: e.target.value}}
+                                                                                                        }))}
+                                                                                                    />
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                        
+                                                                    <div className="flex justify-end">
+                                                                        <button
+                                                                            onClick={saveCarta}
+                                                                            disabled={isSavingCarta}
+                                                                            className="px-8 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm transition-all shadow-lg shadow-purple-200"
+                                                                        >
+                                                                            {isSavingCarta ? 'Guardando...' : '💾 Guardar Carta'}
+                                                                        </button>
+                                                                    </div>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {/* ── TAB: PLANILLA MAGNA (SYSADMIN) ──────────────────────── */}
+                                                    {plSubTab === 'PLANILLA_PL' && (
+                                                        <div>
+                                                            {!plEnrollment ? (
+                                                                <div className="py-16 text-center bg-slate-50 border border-dashed border-slate-200 rounded-sm">
+                                                                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Sin etapa PL activa</p>
+                                                                </div>
+                                                            ) : isLoadingCheckins ? (
+                                                                <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-purple-100 border-t-purple-500 rounded-full animate-spin" /></div>
+                                                            ) : (
+                                                                <div className="space-y-3 overflow-x-auto">
+                                                                  <div className="min-w-[560px] space-y-3">
+                                                                    <div className="grid grid-cols-7 gap-1 text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">
+                                                                        <span className="col-span-1">Semana</span>
+                                                                        {GOAL_AREAS.map(a => <span key={a.key} className="text-center">{a.label.slice(0,4)}.</span>)}
+                                                                        <span className="text-right">Promedio</span>
+                                                                    </div>
+                                                                    {Array.from({length: 13}, (_, i) => i + 1).map(week => {
+                                                                        const existing = checkins.find(c => c.week_number === week);
+                                                                        const scores = existing?.scores || {};
+                                                                        const avg = GOAL_AREAS.length
+                                                                            ? Math.round(GOAL_AREAS.reduce((s, a) => s + (scores[a.key] || 0), 0) / GOAL_AREAS.length)
+                                                                            : 0;
+                                                                        const isEditing = editingWeek === week;
+                                                                        return (
+                                                                            <div key={week} className={`border rounded-sm transition-all ${isEditing ? 'border-purple-300 bg-purple-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                                                                                {isEditing ? (
+                                                                                    <div className="p-4 space-y-3">
+                                                                                        <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Semana {week} — Ingreso de Porcentajes</p>
+                                                                                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                                                                                            {GOAL_AREAS.map(area => (
+                                                                                                <div key={area.key}>
+                                                                                                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">{area.label}</p>
+                                                                                                    <div className="flex items-center gap-1">
+                                                                                                        <input
+                                                                                                            type="number" min={0} max={100}
+                                                                                                            className="w-full p-2 border border-slate-200 rounded-sm text-sm text-center focus:outline-none focus:border-purple-400"
+                                                                                                            value={weekDraft[area.key] ?? (scores[area.key] || 0)}
+                                                                                                            onChange={e => setWeekDraft(p => ({...p, [area.key]: parseInt(e.target.value) || 0}))}
+                                                                                                        />
+                                                                                                        <span className="text-[10px] text-slate-400">%</span>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                        <div className="flex justify-end gap-3">
+                                                                                            <button onClick={() => setEditingWeek(null)} className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600">Cancelar</button>
+                                                                                            <button onClick={() => saveWeekCheckin(week)} disabled={isSavingCheckin} className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm disabled:opacity-50">{isSavingCheckin ? 'Guardando...' : 'Guardar'}</button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <button className="w-full grid grid-cols-7 gap-1 px-3 py-3 items-center text-left" onClick={() => { setEditingWeek(week); setWeekDraft(scores); }}>
+                                                                                        <span className="text-[10px] font-bold text-slate-700 col-span-1">Sem. {week}</span>
+                                                                                        {GOAL_AREAS.map(a => (
+                                                                                            <span key={a.key} className={`text-center text-[11px] font-bold ${(scores[a.key] || 0) >= 70 ? 'text-emerald-600' : (scores[a.key] || 0) >= 40 ? 'text-amber-600' : existing ? 'text-red-500' : 'text-slate-300'}`}>
+                                                                                                {existing ? `${scores[a.key] || 0}%` : '—'}
+                                                                                            </span>
+                                                                                        ))}
+                                                                                        <span className={`text-right text-[11px] font-black ${existing ? (avg >= 70 ? 'text-emerald-600' : avg >= 40 ? 'text-amber-600' : 'text-red-500') : 'text-slate-200'}`}>
+                                                                                            {existing ? `${avg}%` : '+'}
+                                                                                        </span>
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                  </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </>
@@ -873,154 +1698,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                 </div>
                             )}
 
-                            {/* ── TAB: CARTA DE ENROLAMIENTO (SYSADMIN) ──────────────────── */}
-                            {detailTab === 'CARTA' && (
-                                <div className="space-y-8">
-                                    {!plEnrollment ? (
-                                        <div className="py-16 text-center bg-slate-50 border border-dashed border-slate-200 rounded-sm">
-                                            <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Sin etapa PL activa</p>
-                                            <p className="text-xs text-slate-400 mt-1">El alumno no tiene un enrollment en Plan Líder.</p>
-                                        </div>
-                                    ) : isLoadingCarta ? (
-                                        <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-purple-100 border-t-purple-500 rounded-full animate-spin" /></div>
-                                    ) : (
-                                        <>
-                                            {/* Identidad */}
-                                            <div className="bg-purple-50 border border-purple-100 rounded-sm p-1">
-                                                <p className="text-[9px] font-black text-purple-500 uppercase tracking-widest px-4 pt-3 pb-1">Identidad & Contrato</p>
-                                                <div className="p-4 space-y-4">
-                                                    {[{key: 'contrato', label: 'Yo soy...'}, {key: 'estiramiento', label: 'Mi estiramiento es...'}, {key: 'nabo_descripcion', label: 'Mi patrón limitante (Nabo)'}, {key: 'equipo_asistencia', label: 'El equipo me ayuda a...'}].map(f => (
-                                                        <div key={f.key}>
-                                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">{f.label}</p>
-                                                            <textarea
-                                                                rows={2}
-                                                                className="w-full p-3 bg-white border border-slate-200 rounded-sm text-sm text-slate-700 focus:outline-none focus:border-purple-400 resize-none"
-                                                                value={cartaDraft[f.key] || ''}
-                                                                onChange={e => setCartaDraft((p: any) => ({...p, [f.key]: e.target.value}))}
-                                                            />
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
 
-                                            {/* Metas por área */}
-                                            <div>
-                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Metas por Área de Vida</p>
-                                                <div className="space-y-4">
-                                                    {GOAL_AREAS.map(area => {
-                                                        const areaData = (cartaDraft.goals_data || {})[area.key] || {goal: '', purpose: '', actions: [], metrics: ''};
-                                                        return (
-                                                            <div key={area.key} className="border border-slate-100 rounded-sm overflow-hidden">
-                                                                <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
-                                                                    <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">{area.label}</p>
-                                                                </div>
-                                                                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                                    {[{k:'goal', l:'Meta'}, {k:'purpose', l:'Para qué'}, {k:'metrics', l:'Métrica'}].map(f2 => (
-                                                                        <div key={f2.k} className={f2.k === 'metrics' ? 'md:col-span-2' : ''}>
-                                                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{f2.l}</p>
-                                                                            <input
-                                                                                type="text"
-                                                                                className="w-full p-2.5 bg-white border border-slate-200 rounded-sm text-sm focus:outline-none focus:border-purple-400"
-                                                                                value={areaData[f2.k] || ''}
-                                                                                onChange={e => setCartaDraft((p: any) => ({
-                                                                                    ...p,
-                                                                                    goals_data: {...(p.goals_data || {}), [area.key]: {...areaData, [f2.k]: e.target.value}}
-                                                                                }))}
-                                                                            />
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex justify-end">
-                                                <button
-                                                    onClick={saveCarta}
-                                                    disabled={isSavingCarta}
-                                                    className="px-8 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm transition-all shadow-lg shadow-purple-200"
-                                                >
-                                                    {isSavingCarta ? 'Guardando...' : '💾 Guardar Carta'}
-                                                </button>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* ── TAB: PLANILLA MAGNA (SYSADMIN) ──────────────────────── */}
-                            {detailTab === 'PLANILLA_PL' && (
-                                <div>
-                                    {!plEnrollment ? (
-                                        <div className="py-16 text-center bg-slate-50 border border-dashed border-slate-200 rounded-sm">
-                                            <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Sin etapa PL activa</p>
-                                        </div>
-                                    ) : isLoadingCheckins ? (
-                                        <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-purple-100 border-t-purple-500 rounded-full animate-spin" /></div>
-                                    ) : (
-                                        <div className="space-y-3 overflow-x-auto">
-                                          <div className="min-w-[560px] space-y-3">
-                                            <div className="grid grid-cols-7 gap-1 text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">
-                                                <span className="col-span-1">Semana</span>
-                                                {GOAL_AREAS.map(a => <span key={a.key} className="text-center">{a.label.slice(0,4)}.</span>)}
-                                                <span className="text-right">Promedio</span>
-                                            </div>
-                                            {Array.from({length: 13}, (_, i) => i + 1).map(week => {
-                                                const existing = checkins.find(c => c.week_number === week);
-                                                const scores = existing?.scores || {};
-                                                const avg = GOAL_AREAS.length
-                                                    ? Math.round(GOAL_AREAS.reduce((s, a) => s + (scores[a.key] || 0), 0) / GOAL_AREAS.length)
-                                                    : 0;
-                                                const isEditing = editingWeek === week;
-                                                return (
-                                                    <div key={week} className={`border rounded-sm transition-all ${isEditing ? 'border-purple-300 bg-purple-50' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                                                        {isEditing ? (
-                                                            <div className="p-4 space-y-3">
-                                                                <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Semana {week} — Ingreso de Porcentajes</p>
-                                                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                                                                    {GOAL_AREAS.map(area => (
-                                                                        <div key={area.key}>
-                                                                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">{area.label}</p>
-                                                                            <div className="flex items-center gap-1">
-                                                                                <input
-                                                                                    type="number" min={0} max={100}
-                                                                                    className="w-full p-2 border border-slate-200 rounded-sm text-sm text-center focus:outline-none focus:border-purple-400"
-                                                                                    value={weekDraft[area.key] ?? (scores[area.key] || 0)}
-                                                                                    onChange={e => setWeekDraft(p => ({...p, [area.key]: parseInt(e.target.value) || 0}))}
-                                                                                />
-                                                                                <span className="text-[10px] text-slate-400">%</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                                <div className="flex justify-end gap-3">
-                                                                    <button onClick={() => setEditingWeek(null)} className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600">Cancelar</button>
-                                                                    <button onClick={() => saveWeekCheckin(week)} disabled={isSavingCheckin} className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm disabled:opacity-50">{isSavingCheckin ? 'Guardando...' : 'Guardar'}</button>
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <button className="w-full grid grid-cols-7 gap-1 px-3 py-3 items-center text-left" onClick={() => { setEditingWeek(week); setWeekDraft(scores); }}>
-                                                                <span className="text-[10px] font-bold text-slate-700 col-span-1">Sem. {week}</span>
-                                                                {GOAL_AREAS.map(a => (
-                                                                    <span key={a.key} className={`text-center text-[11px] font-bold ${(scores[a.key] || 0) >= 70 ? 'text-emerald-600' : (scores[a.key] || 0) >= 40 ? 'text-amber-600' : existing ? 'text-red-500' : 'text-slate-300'}`}>
-                                                                        {existing ? `${scores[a.key] || 0}%` : '—'}
-                                                                    </span>
-                                                                ))}
-                                                                <span className={`text-right text-[11px] font-black ${existing ? (avg >= 70 ? 'text-emerald-600' : avg >= 40 ? 'text-amber-600' : 'text-red-500') : 'text-slate-200'}`}>
-                                                                    {existing ? `${avg}%` : '+'}
-                                                                </span>
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                          </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
 
                             {/* ── TAB: CAMPUS BETA (SYSADMIN) ─────────────────────────── */}
                             {detailTab === 'CAMPUS' && (
@@ -1043,68 +1721,15 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                 </div>
                             )}
 
-                            {detailTab === 'METAS' && (
-                                <div>
-                                    <div className="flex justify-end mb-8">
-                                        <button className="px-5 py-2.5 bg-slate-900 text-white text-[10px] font-bold uppercase tracking-wider rounded-sm hover:bg-black transition-all shadow-md">
-                                            + Registrar Nueva Meta
-                                        </button>
-                                    </div>
-                                    {isLoadingGoals ? (
-                                        <p className="text-center text-slate-400 py-10 font-bold uppercase tracking-widest text-[10px]">Cargando metas...</p>
-                                    ) : studentGoals.length === 0 ? (
-                                        <div className="text-center py-20 bg-slate-50 border border-dashed border-slate-200 rounded-md flex flex-col items-center">
-                                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-6 border border-slate-100 shadow-sm text-slate-300">
-                                                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-                                            </div>
-                                            <p className="text-slate-500 font-bold text-sm uppercase tracking-wider mb-2">Sin metas registradas</p>
-                                            <p className="text-xs text-slate-400 max-w-sm mx-auto">El alumno no ha definido metas para su Plan Líder actual o no está inscripto en un programa de seguimiento.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            {studentGoals.map(goal => (
-                                                <div key={goal.id} className="border border-slate-100 rounded-sm p-6 bg-white shadow-sm flex gap-6 hover:border-blue-200 transition-colors">
-                                                    <div className={`mt-1 w-10 h-10 rounded-sm flex items-center justify-center border ${goal.status === 'achieved' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-slate-50 border-slate-200 text-slate-300'}`}>
-                                                        <CheckIcon className="w-5 h-5" />
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <div className="flex justify-between items-start">
-                                                            <h5 className={`font-bold text-slate-800 text-base leading-relaxed ${goal.status === 'achieved' ? 'line-through opacity-40' : ''}`}>
-                                                                {goal.goal_description}
-                                                            </h5>
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4 px-3 py-1 bg-slate-50 border rounded-sm">{goal.target_date || 'Sin fecha'}</span>
-                                                        </div>
-                                                        {goal.staff_feedback && (
-                                                            <div className="mt-5 bg-blue-50/50 p-4 border-l-2 border-blue-400 rounded-r-sm text-sm text-blue-800">
-                                                                <span className="font-bold uppercase text-[9px] block mb-2 opacity-60 tracking-widest">Respuesta / Feedback de Staff</span>
-                                                                {goal.staff_feedback}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
 
                             {/* Standard Field Render Logic */}
-                            {['PERSONAL', 'MOTIVACIÓN', 'SALUD', 'OTROS'].includes(detailTab) && (
+                            {['PERSONAL', 'SALUD', 'OTROS'].includes(detailTab) && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
                                     {(() => {
                                         const dictionaries: Record<string, Record<string, string>> = {
                                             'PERSONAL': {
                                                 'firstName': 'Nombre', 'lastName': 'Apellido', 'preferredName': '¿Cómo te llaman?', 'email': 'Correo Electrónico',
-                                                'phone': 'Teléfono', 'age': 'Edad', 'dni': 'DNI',
-                                                'address': 'Dirección', 'occupation': 'Ocupación', 'birthDate': 'Fecha de Nac.',
-                                                'gender': 'Género', 'instagram': 'Instagram'
-                                            },
-                                            'MOTIVACIÓN': {
-                                                'intention': '¿Qué querés llevarte?',
-                                                'dream1': 'Sueño Principal', 'dream2': 'Segundo Sueño', 'dream3': 'Tercer Sueño',
-                                                'referredBy': '¿Quién te invitó?',
-                                                'qualities': 'Cualidades', 'context': 'Contexto actual',
-                                                'dailyRoutine': 'Un día tuyo', 'energyLeaks': 'Fugas de energía', 'lifeHistory': 'Historia de vida'
+                                                'phone': 'Teléfono', 'age': 'Edad', 'instagram': 'Instagram'
                                             },
                                             'SALUD': {
                                                 'underTreatment': 'Bajo Tratamiento', 'underTreatmentDetails': 'Detalles del Tratamiento',
