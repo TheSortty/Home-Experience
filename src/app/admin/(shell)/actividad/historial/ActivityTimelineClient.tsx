@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   IoSparklesOutline, IoCloudUploadOutline, IoEyeOutline,
   IoArrowUpCircleOutline, IoHelpCircleOutline,
@@ -134,10 +135,16 @@ interface Props {
 }
 
 export default function ActivityTimelineClient({ courses }: Props) {
+  const searchParams = useSearchParams();
+  const catParam = searchParams?.get('cat') as CategoryFilter | null;
+  const isKnownCategory = catParam && CATEGORIES.some(c => c.id === catParam);
+
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [datePreset, setDatePreset] = useState<DatePreset>('week');
-  const [category, setCategory] = useState<CategoryFilter>('all');
+  // Llegando desde un bloque de una categoría puntual, mostramos todo el
+  // historial de entrada en vez del recorte de "última semana" por defecto.
+  const [datePreset, setDatePreset] = useState<DatePreset>(isKnownCategory ? 'all' : 'week');
+  const [category, setCategory] = useState<CategoryFilter>(isKnownCategory ? (catParam as CategoryFilter) : 'all');
   const [search, setSearch] = useState('');
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [limit, setLimit] = useState(PAGE_SIZE);

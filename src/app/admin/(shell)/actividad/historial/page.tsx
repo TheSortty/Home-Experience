@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { createClient } from '@/utils/supabase/server';
 import ActivityTimelineClient, { type CourseTab } from './ActivityTimelineClient';
 import { requireAdminPage } from '@/src/services/adminPageGuard';
@@ -14,5 +15,9 @@ export default async function ActividadHistorialPage() {
 
   const courseList: CourseTab[] = (courses || []).map((c: any) => ({ id: c.id, title: c.title }));
 
-  return <ActivityTimelineClient courses={courseList} />;
+  return (
+    <Suspense fallback={null}>
+      <ActivityTimelineClient courses={courseList} />
+    </Suspense>
+  );
 }
