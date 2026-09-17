@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Login from '@/src/features/auth/Login'
@@ -10,7 +10,14 @@ import { resolveRole, isAdminRole } from '@/src/services/roleService'
 export default function LoginPage() {
   const router       = useRouter()
   const searchParams = useSearchParams()
-  const [checking, setChecking] = useState(true)
+  // No on-mount "already logged in?" check here — the middleware already
+  // redirects authenticated users away from /auth/login server-side, using
+  // getUser() (validated against the Supabase Auth server). Duplicating that
+  // check here with getSession() (which trusts a possibly-stale local
+  // session) caused a redirect loop: middleware bounces an invalid session
+  // back to /auth/login, this page's client-side check optimistically sends
+  // it to /admin/dashboard, middleware bounces it back again.
+  const [checking, setChecking] = useState(false)
   const passwordSet    = searchParams.get('message') === 'password_set'
   const invalidToken   = searchParams.get('error') === 'InvalidToken'
 
@@ -22,18 +29,6 @@ export default function LoginPage() {
       router.replace('/dashboard');
     }
   }
-
-  useEffect(() => {
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        if (session?.user) {
-          checkRoleAndRedirect(session.user.id);
-        } else {
-          setChecking(false);
-        }
-      })
-      .catch(() => setChecking(false));
-  }, [router])
 
   const BackButton = (
     <Link href="/" aria-label="Volver al inicio" className="auth-back">
