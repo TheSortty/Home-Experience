@@ -19,7 +19,7 @@ export async function requireAdminPage(): Promise<{ role: UserRole; userId: stri
 }
 
 /**
- * Sysadmin-only guard. Use for /admin/configuracion, /admin/auditoria, /admin/formularios, /admin/comunicacion.
+ * Sysadmin-only guard. Use for /admin/configuracion, /admin/auditoria, /admin/formularios.
  */
 export async function requireSysadminPage(): Promise<{ role: UserRole; userId: string; email: string | null }> {
   const { role, userId, email } = await requireAdminPage();

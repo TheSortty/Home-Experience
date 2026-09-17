@@ -2,14 +2,13 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { IoMenuOutline, IoCloseOutline, IoChevronDownOutline, IoNotificationsOutline, IoSparklesOutline } from 'react-icons/io5';
+import { usePathname } from 'next/navigation';
+import { IoMenuOutline, IoCloseOutline, IoChevronDownOutline, IoChevronBackOutline, IoNotificationsOutline, IoSparklesOutline } from 'react-icons/io5';
 import LogoutIcon from '../../../ui/icons/LogoutIcon';
 import UsersIcon from '../../../ui/icons/UsersIcon';
 import CalendarIcon from '../../../ui/icons/CalendarIcon';
 import SettingsIcon from '../../../ui/icons/SettingsIcon';
 import DocumentIcon from '../../../ui/icons/DocumentIcon';
-import MailIcon from '../../../ui/icons/MailIcon';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../services/supabaseClient';
 import { restSelect, restRpc } from '../../../services/supabaseRest';
@@ -38,7 +37,6 @@ const ADMIN_NAV: NavItem[] = [
 ];
 
 const SYSADMIN_NAV: NavItem[] = [
-  { href: '/admin/comunicacion', label: 'Comunicación', icon: MailIcon },
   { href: '/admin/formularios', label: 'Formulario y Encuestas', icon: DocumentIcon },
   { href: '/admin/configuracion', label: 'Configuración Web', icon: SettingsIcon },
   { href: '/admin/auditoria', label: 'Auditoría', icon: DocumentIcon },
@@ -50,7 +48,6 @@ const SECTION_TITLES: Record<string, string> = {
   '/admin/personas': 'Personas',
   '/admin/programas': 'Programas',
   '/admin/calendario': 'Calendario',
-  '/admin/comunicacion': 'Comunicación',
   '/admin/formularios': 'Formulario y Encuestas',
   '/admin/configuracion': 'Configuración Web',
   '/admin/auditoria': 'Auditoría',
@@ -62,41 +59,37 @@ interface AdminShellProps {
 }
 
 export default function AdminShell({ children }: AdminShellProps) {
-  const router = useRouter();
   const pathname = usePathname() || '/admin/actividad';
-  const searchParams = useSearchParams();
   const { role, user, isLoading: isLoadingAuth } = useAuth();
   const userEmail = user?.email || '';
   const isAdmin = role === 'admin' || role === 'sysadmin' || role === 'super_admin';
   const isSuper = role === 'sysadmin' || role === 'super_admin';
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      setSidebarCollapsed(localStorage.getItem('admin_sidebar_collapsed') === '1');
+    } catch {}
+  }, []);
+
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('admin_sidebar_collapsed', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  }, []);
+
+  // Icon-only rail when collapsed, except on the mobile drawer (that's always full width).
+  const iconOnly = sidebarCollapsed && !mobileSidebarOpen;
   const [adminAvatar, setAdminAvatar] = useState<string | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const [pendingAdmissions, setPendingAdmissions] = useState(0);
   const [unreadActivity, setUnreadActivity] = useState(0);
-
-  // Search lives in URL (?q=) so individual sections can read it.
-  const queryParam = searchParams?.get('q') ?? '';
-  const [searchInput, setSearchInput] = useState(queryParam);
-  useEffect(() => { setSearchInput(queryParam); }, [queryParam]);
-
-  const pushSearch = useCallback((value: string) => {
-    const sp = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
-    if (value) sp.set('q', value); else sp.delete('q');
-    const qs = sp.toString();
-    router.replace(`${pathname}${qs ? `?${qs}` : ''}`);
-  }, [pathname, router, searchParams]);
-
-  // Debounced URL sync
-  useEffect(() => {
-    const handle = setTimeout(() => {
-      if (searchInput !== queryParam) pushSearch(searchInput);
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [searchInput, queryParam, pushSearch]);
 
   // ─── Badge counts ─────────────────────────────────────────────────────────
   const refreshPendingAdmissions = useCallback(async () => {
@@ -199,6 +192,40 @@ export default function AdminShell({ children }: AdminShellProps) {
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
+  const renderNavItem = (item: NavItem) => {
+    const Icon = item.icon;
+    const active = isActive(item.href);
+    const badgeValue = item.badgeKey ? badges[item.badgeKey] : 0;
+    const hasBadge = !!item.badgeKey && badgeValue > 0;
+    const dotColor = item.badgeKey === 'pendingAdmissions' ? 'bg-amber-400' : 'bg-rose-500 animate-pulse';
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        title={iconOnly ? item.label : undefined}
+        className={`relative flex items-center rounded-sm text-sm font-medium transition-all group ${
+          iconOnly ? 'w-10 h-10 mx-auto justify-center' : 'w-[calc(100%-24px)] mx-3 gap-3 px-4 py-2.5'
+        } ${
+          active
+            ? `bg-blue-600 text-white shadow-lg shadow-blue-900/40 ${iconOnly ? '' : 'translate-x-1'}`
+            : 'text-slate-400 hover:bg-white/5 hover:text-white'
+        }`}
+      >
+        <Icon className={`w-5 h-5 flex-shrink-0 ${active ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
+        {!iconOnly && <span className="flex-shrink-0 whitespace-nowrap">{item.label}</span>}
+        {!iconOnly && hasBadge && (
+          <span className={`ml-auto flex-shrink-0 ${dotColor.split(' ')[0]} text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none ${item.badgeKey === 'unreadActivity' ? 'animate-pulse' : ''}`}>
+            {item.badgeKey === 'unreadActivity' && badgeValue > 99 ? '99+' : badgeValue}
+          </span>
+        )}
+        {iconOnly && hasBadge && (
+          <span className={`absolute top-1 right-1.5 w-2 h-2 rounded-full ring-2 ring-[var(--admin-sidebar-bg)] ${dotColor}`} />
+        )}
+      </Link>
+    );
+  };
+
   return (
     <div className="flex h-screen admin-reboot-container overflow-hidden">
       {/* Mobile backdrop */}
@@ -209,17 +236,38 @@ export default function AdminShell({ children }: AdminShellProps) {
         />
       )}
 
+      {/* Spacer: reserves layout space on desktop so the fixed sidebar doesn't overlap main content */}
+      <div
+        aria-hidden
+        className={`hidden md:block flex-shrink-0 transition-[width] duration-200 ease-out ${
+          sidebarCollapsed ? 'md:w-[64px]' : 'md:w-[260px]'
+        }`}
+      />
+
       {/* Sidebar */}
       <aside
-        className={`formal-sidebar flex flex-col flex-shrink-0 z-40 fixed md:static inset-y-0 left-0 transform transition-transform duration-200 ease-out ${
+        className={`formal-sidebar flex flex-col flex-shrink-0 z-40 fixed inset-y-0 left-0 w-[260px] transition-[width,transform] duration-200 ease-out ${
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        }`}
+        } ${sidebarCollapsed ? 'md:w-[64px]' : 'md:w-[260px]'}`}
       >
-        <div className="p-8 border-b border-white/5 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">HOME</h1>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-[0.2em]">Management System</p>
-          </div>
+        <button
+          onClick={toggleSidebarCollapsed}
+          className="hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 w-8 h-8 items-center justify-center rounded-full border-2 border-[#00A9CE] bg-white text-[#00A9CE] shadow-[0_4px_14px_rgba(0,169,206,0.45)] hover:bg-[#00A9CE] hover:text-white hover:shadow-[0_6px_18px_rgba(0,169,206,0.6)] hover:scale-110 transition-all z-50"
+          aria-label={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+        >
+          <IoChevronBackOutline className={`w-4 h-4 transition-transform duration-200 ${sidebarCollapsed ? 'rotate-180' : ''}`} />
+        </button>
+
+        <div className="flex flex-col h-full overflow-hidden">
+        <div className={`border-b border-white/5 flex items-center overflow-hidden ${iconOnly ? 'justify-center px-0 py-6' : 'justify-between p-8'}`}>
+          {iconOnly ? (
+            <img src="/logo-circle.png" alt="HOME" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className="min-w-[176px]">
+              <h1 className="text-2xl font-bold tracking-tight text-white">HOME</h1>
+              <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-[0.2em] whitespace-nowrap">Management System</p>
+            </div>
+          )}
           <button
             onClick={() => setMobileSidebarOpen(false)}
             className="md:hidden p-2 -mr-2 text-slate-400 hover:text-white"
@@ -229,83 +277,48 @@ export default function AdminShell({ children }: AdminShellProps) {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-6 space-y-1">
-          {ADMIN_NAV.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            const badgeValue = item.badgeKey ? badges[item.badgeKey] : 0;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`w-[calc(100%-24px)] flex items-center gap-3 px-4 py-2.5 mx-3 rounded-sm text-sm font-medium transition-all group ${
-                  active
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                }`}
-              >
-                <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
-                <span className="truncate">{item.label}</span>
-                {item.badgeKey === 'pendingAdmissions' && badgeValue > 0 && (
-                  <span className="ml-auto bg-amber-400 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
-                    {badgeValue}
-                  </span>
-                )}
-                {item.badgeKey === 'unreadActivity' && badgeValue > 0 && (
-                  <span className="ml-auto bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none animate-pulse">
-                    {badgeValue > 99 ? '99+' : badgeValue}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+        <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-6 space-y-1 ${iconOnly ? 'flex flex-col items-center' : ''}`}>
+          {ADMIN_NAV.map(renderNavItem)}
 
           {isSuper && (
             <>
-              <div className="px-6 py-4 mt-4 mb-2">
-                <p className="text-[9px] uppercase font-bold text-slate-500 tracking-[0.2em]">Sysadmin Tools</p>
-                <div className="h-px w-full bg-white/5 mt-3" />
+              <div className={`mt-4 mb-2 ${iconOnly ? 'w-full flex flex-col items-center py-2' : 'px-6 py-4 overflow-hidden'}`}>
+                {!iconOnly && (
+                  <p className="text-[9px] uppercase font-bold text-slate-500 tracking-[0.2em] whitespace-nowrap">Sysadmin Tools</p>
+                )}
+                <div className={`h-px bg-white/5 ${iconOnly ? 'w-6 mt-0' : 'w-full mt-3'}`} />
               </div>
-              {SYSADMIN_NAV.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`w-[calc(100%-24px)] flex items-center gap-3 px-4 py-2.5 mx-3 rounded-sm text-sm font-medium transition-all group ${
-                      active
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
-                        : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                );
-              })}
+              {SYSADMIN_NAV.map(renderNavItem)}
             </>
           )}
 
           {/* Changelog link */}
-          <div className="px-6 pt-6 mt-auto mb-2">
-            <div className="h-px w-full bg-white/5 mb-4" />
+          <div className={`mt-auto ${iconOnly ? 'w-full flex flex-col items-center pt-6 pb-2' : 'px-6 pt-6 mb-2'}`}>
+            <div className={`h-px bg-white/5 ${iconOnly ? 'w-6 mb-4' : 'w-full mb-4'}`} />
             <Link
               href="/admin/novedades"
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-sm text-sm font-medium transition-all group ${
+              title={iconOnly ? 'Novedades' : undefined}
+              className={`flex items-center rounded-sm text-sm font-medium transition-all group ${
+                iconOnly ? 'w-10 h-10 justify-center' : 'w-full gap-3 px-4 py-2.5'
+              } ${
                 isActive('/admin/novedades')
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-x-1'
+                  ? `bg-blue-600 text-white shadow-lg shadow-blue-900/40 ${iconOnly ? '' : 'translate-x-1'}`
                   : 'text-slate-400 hover:bg-white/5 hover:text-white'
               }`}
             >
-              <IoSparklesOutline className={`w-4 h-4 flex-shrink-0 ${isActive('/admin/novedades') ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
-              <span className="truncate">Novedades</span>
-              <span className="ml-auto text-[9px] font-black text-slate-500 group-hover:text-slate-300">
-                v{CHANGELOG[0].version}
-              </span>
+              <IoSparklesOutline className={`w-5 h-5 flex-shrink-0 ${isActive('/admin/novedades') ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
+              {!iconOnly && (
+                <>
+                  <span className="flex-shrink-0 whitespace-nowrap">Novedades</span>
+                  <span className="ml-auto flex-shrink-0 text-[9px] font-black text-slate-500 group-hover:text-slate-300">
+                    v{CHANGELOG[0].version}
+                  </span>
+                </>
+              )}
             </Link>
           </div>
         </nav>
+        </div>
       </aside>
 
       {/* Main */}
@@ -320,28 +333,10 @@ export default function AdminShell({ children }: AdminShellProps) {
             <IoMenuOutline size={24} />
           </button>
 
-          <div className="flex items-center gap-6 flex-1 min-w-0">
-            <div className="formal-search-container max-w-sm hidden sm:flex relative">
-              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Buscar en esta sección..."
-                className="formal-search-input pr-10"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-              />
-              {searchInput && (
-                <button
-                  onClick={() => setSearchInput('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
-                  aria-label="Limpiar"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+          <div className="flex-1 min-w-0 flex items-center">
+            {sectionTitle && (
+              <h1 className="text-base md:text-lg font-bold text-slate-900 truncate">{sectionTitle}</h1>
+            )}
           </div>
 
           <div className="flex items-center gap-2 md:gap-4 shrink-0">
@@ -433,17 +428,6 @@ export default function AdminShell({ children }: AdminShellProps) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-[#f8fafc] p-4 sm:p-6 md:p-10">
           <div className="max-w-7xl mx-auto pb-20">
-            {sectionTitle && (
-              <div className="mb-6 md:mb-10">
-                <h2 className="text-xl md:text-2xl font-bold text-slate-900">{sectionTitle}</h2>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-xs text-slate-400 font-medium">Dashboard</span>
-                  <span className="text-xs text-slate-300">/</span>
-                  <span className="text-xs text-blue-600 font-bold">{sectionTitle}</span>
-                </div>
-              </div>
-            )}
-
             {(isLoadingAuth || !isAdmin) ? (
               <div className="flex items-center justify-center h-64">
                 {!isLoadingAuth && !isAdmin ? (
