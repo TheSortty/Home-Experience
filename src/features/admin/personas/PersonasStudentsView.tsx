@@ -53,6 +53,11 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
   const [invitePassword, setInvitePassword] = useState('');
   const [isInviting, setIsInviting] = useState(false);
 
+  // Reset password modal state (para alumnos que ya tienen acceso)
+  const [studentToReset, setStudentToReset] = useState<PersonaStudent | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+
   const fetchTrashCount = useCallback(async () => {
     try {
       const { count } = await restSelect('profiles', {
@@ -256,6 +261,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
         setIsConfirmDeleteOpen(false);
         setIsInviteModalOpen(false);
         setStudentsToAssign(null);
+        setStudentToReset(null);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -295,6 +301,35 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
       toast.error(err.message);
     } finally {
       setIsInviting(false);
+    }
+  };
+
+  const openResetPassword = (student: PersonaStudent) => {
+    setStudentToReset(student);
+    setResetPassword('');
+  };
+
+  const submitResetPassword = async () => {
+    if (!studentToReset?.user_id) return;
+    setIsResetting(true);
+    try {
+      const res = await fetch('/api/admin/create-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'reset_password',
+          userId: studentToReset.user_id,
+          password: resetPassword,
+        }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(data.error || 'Error al restablecer la contraseña');
+      toast.success(`Contraseña actualizada para ${studentToReset.name}`);
+      setStudentToReset(null);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -526,6 +561,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
               students={filtered}
               onSelect={(s) => setSelectedStudent(studentForModal(s))}
               onInvite={openInvite}
+              onResetPassword={openResetPassword}
               onAssign={(s) => setStudentsToAssign([s])}
               onUnlink={handleUnlink}
               onMove={handleMove}
@@ -540,6 +576,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
               students={filtered}
               onSelect={(s) => setSelectedStudent(studentForModal(s))}
               onInvite={openInvite}
+              onResetPassword={openResetPassword}
               onAssign={(s) => setStudentsToAssign([s])}
               onUnlink={handleUnlink}
               onMove={handleMove}
@@ -652,6 +689,40 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
         </div>,
         document.body
       )}
+
+      {/* Reset password modal */}
+      {studentToReset && createPortal(
+        <div className="full-screen-modal-overlay z-[70]" onClick={() => setStudentToReset(null)}>
+          <div className="formal-modal max-w-md w-full p-8 animate-scale-in" onClick={e => e.stopPropagation()}>
+            <div className="flex flex-col">
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Restablecer contraseña</h3>
+              <p className="text-sm text-slate-500 mb-6">
+                Vas a definir una nueva contraseña para <strong>{studentToReset.name}</strong> ({studentToReset.email}).
+                Se la pasás vos por privado; reemplaza la anterior de inmediato.
+              </p>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Mínimo 6 caracteres"
+                value={resetPassword}
+                onChange={e => setResetPassword(e.target.value)}
+                className="w-full p-2 text-sm border rounded-sm mb-6"
+              />
+              <div className="flex gap-4 w-full">
+                <button onClick={() => setStudentToReset(null)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-widest rounded-sm hover:bg-slate-200 transition-all">Cancelar</button>
+                <button
+                  onClick={submitResetPassword}
+                  disabled={isResetting || resetPassword.length < 6}
+                  className="flex-1 py-3 bg-blue-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-sm shadow-lg shadow-blue-200 hover:bg-blue-700 disabled:opacity-50 transition-all"
+                >
+                  {isResetting ? 'Guardando...' : 'Confirmar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 }
@@ -659,12 +730,13 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
 // ─── Sub-views ────────────────────────────────────────────────────────────────
 
 function TableView({
-  students, onSelect, onInvite, onAssign, onUnlink, onMove, initials,
+  students, onSelect, onInvite, onResetPassword, onAssign, onUnlink, onMove, initials,
   selectedIds, onToggleSelect, onToggleAll, allSelected,
 }: {
   students: PersonaStudent[];
   onSelect: (s: PersonaStudent) => void;
   onInvite: (s: PersonaStudent) => void;
+  onResetPassword: (s: PersonaStudent) => void;
   onAssign: (s: PersonaStudent) => void;
   onUnlink: (s: PersonaStudent, p: ProgramChipData) => void;
   onMove: (s: PersonaStudent, p: ProgramChipData) => void;
@@ -756,7 +828,15 @@ function TableView({
               </td>
               <td className="hidden md:table-cell text-center">
                 {s.user_id ? (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">✅ Acceso activo</span>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">✅ Acceso activo</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onResetPassword(s); }}
+                      className="text-[9px] font-bold text-slate-400 uppercase tracking-wider hover:text-blue-600 hover:underline transition-colors"
+                    >
+                      Restablecer contraseña
+                    </button>
+                  </div>
                 ) : (
                   <button
                     onClick={(e) => { e.stopPropagation(); onInvite(s); }}
@@ -786,12 +866,13 @@ function TableView({
 }
 
 function GridView({
-  students, onSelect, onInvite, onAssign, onUnlink, onMove, initials,
+  students, onSelect, onInvite, onResetPassword, onAssign, onUnlink, onMove, initials,
   selectedIds, onToggleSelect,
 }: {
   students: PersonaStudent[];
   onSelect: (s: PersonaStudent) => void;
   onInvite: (s: PersonaStudent) => void;
+  onResetPassword: (s: PersonaStudent) => void;
   onAssign: (s: PersonaStudent) => void;
   onUnlink: (s: PersonaStudent, p: ProgramChipData) => void;
   onMove: (s: PersonaStudent, p: ProgramChipData) => void;
@@ -854,7 +935,12 @@ function GridView({
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-50 gap-2">
               {s.user_id ? (
-                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1">
+                <span
+                  onClick={(e) => { e.stopPropagation(); onResetPassword(s); }}
+                  className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1 cursor-pointer hover:underline"
+                  role="button"
+                  title="Restablecer contraseña"
+                >
                   ✓ Acceso
                 </span>
               ) : (

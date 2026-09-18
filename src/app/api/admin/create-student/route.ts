@@ -19,10 +19,14 @@ export async function POST(request: Request) {
     }
 
     // 2. Parse request body
-    const body = await request.json() as { email: string; mode: string; password?: string; firstName?: string; lastName?: string };
-    const { email, mode, password, firstName, lastName } = body;
+    const body = await request.json() as { email: string; mode: string; password?: string; firstName?: string; lastName?: string; userId?: string };
+    const { email, mode, password, firstName, lastName, userId } = body;
 
-    if (!email || !mode) {
+    if (mode === 'reset_password') {
+      if (!userId) {
+        return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+      }
+    } else if (!email || !mode) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -75,6 +79,18 @@ export async function POST(request: Request) {
         email_confirm: true,
         user_metadata: { first_name: firstName, last_name: lastName }
       });
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      authUserId = data.user.id;
+
+    } else if (mode === 'reset_password') {
+      if (!password || password.length < 6) {
+        return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
+      }
+
+      const { data, error } = await adminAuthClient.auth.admin.updateUserById(userId!, { password });
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 400 });
