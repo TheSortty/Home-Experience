@@ -271,6 +271,20 @@ export async function trackResourceOpen(resourceId: string) {
 // ── submission: upload one or more files → Cloudflare R2 ──────────────────────
 
 export async function submitLesson(formData: FormData) {
+  try {
+    return await submitLessonInner(formData);
+  } catch (err) {
+    // Cualquier excepción que escape del server action (sesión vencida a mitad
+    // de la subida, un fetch de Supabase que revienta, etc.) rompe el RSC
+    // response y el cliente ve "Algo salió mal" sin ninguna pista. Devolver
+    // siempre un { error } evita el crash y muestra el motivo real.
+    console.error('[entregas] submitLesson failed:', err);
+    const message = err instanceof Error ? err.message : 'No se pudo enviar la entrega. Probá de nuevo.';
+    return { error: message };
+  }
+}
+
+async function submitLessonInner(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'No autenticado' };
@@ -419,6 +433,16 @@ export async function submitLesson(formData: FormData) {
 // organizer enables it). Files are appended to the existing delivery (no new
 // version) and each one records whether it landed before or after the deadline.
 export async function addSubmissionFiles(formData: FormData) {
+  try {
+    return await addSubmissionFilesInner(formData);
+  } catch (err) {
+    console.error('[entregas] addSubmissionFiles failed:', err);
+    const message = err instanceof Error ? err.message : 'No se pudieron subir los adicionales. Probá de nuevo.';
+    return { error: message };
+  }
+}
+
+async function addSubmissionFilesInner(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'No autenticado' };

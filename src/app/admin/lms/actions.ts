@@ -93,6 +93,21 @@ export async function updateLessonLifecycle(formData: FormData) {
 }
 
 export async function submitAdminReview(formData: FormData) {
+  try {
+    return await submitAdminReviewInner(formData);
+  } catch (err) {
+    // Anything that escapes here (auth/session hiccups, an unexpected DB
+    // error, etc.) would otherwise bubble past this action as an unhandled
+    // exception — Next.js then strips the real message client-side and the
+    // admin route's error boundary shows a bare "Error en el panel" with no
+    // way to tell what happened. Surface the real reason instead.
+    console.error('[entregas] submitAdminReview failed:', err);
+    const message = err instanceof Error ? err.message : 'Error inesperado al enviar la devolución.';
+    return { error: message };
+  }
+}
+
+async function submitAdminReviewInner(formData: FormData) {
   const { supabase, profile: reviewer } = await assertReviewer();
 
   const submissionId = formData.get('submissionId') as string;
@@ -188,10 +203,14 @@ export async function submitAdminReview(formData: FormData) {
     status: newStatus,
     ...(approve ? { approved_by: reviewer.id, approved_at: new Date().toISOString() } : {}),
   };
-  await supabase
+  const { error: statusErr } = await supabase
     .from('submissions')
     .update(statusUpdate)
     .eq('id', submissionId);
+  if (statusErr) {
+    console.error('[entregas] status update failed:', statusErr);
+    return { error: `La devolución se guardó, pero no se pudo actualizar el estado de la entrega: ${statusErr.message}` };
+  }
 
   // Bandeja event
   const { data: submission } = await supabase
