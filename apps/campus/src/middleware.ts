@@ -69,7 +69,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   return supabaseResponse
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   return updateSession(request)
 }
 
