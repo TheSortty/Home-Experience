@@ -24,14 +24,14 @@ git stash list
 **Qué hay ahí adentro** (21 archivos, `git stash show -u stash@{0} --stat`):
 - Feature de **importar histórico de Personas** completa y sin commitear:
   `src/app/admin/(shell)/personas/importar/` (ImportarClient.tsx + page.tsx),
-  `src/features/admin/personas/import/importFields.ts`.
+  `apps/marketing/src/features/admin/personas/import/importFields.ts`.
 - Migraciones de un **schema de CRM/staging** aparte del que se tocó hoy:
   `supabase/migrations/000005_crm_schema.sql` y `000006_crm_import_staging.sql`.
   (Ojo: es un CRM distinto al tab "CRM" que se eliminó de la ficha del
   alumno hoy — coincidencia de nombre, no está relacionado.)
 - Cambios de compresión/tipos de archivo para entregas:
-  `src/utils/imageCompress.ts`, `src/services/entregasFileTypes.ts`,
-  `src/utils/fileAccept.ts`, `src/services/entregasStorage.ts`.
+  `packages/services/src/utils/imageCompress.ts`, `packages/services/src/entregasFileTypes.ts`,
+  `packages/services/src/utils/fileAccept.ts`, `packages/services/src/entregasStorage.ts`.
 - **Conflicto real**: `SubmissionTab.tsx`, `ReviewForm.tsx` y
   `SubmissionCard.tsx` (entregas) tienen cambios en el stash que pisan los
   mismos archivos que el commit `5677225` (ya en remoto, "picker de archivos

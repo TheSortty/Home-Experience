@@ -3,43 +3,23 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "build": "next build",
-    "dev": "next dev",
-    "start": "next start",
-    "lint": "next lint",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
-  },
-  "dependencies": {
-    "@gsap/react": "^2.1.2",
-    "@opennextjs/cloudflare": "^1.19.1",
-    "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.105.4",
-    "@types/uuid": "^11.0.0",
-    "clsx": "^2.1.1",
-    "framer-motion": "^12.23.24",
-    "gsap": "^3.13.0",
-    "lenis": "^1.3.15",
-    "matter-js": "^0.20.0",
-    "next": "^16.2.2",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-hot-toast": "^2.6.0",
-    "react-icons": "^5.5.0",
-    "swiper": "^12.0.3",
-    "tailwind-merge": "^3.4.0",
-    "uuid": "^13.0.0"
+    "dev": "concurrently -n marketing,campus -c blue,magenta \"npm run dev:marketing\" \"npm run dev:campus\"",
+    "dev:marketing": "npm run dev --workspace=marketing",
+    "dev:campus": "npm run dev --workspace=campus",
+    "build": "npm run build:marketing && npm run build:campus",
+    "build:marketing": "npm run build --workspace=marketing",
+    "build:campus": "npm run build --workspace=campus",
+    "typecheck": "npm run typecheck:marketing && npm run typecheck:campus",
+    "typecheck:marketing": "npm exec --workspace=marketing -- tsc --noEmit",
+    "typecheck:campus": "npm exec --workspace=campus -- tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@types/react": "19.2.14",
-    "autoprefixer": "^10.4.27",
-    "postcss": "^8.5.8",
-    "tailwindcss": "^3.4.19",
-    "typescript": "~5.8.2",
-    "wrangler": "^4.82.2"
+    "concurrently": "^10.0.5",
+    "typescript": "~5.8.2"
   }
 }

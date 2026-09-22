@@ -27,7 +27,7 @@ Error: Cannot perform I/O on behalf of a different request (I/O type: Refcounted
 ### Fixes aplicados (A + B) — 2026-05-26
 
 - **A**: Se añadió `try/catch` alrededor de cada bloque de queries en
-  `src/app/(campus)/dashboard/page.tsx` y `src/app/(campus)/layout.tsx`.
+  `apps/campus/src/app/(campus)/dashboard/page.tsx` y `apps/campus/src/app/(campus)/layout.tsx`.
   Cualquier fallo produce fallbacks seguros (arrays vacíos, strings "Alumno", etc.)
   en lugar de crashear el Worker.
 
@@ -49,10 +49,10 @@ JS de Supabase) para todas sus queries de datos. Esto elimina completamente los
 
 | Archivo | Queries problemáticas |
 |---|---|
-| `src/app/(campus)/dashboard/page.tsx` | `profiles`, `courses`, `getStudentProgress` (interno), `lessons`, `course_sessions`, `cycle_sessions` |
-| `src/app/(campus)/layout.tsx` | `profiles` |
-| `src/services/roleService.ts` | `resolveRole()` server-side usa RPC con el cliente JS |
-| `src/services/progressService.ts` | `getStudentProgress()` usa el cliente JS internamente |
+| `apps/campus/src/app/(campus)/dashboard/page.tsx` | `profiles`, `courses`, `getStudentProgress` (interno), `lessons`, `course_sessions`, `cycle_sessions` |
+| `apps/campus/src/app/(campus)/layout.tsx` | `profiles` |
+| `packages/services/src/roleService.ts` | `resolveRole()` server-side usa RPC con el cliente JS |
+| `packages/services/src/progressService.ts` | `getStudentProgress()` usa el cliente JS internamente |
 
 #### Guía de migración
 
@@ -61,7 +61,7 @@ JS de Supabase) para todas sus queries de datos. Esto elimina completamente los
 const { data } = await supabase.from('profiles').select('first_name').eq('user_id', uid).single();
 
 // Después (REST puro — sin timers)
-import { restSelect } from '@/src/services/supabaseRest';
+import { restSelect } from '@home/services/supabaseRest';
 const { data } = await restSelect<Profile>('profiles', {
   columns: 'first_name',
   filters: { user_id: `eq.${uid}` },
@@ -75,7 +75,7 @@ Para RPCs:
 const { data } = await supabase.rpc('resolve_role', { uid });
 
 // Después
-import { restRpc } from '@/src/services/supabaseRest';
+import { restRpc } from '@home/services/supabaseRest';
 const { data } = await restRpc<string>('resolve_role', { uid });
 ```
 
