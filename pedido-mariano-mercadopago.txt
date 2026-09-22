@@ -1,0 +1,122 @@
+Che Mariano, cómo va.
+
+Ya tengo armado todo el tema de cobrar por Mercado Pago en la web, con los
+precios nuevos y todo. Lo que falta es la parte de configuración de la cuenta,
+que esa la tenés que hacer vos porque va con los accesos de la cuenta de HOME.
+Te dejo abajo lo que necesito, punto por punto, así lo dejamos andando.
+
+Es todo desde el panel de desarrolladores de Mercado Pago:
+https://www.mercadopago.com.ar/developers/panel
+
+
+1) CREAR LA APLICACIÓN
+-----------------------
+Entrá con la cuenta de Mercado Pago de HOME, la que recibe la plata (esto es
+importante, tiene que ser esa cuenta y no una personal, porque la aplicación
+queda atada a la cuenta que la crea).
+
+Andá a "Tus integraciones" y creá una aplicación nueva:
+- Nombre: algo como "Web HOME" o "siendohome.com", el que quieras.
+- Producto: Checkout Pro.
+- Modelo de integración: online / pagos online.
+
+
+2) LAS CREDENCIALES (esto es lo principal)
+-------------------------------------------
+Una vez creada la aplicación, entrá a "Credenciales" y pasame estas cuatro
+cosas. Vas a ver dos solapas, prueba y producción, necesito de las dos:
+
+De PRODUCCIÓN (son las que cobran plata de verdad):
+- Access Token (arranca con APP_USR-...)
+- Public Key
+
+De PRUEBA (para testear sin mover plata):
+- Access Token
+- Public Key
+
+IMPORTANTE: el Access Token es como una contraseña, cualquiera que lo tenga
+puede cobrar y ver los pagos de la cuenta. No me lo mandes por WhatsApp ni por
+mail. Pasámelo por algún lado que se borre, o directamente me lo mostrás en
+pantalla cuando nos veamos y lo cargo yo.
+
+
+3) EL WEBHOOK (sin esto no funciona)
+-------------------------------------
+Esto es lo que le avisa a la web que alguien pagó. Si no está configurado, la
+persona paga pero en el sistema no aparece nada.
+
+En la misma aplicación andá a "Webhooks" o "Notificaciones":
+- URL a configurar: https://siendohome.com/api/pagos/webhook
+- Evento a tildar: "Pagos" (payment). Los demás no hacen falta.
+- Cuando lo guardes, MP te genera una CLAVE SECRETA. Esa clave la necesito
+  también (mismo cuidado que el access token, no la mandes por mail).
+
+Si te deja configurar la URL para prueba y para producción, cargá la misma en
+las dos.
+
+
+4) LA PROMO DE LAS CUOTAS
+--------------------------
+Esto es aparte y quiero confirmarlo con vos porque me puede jugar en contra.
+
+Lo que quedó en la web: hasta el 31 de octubre, miércoles y sábados, 3 cuotas
+sin interés.
+
+Ahora, desde la web yo solamente puedo limitar que se muestren hasta 3 cuotas.
+Que esas 3 cuotas sean SIN INTERÉS depende de una promo que tiene que estar
+cargada en el panel de Mercado Pago. Si la promo no está cargada allá, el que
+compra igual ve 3 cuotas pero CON interés, y le termina saliendo más caro.
+
+Entonces necesito que me confirmes:
+- ¿La promo de 3 cuotas sin interés ya está activa en la cuenta?
+- ¿Es solo miércoles y sábados o quedó para todos los días?
+- ¿Hasta el 31/10 confirmado?
+- El costo de las cuotas sin interés lo absorbe HOME (a nosotros nos entra
+  menos plata). ¿Está todo bien con eso o lo querés revisar?
+
+
+5) COSAS PARA CONFIRMAR
+------------------------
+- ¿La cuenta está verificada y habilitada para cobrar? (Con CBU cargado para
+  poder retirar la plata.)
+- ¿A qué mail llegan los avisos de pago de Mercado Pago?
+- ¿Querés que se pueda pagar con TODOS los medios (tarjeta, débito, efectivo
+  en Rapipago/Pago Fácil, dinero en cuenta), o querés que saque alguno?
+- ¿Hay algún tema de facturación que tenga que contemplar, o eso lo manejás
+  vos por afuera?
+
+
+6) PRECIOS
+-----------
+Los cargué así, decime si está bien:
+
+  INICIAL (4 días) ............................. $280.000
+  AVANZADO (5 días) ............................ $300.000
+  PROGRAMA DE LIDERAZGO (3 meses) .............. $450.000
+
+  Combo CreSER (INICIAL + AVANZADO) ............ $480.000
+  Combo completo (INICIAL + AVANZADO + PL) ..... $820.000
+
+Una aclaración: antes teníamos dos precios por combo, uno en efectivo y otro
+en tarjeta. Ahora quedó un precio solo, porque los recargos por tarjeta y
+cuotas los pone Mercado Pago de su lado y no tiene sentido que yo mantenga a
+mano un número que no controlo.
+
+Los precios quedan editables desde el panel de administración de la web, en
+Configuración Web, así que si cambian los cambiás vos sin depender de mí.
+
+
+EN RESUMEN, LO QUE NECESITO DE VOS
+-----------------------------------
+[ ] Access Token y Public Key de producción
+[ ] Access Token y Public Key de prueba
+[ ] Webhook configurado + la clave secreta que genera
+[ ] Confirmar la promo de las 3 cuotas sin interés
+[ ] Confirmar los precios de arriba
+
+Con eso lo pruebo primero con las credenciales de prueba, y cuando veamos que
+está todo ok lo pasamos a producción y empezamos a cobrar.
+
+Cualquier cosa que no se entienda avisame y lo vemos juntos.
+
+Abrazo.

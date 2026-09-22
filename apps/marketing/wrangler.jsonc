@@ -1,0 +1,54 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "home-experience",
+  "compatibility_date": "2026-04-14",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "home-experience"
+    }
+  ],
+  "images": {
+    "binding": "IMAGES"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Mismos buckets que usa campus (ver apps/campus/wrangler.jsonc): un R2
+  // bucket puede bindearse a varios Workers. Los necesitamos acá porque el
+  // admin (que vive en este Worker) revisa/descarga entregas y materiales.
+  "r2_buckets": [
+    {
+      "binding": "AVATARS",
+      "bucket_name": "campus-avatars"
+    },
+    {
+      "binding": "ENTREGAS",
+      "bucket_name": "campus-entregas"
+    }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_BASE_URL": "https://siendohome.com",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://qvdjpmcprbinvrcczyhp.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2ZGpwbWNwcmJpbnZyY2N6eWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ3OTExODEsImV4cCI6MjA4MDM2NzE4MX0.vmTXYtXOFtbVHtpOZTN4ZNfBseR63utXat7o6hBRQy4",
+    "NEXT_PUBLIC_GOOGLE_PLACE_ID": "ChIJBQ5O4hwIvCwRMORcQLTnrfw",
+    // URLs de los dos Workers, para armar links/redirects entre marketing y
+    // campus (ver packages/services/src/siteUrls.ts).
+    "NEXT_PUBLIC_MARKETING_URL": "https://siendohome.com",
+    "NEXT_PUBLIC_CAMPUS_URL": "https://campus.siendohome.com",
+    // Dominio del cookie de sesión — mismo valor que en apps/campus, así el
+    // login hecho acá lo lee el Worker de campus (SSO). Ver Fase 3 del plan.
+    "NEXT_PUBLIC_COOKIE_DOMAIN": ".siendohome.com"
+  }
+  // SUPABASE_SERVICE_ROLE_KEY (lo usa calendarSync.ts para los server actions
+  // de /admin/calendario) va como Secret desde el dashboard, no acá — nunca
+  // en texto plano ni commiteado.
+}

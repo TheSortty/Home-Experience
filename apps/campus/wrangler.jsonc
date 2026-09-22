@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "home-campus",
+  "compatibility_date": "2026-04-14",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "home-campus"
+    }
+  ],
+  "images": {
+    "binding": "IMAGES"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Mismos buckets que usa marketing (ver apps/marketing/wrangler.jsonc): un
+  // R2 bucket puede bindearse a varios Workers sin conflicto.
+  "r2_buckets": [
+    {
+      "binding": "AVATARS",
+      "bucket_name": "campus-avatars"
+    },
+    {
+      "binding": "ENTREGAS",
+      "bucket_name": "campus-entregas"
+    }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_BASE_URL": "https://campus.siendohome.com",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://qvdjpmcprbinvrcczyhp.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2ZGpwbWNwcmJpbnZyY2N6eWhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ3OTExODEsImV4cCI6MjA4MDM2NzE4MX0.vmTXYtXOFtbVHtpOZTN4ZNfBseR63utXat7o6hBRQy4",
+    // URLs de los dos Workers (ver packages/services/src/siteUrls.ts).
+    "NEXT_PUBLIC_MARKETING_URL": "https://siendohome.com",
+    "NEXT_PUBLIC_CAMPUS_URL": "https://campus.siendohome.com",
+    // Mismo dominio de cookie que marketing — necesario para el SSO.
+    "NEXT_PUBLIC_COOKIE_DOMAIN": ".siendohome.com"
+  }
+  // SUPABASE_SERVICE_ROLE_KEY (calendarSync.ts) y GOOGLE_OAUTH_CLIENT_ID /
+  // GOOGLE_OAUTH_CLIENT_SECRET (googleCalendar.ts) van como Secret desde el
+  // dashboard de Cloudflare, no acá.
+}
