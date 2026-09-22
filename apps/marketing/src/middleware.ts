@@ -77,7 +77,11 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     return supabaseResponse
   }
 
-  const role = user ? await resolveRole(supabase, user.id) : null
+  // El rol sólo importa en /admin y en /auth/login. Resolverlo siempre le
+  // sumaba un viaje a PostgREST a cada request de cualquier usuario logueado
+  // — la landing, /auth/register, todo — para después descartarlo.
+  const needsRole = user && (isAdminRoute || isLoginRoute)
+  const role = needsRole ? await resolveRole(supabase, user.id) : null
   const isAdmin = role === 'admin' || role === 'sysadmin'
   const isCoach = role === 'coach'
   // Coaches can access /admin/lms (entregas + course overview) but nothing else in /admin.
@@ -111,8 +115,9 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   // lo mandamos a donde corresponda. NO redirigimos desde '/': un usuario
   // logueado tiene que poder volver a la landing desde el campus/admin.
   if (user && isLoginRoute) {
-    const { data: roleRpc } = await supabase.rpc('get_user_role')
-    const isAdminRole = roleRpc === 'admin' || roleRpc === 'sysadmin'
+    // Reusamos el rol de arriba: esto hacía un rpc('get_user_role') extra
+    // para volver a traer exactamente lo mismo que ya teníamos.
+    const isAdminRole = isAdmin
 
     // Si venía con ?next= (lo pone el campus cuando rebota por falta de
     // sesión), ese es el destino real — perderlo acá deja al alumno en el
@@ -134,7 +139,24 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   return supabaseResponse
 }
 
+/**
+ * Los prefetch del router de Next no los mira nadie: son una carga
+ * especulativa que el navegador puede tirar a la basura. Pero igual
+ * atraviesan el middleware, y acá cada pasada cuesta un getUser(), que es un
+ * viaje de red a /auth/v1/user — endpoint con límite de 30 requests cada 5
+ * minutos POR IP. Y como getUser() sale del Worker, la IP que Supabase ve es
+ * la del Worker: el cupo es uno solo para todos los alumnos a la vez.
+ *
+ * Saltearlos es seguro: la respuesta del prefetch no le muestra nada a nadie
+ * sin una navegación real, y esa navegación vuelve a pasar por acá. Además
+ * las páginas protegidas tienen su propio guard en el layout.
+ */
+function isPrefetch(request: NextRequest): boolean {
+  return request.headers.get('next-router-prefetch') === '1'
+}
+
 export async function middleware(request: NextRequest) {
+  if (isPrefetch(request)) return NextResponse.next({ request })
   return updateSession(request)
 }
 

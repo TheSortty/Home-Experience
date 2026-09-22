@@ -69,7 +69,24 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   return supabaseResponse
 }
 
+/**
+ * Los prefetch del router de Next no los mira nadie: son una carga
+ * especulativa que el navegador puede tirar a la basura. Pero igual
+ * atraviesan el middleware, y acá cada pasada cuesta un getUser(), que es un
+ * viaje de red a /auth/v1/user — endpoint con límite de 30 requests cada 5
+ * minutos POR IP. Y como getUser() sale del Worker, la IP que Supabase ve es
+ * la del Worker: el cupo es uno solo para todos los alumnos a la vez.
+ *
+ * Saltearlos es seguro: la respuesta del prefetch no le muestra nada a nadie
+ * sin una navegación real, y esa navegación vuelve a pasar por acá. Además
+ * las páginas protegidas tienen su propio guard en el layout.
+ */
+function isPrefetch(request: NextRequest): boolean {
+  return request.headers.get('next-router-prefetch') === '1'
+}
+
 export async function middleware(request: NextRequest) {
+  if (isPrefetch(request)) return NextResponse.next({ request })
   return updateSession(request)
 }
 
