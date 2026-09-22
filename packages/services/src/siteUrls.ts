@@ -1,41 +1,26 @@
 // URLs de los dos Workers que forman el sitio, para armar links/redirects
 // entre ellos (dominios distintos desde que se separó el campus).
 //
-// OJO con NEXT_PUBLIC_*: Next las inlinea en el bundle EN TIEMPO DE BUILD, no
-// las lee del entorno del Worker. O sea que los `vars` de wrangler.jsonc sólo
-// alcanzan para el código de servidor; lo que corre en el navegador se queda
-// con el valor que hubiera cuando se compiló. Como `npm run deploy` compila en
-// la máquina del dev, un build sin estas variables se llevaba puesto el
-// fallback de localhost a producción — y el alumno terminaba redirigido a
-// http://localhost:3001/dashboard después de loguearse.
+// De dónde salen estos valores en cada caso:
+//   - Deploy (Workers Builds o `npm run deploy`): el build de OpenNext lee los
+//     `vars` de wrangler.jsonc y los inyecta al build de Next, PISANDO lo que
+//     venga de .env* o del shell. Ver getEnvFromPlatformProxy() en
+//     @opennextjs/cloudflare. O sea que en producción manda wrangler.jsonc.
+//   - `next dev` / `next build` a secas: esos no pasan por OpenNext y no ven
+//     el wrangler.jsonc, así que sale del .env.local de cada app. Sin él,
+//     caen a los puertos de dev de acá abajo.
 //
-// Por eso hay dos redes de contención:
-//   1. Los scripts `deploy`/`preview`/`upload` de cada app setean las dos
-//      variables explícitamente antes de compilar (ahí sí se inlinean bien).
-//   2. resolve() de abajo: si igual faltaran, en el navegador se fija en qué
-//      host está parado antes de asumir que es local.
-
-const PROD_MARKETING = 'https://siendohome.com';
-const PROD_CAMPUS = 'https://campus.siendohome.com';
-
-function resolve(envValue: string | undefined, prodUrl: string, devPort: number): string {
-  if (envValue) return envValue;
-
-  // Sin variable: el host desde el que se sirve la página es la única fuente
-  // confiable que tenemos acá. Si no es localhost, esto es producción.
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host !== 'localhost' && host !== '127.0.0.1') return prodUrl;
-  }
-
-  return `http://localhost:${devPort}`;
-}
+// Ojo con una cosa igual: las NEXT_PUBLIC_* se inlinean en el bundle al
+// compilar, no se leen del entorno del Worker. Un `next build` a mano
+// (sin .env.local y sin OpenNext) hornea el fallback de localhost en el
+// bundle del navegador. Para chequear un build antes de subirlo:
+//   grep -rl "localhost:300" apps/<app>/.next/static/chunks   → tiene que dar vacío
 
 /** Origin del sitio principal (landing + admin). */
-export const MARKETING_URL = resolve(process.env.NEXT_PUBLIC_MARKETING_URL, PROD_MARKETING, 3000);
+export const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3000';
 
 /** Origin del campus (alumno). */
-export const CAMPUS_URL = resolve(process.env.NEXT_PUBLIC_CAMPUS_URL, PROD_CAMPUS, 3001);
+export const CAMPUS_URL = process.env.NEXT_PUBLIC_CAMPUS_URL || 'http://localhost:3001';
 
 /**
  * Valida un `?next=` antes de redirigir.
