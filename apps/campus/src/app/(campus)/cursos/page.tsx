@@ -249,11 +249,14 @@ export default async function CampusCursosPage({
             return (
               <Link key={course.enrollmentId} href={href} className="group">
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full group-hover:border-[#00A9CE]/40 group-hover:shadow-md transition-all">
-                  <div className={`h-40 relative overflow-hidden ${coverSrc ? '' : `bg-gradient-to-r ${gradient}`}`}>
+                  {/* Gradiente siempre de fondo — ver el comentario en
+                      dashboard/page.tsx: una portada que no carga tiene que
+                      degradar al gradiente, no a una caja blanca con el alt. */}
+                  <div className={`h-40 relative overflow-hidden bg-gradient-to-r ${gradient}`}>
                     {coverSrc && (
                       <img
                         src={coverSrc}
-                        alt={course.courseTitle}
+                        alt=""
                         className="absolute inset-0 w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                       />

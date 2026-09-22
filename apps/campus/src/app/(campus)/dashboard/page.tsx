@@ -435,11 +435,17 @@ export default async function CampusDashboardPage({
                     data-anim="card"
                     className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:border-[#00A9CE]/30 hover:shadow-md transition-all"
                   >
-                    <div className={`h-32 relative overflow-hidden ${coverSrc ? '' : `bg-gradient-to-r ${idx % 2 === 0 ? 'from-[#00A9CE] to-blue-600' : 'from-emerald-400 to-teal-500'}`}`}>
+                    {/* El gradiente va SIEMPRE, no sólo cuando falta portada: si
+                        la imagen existe pero no carga (borrada del bucket, link de
+                        Drive caído), queda él de fondo en vez de una caja blanca.
+                        alt="" a propósito — el título ya está en el <h3> de abajo,
+                        así que la portada es decorativa y un alt con texto se
+                        dibujaría encima del gradiente al fallar. */}
+                    <div className={`h-32 relative overflow-hidden bg-gradient-to-r ${idx % 2 === 0 ? 'from-[#00A9CE] to-blue-600' : 'from-emerald-400 to-teal-500'}`}>
                       {coverSrc && (
                         <img
                           src={coverSrc}
-                          alt={enr.cycles?.courses?.title ?? ''}
+                          alt=""
                           className="absolute inset-0 w-full h-full object-cover"
                           referrerPolicy="no-referrer"
                         />
