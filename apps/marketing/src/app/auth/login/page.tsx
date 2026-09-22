@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Login from '@/src/features/auth/Login'
 import { supabase } from '@home/services/supabaseClient'
 import { resolveRole, isAdminRole } from '@home/services/roleService'
-import { CAMPUS_URL } from '@home/services/siteUrls'
+import { CAMPUS_URL, safeNextUrl } from '@home/services/siteUrls'
 
 export default function LoginPage() {
   const router       = useRouter()
@@ -22,14 +22,28 @@ export default function LoginPage() {
   const passwordSet    = searchParams.get('message') === 'password_set'
   const invalidToken   = searchParams.get('error') === 'InvalidToken'
 
+  // A dónde iba el usuario antes de que lo mandaran a loguearse. El campus
+  // lo manda como URL absoluta (?next=http://campus.../cursos/abc) porque
+  // vive en otro dominio; safeNextUrl() se encarga de que sólo se acepten
+  // destinos de nuestros dos orígenes.
+  const nextParam = searchParams.get('next')
+
+  const goToCampus = () => {
+    // El campus vive en otro Worker/dominio — no es una ruta interna que
+    // router.replace pueda resolver, hace falta una navegación dura.
+    window.location.href = safeNextUrl(nextParam, `${CAMPUS_URL}/dashboard`);
+  }
+
   const checkRoleAndRedirect = async (userId: string) => {
     const role = await resolveRole(supabase, userId);
     if (isAdminRole(role)) {
-      router.replace('/admin/dashboard');
+      // Un admin con ?next= al campus igual va al campus: entró por un link
+      // concreto, no a administrar.
+      const dest = safeNextUrl(nextParam, '/admin/dashboard');
+      if (dest.startsWith('/')) router.replace(dest);
+      else window.location.href = dest;
     } else {
-      // El campus vive en otro Worker/dominio — no es una ruta interna que
-      // router.replace pueda resolver, hace falta una navegación dura.
-      window.location.href = `${CAMPUS_URL}/dashboard`;
+      goToCampus();
     }
   }
 
@@ -66,7 +80,7 @@ export default function LoginPage() {
     if (session?.user) {
       checkRoleAndRedirect(session.user.id);
     } else {
-      window.location.href = `${CAMPUS_URL}/dashboard`;
+      goToCampus();
     }
   }
 

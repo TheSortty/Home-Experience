@@ -7,9 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "preview": "NEXT_PUBLIC_MARKETING_URL=https://siendohome.com NEXT_PUBLIC_CAMPUS_URL=https://campus.siendohome.com NEXT_PUBLIC_COOKIE_DOMAIN=.siendohome.com opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "NEXT_PUBLIC_MARKETING_URL=https://siendohome.com NEXT_PUBLIC_CAMPUS_URL=https://campus.siendohome.com NEXT_PUBLIC_COOKIE_DOMAIN=.siendohome.com opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload": "NEXT_PUBLIC_MARKETING_URL=https://siendohome.com NEXT_PUBLIC_CAMPUS_URL=https://campus.siendohome.com NEXT_PUBLIC_COOKIE_DOMAIN=.siendohome.com opennextjs-cloudflare build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {

@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveRole } from '@home/services/roleService'
-import { CAMPUS_URL } from '@home/services/siteUrls'
+import { CAMPUS_URL, safeNextUrl } from '@home/services/siteUrls'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -114,9 +114,16 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     const { data: roleRpc } = await supabase.rpc('get_user_role')
     const isAdminRole = roleRpc === 'admin' || roleRpc === 'sysadmin'
 
-    const redirectResponse = isAdminRole
-      ? NextResponse.redirect(new URL('/admin/dashboard', request.url))
-      : NextResponse.redirect(`${CAMPUS_URL}/dashboard`)
+    // Si venía con ?next= (lo pone el campus cuando rebota por falta de
+    // sesión), ese es el destino real — perderlo acá deja al alumno en el
+    // dashboard en vez de la clase a la que quería entrar.
+    const nextParam = request.nextUrl.searchParams.get('next')
+    const fallback = isAdminRole ? '/admin/dashboard' : `${CAMPUS_URL}/dashboard`
+    const dest = safeNextUrl(nextParam, fallback)
+
+    const redirectResponse = dest.startsWith('/')
+      ? NextResponse.redirect(new URL(dest, request.url))
+      : NextResponse.redirect(dest)
 
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))

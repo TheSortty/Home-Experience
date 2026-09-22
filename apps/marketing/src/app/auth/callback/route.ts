@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@home/services/supabase/server'
-import { CAMPUS_URL } from '@home/services/siteUrls'
+import { CAMPUS_URL, safeNextUrl } from '@home/services/siteUrls'
 import { type EmailOtpType } from '@supabase/supabase-js'
 
 /**
@@ -22,7 +22,11 @@ export async function GET(request: Request) {
   // Sin `next` explícito (link de un alumno, no de un admin) el destino real
   // es el campus, que ahora vive en otro dominio — por eso el default es una
   // URL absoluta y no un path relativo a este origin.
-  const next = searchParams.get('next') ?? `${CAMPUS_URL}/dashboard`
+  // safeNextUrl() filtra el parámetro contra los dos orígenes nuestros: acá
+  // se redirige JUSTO después de setear la cookie de sesión, así que un next
+  // sin validar mandaría al usuario recién logueado a donde quiera el que
+  // armó el link.
+  const next = safeNextUrl(searchParams.get('next'), `${CAMPUS_URL}/dashboard`)
   const redirectTo = next.startsWith('http') ? next : `${origin}${next}`
 
   const supabase = await createClient()
