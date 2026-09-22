@@ -952,13 +952,16 @@ function GridView({
                   + Habilitar
                 </span>
               )}
-              <span
-                onClick={(e) => { e.stopPropagation(); onAssign(s); }}
-                className="text-[10px] font-bold text-violet-600 uppercase tracking-wider cursor-pointer hover:underline"
-                role="button"
-              >
-                + Programa
-              </span>
+              {/* Mismo criterio que la tabla: sólo si no tiene ninguno asignado. */}
+              {s.programs.length === 0 && (
+                <span
+                  onClick={(e) => { e.stopPropagation(); onAssign(s); }}
+                  className="text-[10px] font-bold text-violet-600 uppercase tracking-wider cursor-pointer hover:underline"
+                  role="button"
+                >
+                  + Programa
+                </span>
+              )}
             </div>
           </div>
         );

@@ -93,7 +93,7 @@ const DETAIL_SECTION_GROUPS: DetailSectionGroup[] = [
         label: 'Programas',
         items: [
             {
-                id: 'PROGRAMAS', label: 'Historial de Programas',
+                id: 'PROGRAMAS', label: 'Historial',
                 icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
             },
             {
@@ -447,10 +447,12 @@ export const AttendanceBadge: React.FC<{ count: number; total: number }> = ({ co
     );
 };
 
+/** Dato suelto del encabezado. Etiqueta y valor en la misma línea: en tres
+ *  celdas a todo el ancho, el valor quedaba perdido a metros de su etiqueta. */
 const StatCell: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-    <div className="px-4 sm:px-8 py-3 sm:py-4">
-        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-        <p className="text-sm sm:text-base font-bold text-slate-800 capitalize truncate">{children}</p>
+    <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{label}</span>
+        <span className="text-xs font-bold text-slate-800 capitalize">{children}</span>
     </div>
 );
 
@@ -997,6 +999,22 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                 <span className="hidden sm:block w-1 h-1 bg-slate-200 rounded-full"></span>
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{latestProgram?.cycleName || 'Sin programa asignado'}</p>
                             </div>
+
+                            {/* Los tres datos que antes había que ir a buscar tab por tab.
+                                Acá, en línea: ocupaban una banda entera para tres valores cortos. */}
+                            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-3">
+                                <StatCell label="Asistencia">
+                                    {latestProgram && latestProgram.totalSessions > 0
+                                        ? `${Math.round((latestProgram.attendanceCount / latestProgram.totalSessions) * 100)}%`
+                                        : 'N/A'}
+                                </StatCell>
+                                <StatCell label="Pago">
+                                    {paymentLabel}
+                                </StatCell>
+                                <StatCell label="Programas">
+                                    {student.programHistory?.length ?? 0}
+                                </StatCell>
+                            </div>
                         </div>
 
                         <button
@@ -1007,20 +1025,6 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                         </button>
                     </div>
 
-                    {/* Stats — lo que antes había que ir a buscar tab por tab */}
-                    <div className="grid grid-cols-3 divide-x divide-slate-100 relative z-10 border-t border-slate-100">
-                        <StatCell label="Asistencia">
-                            {latestProgram && latestProgram.totalSessions > 0
-                                ? `${Math.round((latestProgram.attendanceCount / latestProgram.totalSessions) * 100)}%`
-                                : 'N/A'}
-                        </StatCell>
-                        <StatCell label="Pago">
-                            {paymentLabel}
-                        </StatCell>
-                        <StatCell label="Programas">
-                            {student.programHistory?.length ?? 0}
-                        </StatCell>
-                    </div>
                 </div>
 
                 {/* Body with Sidebar */}
@@ -1059,7 +1063,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                 <button
                                                     key={section.id}
                                                     onClick={() => setDetailTab(section.id)}
-                                                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all ${detailTab === section.id
+                                                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-sm text-[10px] font-bold uppercase tracking-widest text-left whitespace-nowrap transition-all ${detailTab === section.id
                                                         ? 'bg-white text-blue-600 shadow-md shadow-slate-200/50 border border-slate-100 translate-x-1'
                                                         : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
                                                         }`}
@@ -1084,23 +1088,20 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     </div>
 
                     {/* Right Content Area */}
-                    <div className="flex-1 overflow-y-auto p-5 sm:p-8 md:p-12 bg-white">
-                        <div className="max-w-4xl mx-auto">
+                    <div className="flex-1 overflow-y-auto p-5 sm:p-6 md:p-8 bg-white">
+                        <div className="max-w-3xl">
 
-                            <div className="mb-8 md:mb-12">
-                                <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] mb-3">
-                                    {findDetailGroup(detailTab)?.label}
-                                </h4>
-                                <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-                                    {detailTab === 'PERSONAL'    && 'Información de Contacto y Perfil'}
-                                    {detailTab === 'MOTIVACIÓN'  && 'Propósito, Sueños y Metas'}
-                                    {detailTab === 'SALUD'       && 'Historial Médico y Emergencias'}
-                                    {detailTab === 'PROGRAMAS'   && 'Historial de Programas'}
-                                    {detailTab === 'PROGRESO'    && 'Progreso en el Campus (LMS)'}
-                                    {detailTab === 'CAMPUS'      && 'Campus Digital (Beta)'}
-                                </h2>
-                                <div className="h-1 w-12 bg-blue-600 mt-6 rounded-full"></div>
-                            </div>
+                            {/* Un solo renglón. El rubro y la regla de color repetían lo
+                                que ya marca la barra lateral y empujaban los datos
+                                medio metro hacia abajo. */}
+                            <h2 className="text-lg font-bold text-slate-900 tracking-tight mb-6 pb-4 border-b border-slate-100">
+                                {detailTab === 'PERSONAL'    && 'Información de Contacto y Perfil'}
+                                {detailTab === 'MOTIVACIÓN'  && 'Propósito, Sueños y Metas'}
+                                {detailTab === 'SALUD'       && 'Historial Médico y Emergencias'}
+                                {detailTab === 'PROGRAMAS'   && 'Historial de Programas'}
+                                {detailTab === 'PROGRESO'    && 'Progreso en el Campus (LMS)'}
+                                {detailTab === 'CAMPUS'      && 'Campus Digital (Beta)'}
+                            </h2>
 
                             {/* Datos de perfil — única fuente editable de estos campos (antes duplicados en CRM) */}
                             {detailTab === 'PERSONAL' && (
@@ -1838,29 +1839,29 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     </div>
                 </div>
 
-                {/* Footer */}
-                <div className="p-8 bg-slate-50 flex justify-between items-center border-t border-slate-100 z-10">
-                    <div className="flex gap-4">
-                        <button onClick={onClose} className="px-8 py-3 text-xs font-bold text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all">Cerrar</button>
+                {/* Footer — relleno al mínimo: son dos botones de texto, no una sección */}
+                <div className="px-6 py-2.5 bg-slate-50 flex justify-between items-center border-t border-slate-100 z-10">
+                    <div className="flex gap-2">
+                        <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-all">Cerrar</button>
                     </div>
-                    
-                    <div className="flex gap-4">
+
+                    <div className="flex gap-2">
                         {student.is_deleted ? (
                             <>
                                 {onPermanentDelete && (
-                                    <button onClick={() => onPermanentDelete(student)} className="px-6 py-3 text-red-500 hover:bg-red-50 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100">
+                                    <button onClick={() => onPermanentDelete(student)} className="px-4 py-2 text-red-500 hover:bg-red-50 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100">
                                         Eliminar Definitivamente
                                     </button>
                                 )}
                                 {onRestore && (
-                                    <button onClick={() => onRestore(student.id)} className="px-8 py-3 bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition-all">
+                                    <button onClick={() => onRestore(student.id)} className="px-5 py-2 bg-blue-600 text-white font-bold text-xs uppercase tracking-widest rounded-sm shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all">
                                         Restaurar Alumno
                                     </button>
                                 )}
                             </>
                         ) : (
                             onSoftDelete && (
-                                <button onClick={() => onSoftDelete(student.id)} className="px-6 py-3 text-red-500 hover:bg-red-50 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100">
+                                <button onClick={() => onSoftDelete(student.id)} className="px-4 py-2 text-red-500 hover:bg-red-50 font-bold text-xs uppercase tracking-widest rounded-sm transition-all border border-transparent hover:border-red-100">
                                     Enviar a Papelera
                                 </button>
                             )

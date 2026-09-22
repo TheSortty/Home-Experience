@@ -56,18 +56,36 @@ export default function AdminProgramas() {
 
   return (
     <div className="flex flex-col gap-0 h-full">
-      {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 pt-5 pb-0 shrink-0">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-slate-900">Programas</h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {activeTab === 'creser' ? 'Ciclos presenciales CRESER' : 'Cursos del Campus Digital'}
-          </p>
+      {/* ── Pestañas + buscador, en una sola fila ───────────────────────────
+          El título salió al header del shell y la bajada repetía lo que ya
+          dice la pestaña activa, así que la barra sube y ocupa ese lugar. */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 px-6 pt-4 border-b border-slate-100 shrink-0">
+        <div className="flex items-end gap-0 -mb-px overflow-x-auto hide-scrollbar order-2 sm:order-1">
+          {([
+            { id: 'creser' as ProgramTab, label: 'CRESER', icon: <IoSchoolOutline className="w-4 h-4" /> },
+            { id: 'campus' as ProgramTab, label: 'Campus LMS', icon: <IoBookOutline className="w-4 h-4" /> },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => switchTab(tab.id)}
+              className={`
+                flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider
+                border-b-2 transition-all flex-shrink-0 whitespace-nowrap
+                ${activeTab === tab.id
+                  ? 'border-[#00A9CE] text-[#00A9CE]'
+                  : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200'
+                }
+              `}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {activeTab === 'creser' && (
-          <div className="relative w-full sm:w-56 flex-shrink-0">
-            <IoSearchOutline size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="relative w-full sm:w-56 flex-shrink-0 pb-2 order-1 sm:order-2">
+            <IoSearchOutline size={15} className="absolute left-3 top-[calc(50%-0.25rem)] -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Buscar ciclo..."
@@ -78,7 +96,7 @@ export default function AdminProgramas() {
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                className="absolute right-2 top-[calc(50%-0.25rem)] -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
                 aria-label="Limpiar búsqueda"
               >
                 <IoCloseOutline size={14} />
@@ -86,30 +104,6 @@ export default function AdminProgramas() {
             )}
           </div>
         )}
-      </div>
-
-      {/* ── Tabs ── */}
-      <div className="flex items-end gap-0 px-6 pt-4 border-b border-slate-100 shrink-0 overflow-x-auto hide-scrollbar">
-        {([
-          { id: 'creser' as ProgramTab, label: 'CRESER', icon: <IoSchoolOutline className="w-4 h-4" /> },
-          { id: 'campus' as ProgramTab, label: 'Campus LMS', icon: <IoBookOutline className="w-4 h-4" /> },
-        ] as const).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => switchTab(tab.id)}
-            className={`
-              flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider
-              border-b-2 -mb-px transition-all flex-shrink-0 whitespace-nowrap
-              ${activeTab === tab.id
-                ? 'border-[#00A9CE] text-[#00A9CE]'
-                : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200'
-              }
-            `}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       {/* ── Content ── */}

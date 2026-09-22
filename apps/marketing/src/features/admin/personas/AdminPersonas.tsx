@@ -82,16 +82,31 @@ export default function AdminPersonas({ role }: Props) {
 
   return (
     <div className="flex flex-col gap-0 h-full">
-      {/* ── Header bar ──────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 px-6 pt-5 pb-0 shrink-0">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-slate-900">Personas</h1>
-          <p className="text-xs text-slate-400 mt-0.5 truncate">
-            {TABS.find(t => t.id === activeTab)?.description}
-          </p>
+      {/* ── Pestañas + herramientas, en una sola fila ───────────────────────
+          El título salió al header del shell y la bajada repetía lo que ya
+          dice la pestaña activa, así que la barra sube y ocupa ese lugar. */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3 px-6 pt-4 border-b border-slate-100 shrink-0">
+        <div className="flex items-end gap-0 -mb-px overflow-x-auto hide-scrollbar order-2 lg:order-1">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider
+                border-b-2 transition-all flex-shrink-0 whitespace-nowrap
+                ${activeTab === tab.id
+                  ? 'border-[#00A9CE] text-[#00A9CE]'
+                  : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200'
+                }
+              `}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap pb-2 order-1 lg:order-2">
           <div className="relative w-full sm:w-56 flex-shrink-0">
             <IoSearchOutline size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -148,27 +163,6 @@ export default function AdminPersonas({ role }: Props) {
             </div>
           )}
         </div>
-      </div>
-
-      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
-      <div className="flex items-end gap-0 px-6 pt-4 border-b border-slate-100 shrink-0 overflow-x-auto hide-scrollbar">
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`
-              flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider
-              border-b-2 -mb-px transition-all flex-shrink-0 whitespace-nowrap
-              ${activeTab === tab.id
-                ? 'border-[#00A9CE] text-[#00A9CE]'
-                : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200'
-              }
-            `}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       {/* ── Content area ────────────────────────────────────────────────── */}

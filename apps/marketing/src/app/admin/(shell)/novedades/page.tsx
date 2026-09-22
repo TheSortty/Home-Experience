@@ -15,8 +15,8 @@ export default function NovedadesPage() {
 
       {/* Header */}
       <div className="space-y-1">
+        {/* Sin <h1>: el título de la sección ya lo pone el header del shell. */}
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">Novedades del sistema</h1>
           <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
             v{latest.version}
           </span>
