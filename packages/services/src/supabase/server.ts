@@ -5,6 +5,7 @@ import type { Database } from '@home/db-types/database.types'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const IS_PROD = process.env.NODE_ENV === 'production'
+const COOKIE_DOMAIN = process.env.NEXT_PUBLIC_COOKIE_DOMAIN || undefined
 
 /**
  * createClient — Server-side Supabase client for:
@@ -41,6 +42,7 @@ export async function createClient() {
               sameSite: 'lax',
               secure: IS_PROD, // false on localhost HTTP, true on production HTTPS
               path: options?.path ?? '/',
+              ...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
             })
           )
         } catch {

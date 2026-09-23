@@ -16,10 +16,31 @@ import type { Database } from '@home/db-types/database.types'
  *   - Auth (login/logout, onAuthStateChange)
  *   - Realtime channels (supabase.channel)
  */
+// SSO entre subdominios: el cookie de sesión tiene que escribirse con
+// domain=.siendohome.com para que lo lean siendohome.com Y campus.siendohome.com.
+// Se deriva del hostname (no de una env var) porque NEXT_PUBLIC_* se inlinea en
+// build y no queremos depender de que esté cargada en el CI. En localhost /
+// workers.dev queda sin domain (host-only), como antes.
+const SHARED_COOKIE_DOMAIN =
+  typeof window !== 'undefined' &&
+  /(^|\.)siendohome\.com$/.test(window.location.hostname)
+    ? '.siendohome.com'
+    : undefined
+
 export const supabase = createBrowserClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   {
+    ...(SHARED_COOKIE_DOMAIN
+      ? {
+          cookieOptions: {
+            domain: SHARED_COOKIE_DOMAIN,
+            path: '/',
+            sameSite: 'lax' as const,
+            secure: true,
+          },
+        }
+      : {}),
     auth: {
       flowType: 'pkce',
       autoRefreshToken: false,

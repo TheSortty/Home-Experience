@@ -133,6 +133,26 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, cookieOptions(cookie, request))
     })
+
+    // Auto-reparación: sesiones iniciadas antes del SSO tienen el cookie
+    // "host-only" (sólo siendohome.com), invisible para campus → loop de
+    // redirects login ↔ campus. Reescribimos el cookie con domain compartido
+    // y borramos la copia host-only.
+    if (COOKIE_DOMAIN) {
+      const refreshed = new Set(supabaseResponse.cookies.getAll().map((c) => c.name))
+      request.cookies.getAll().forEach((cookie) => {
+        if (!cookie.name.startsWith('sb-') || refreshed.has(cookie.name)) return
+        // Header crudo: cookies.set() indexa por nombre y pisaría el de abajo.
+        redirectResponse.headers.append(
+          'Set-Cookie',
+          `${cookie.name}=; Path=/; Max-Age=0; Secure; SameSite=Lax`
+        )
+        redirectResponse.cookies.set(cookie.name, cookie.value, {
+          ...cookieOptions({ maxAge: 400 * 24 * 60 * 60 }, request),
+          httpOnly: false,
+        })
+      })
+    }
     return redirectResponse
   }
 
