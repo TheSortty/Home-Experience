@@ -64,7 +64,7 @@ const nextConfig = {
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cloudflareinsights.com https://*.cloudflareinsights.com",
 
       // Imágenes: Supabase Storage, Google avatars, YouTube thumbs, Unsplash, Picsum, R2
-      "img-src 'self' data: blob: https://*.supabase.co https://*.googleusercontent.com https://lh3.googleusercontent.com https://img.youtube.com https://images.unsplash.com https://picsum.photos https://pub-a623949342a84338a70f5a9f083bcc04.r2.dev",
+      "img-src 'self' data: blob: https://*.supabase.co https://drive.google.com https://*.googleusercontent.com https://lh3.googleusercontent.com https://img.youtube.com https://images.unsplash.com https://picsum.photos https://pub-a623949342a84338a70f5a9f083bcc04.r2.dev",
 
       // Video: sólo YouTube embed de las clases (no hay fondo de Cloudinary acá).
       "media-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
