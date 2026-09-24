@@ -1,5 +1,6 @@
 'use client';
 
+import { MARKETING_URL } from '@home/services/siteUrls';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -237,7 +238,7 @@ export default function CursoContent({
                 Estás explorando este programa como organizador. El progreso de los alumnos no se modifica.
               </p>
               <a
-                href={`/admin/lms/actividad?course=${cursoId}`}
+                href={`${MARKETING_URL}/admin/lms/actividad?course=${cursoId}`}
                 className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 hover:underline"
               >
                 Ver actividad de alumnos →

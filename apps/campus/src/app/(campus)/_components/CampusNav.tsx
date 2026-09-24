@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -18,6 +18,15 @@ const BASE_LINKS = [
   { href: '/calendario', label: 'Calendario', icon: IoCalendarOutline },
 ];
 
+// El panel de entregas vive en el otro Worker (siendohome.com/admin/lms): un
+// href relativo acá daba 404 en el campus. Los destinos absolutos van con <a>
+// (navegación completa); los internos con <Link>.
+function NavAnchor({ href, ...props }: React.ComponentProps<'a'> & { href: string }) {
+  return href.startsWith('http')
+    ? <a href={href} {...props} />
+    : <Link href={href} {...props} />;
+}
+
 interface Props {
   role?: string;
 }
@@ -31,12 +40,12 @@ export default function CampusNav({ role }: Props) {
   const navLinks = isCoachOrAdmin
     ? [
         ...BASE_LINKS,
-        { href: '/admin/lms', label: 'Entregas', icon: IoCheckmarkDoneOutline },
+        { href: `${MARKETING_URL}/admin/lms`, label: 'Entregas', icon: IoCheckmarkDoneOutline },
       ]
     : BASE_LINKS;
 
   const isActive = (href: string) =>
-    href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href);
+    href.startsWith('http') ? false : href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href);
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
@@ -45,7 +54,7 @@ export default function CampusNav({ role }: Props) {
       {/* Desktop horizontal nav */}
       <nav className="hidden md:flex items-center gap-1">
         {navLinks.map(({ href, label }) => (
-          <Link
+          <NavAnchor
             key={href}
             href={href}
             aria-current={isActive(href) ? 'page' : undefined}
@@ -56,7 +65,7 @@ export default function CampusNav({ role }: Props) {
             }`}
           >
             {label}
-          </Link>
+          </NavAnchor>
         ))}
       </nav>
 
@@ -87,7 +96,7 @@ export default function CampusNav({ role }: Props) {
             </div>
             <nav className="flex-1 px-4 py-4 space-y-1">
               {navLinks.map(({ href, label, icon: Icon }) => (
-                <Link
+                <NavAnchor
                   key={href}
                   href={href}
                   aria-current={isActive(href) ? 'page' : undefined}
@@ -99,7 +108,7 @@ export default function CampusNav({ role }: Props) {
                 >
                   <Icon size={20} />
                   <span>{label}</span>
-                </Link>
+                </NavAnchor>
               ))}
 
               {/* Separador + Web principal */}
