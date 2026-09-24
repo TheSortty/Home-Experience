@@ -1,10 +1,10 @@
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import { resolveCourseAccess } from '@home/services/courseAccess';
 import ForumClient, { type ForumPost, type CourseTab } from './ForumClient';
 
 export default async function CampusComunidadPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
   let profileId = '';
   let courses: CourseTab[] = [];

@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react'
 import { redirect } from 'next/navigation'
-import { createClient } from '@home/services/supabase/server'
+import { createClient, getSessionUser } from '@home/services/supabase/server'
 import { resolveRole, isReviewerRole } from '@home/services/roleService'
 import { CAMPUS_URL } from '@home/services/siteUrls'
 
@@ -12,7 +12,7 @@ const LoadingFallback = () => (
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser(supabase)
 
   if (!user) redirect('/auth/login')
 

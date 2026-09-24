@@ -1,4 +1,4 @@
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -17,19 +17,22 @@ export default async function AdminCursoPage({
   const { cursoId } = await params;
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) redirect('/auth/login');
 
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('user_id', user.id).single();
   if (!isAdminRole(profile?.role ?? '')) redirect(`${CAMPUS_URL}/dashboard`);
 
-  const { data: course } = await supabase
+  const { data: course, error: courseError } = await supabase
     .from('courses')
     .select('id, title')
     .eq('id', cursoId)
     .single();
 
+  // PGRST116 = no hay fila (curso inexistente o sin acceso): eso sí es un 404.
+  // Cualquier otro error (auth caída, timeout) NO es un 404: que lo tome error.tsx.
+  if (courseError && courseError.code !== 'PGRST116') throw new Error(`No se pudo cargar el curso: ${courseError.message}`);
   if (!course) notFound();
 
   const { data: rawModules } = await supabase

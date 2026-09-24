@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import { redirect } from 'next/navigation';
 import { resolveRole } from '@home/services/roleService';
 import { MARKETING_URL } from '@home/services/siteUrls';
@@ -17,7 +17,7 @@ export const metadata = {
 
 export default async function CampusLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
   // El middleware ya filtra esto antes de llegar acá; queda como red de
   // seguridad. El login vive en el sitio principal, no en este Worker.

@@ -1,4 +1,4 @@
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -21,7 +21,7 @@ export default async function EntregasPage({
   const { lesson: filterLesson, team = 'all', status: statusFilter = 'all' } = await searchParams;
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) redirect('/auth/login');
 
   const { data: profile } = await supabase
@@ -34,8 +34,10 @@ export default async function EntregasPage({
   const isAdmin = isAdminRole(profile?.role ?? '');
   if (!isCoach && !isAdmin) redirect(`${CAMPUS_URL}/dashboard`);
 
-  const { data: course } = await supabase
+  const { data: course, error: courseError } = await supabase
     .from('courses').select('id, title').eq('id', cursoId).single();
+  // PGRST116 = sin fila → 404; otro error (auth caída, timeout) → error.tsx.
+  if (courseError && courseError.code !== 'PGRST116') throw new Error(`No se pudo cargar el curso: ${courseError.message}`);
   if (!course) notFound();
 
   // ── Lessons with submissions ───────────────────────────────────────────────

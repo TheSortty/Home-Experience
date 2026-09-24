@@ -1,4 +1,4 @@
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import { IoCalendarOutline } from 'react-icons/io5';
 import CalendarView, { type CalendarSession } from './_components/CalendarView';
 import GoogleCalendarCard, { type GoogleCalendarStatus } from './_components/GoogleCalendarCard';
@@ -24,7 +24,7 @@ export default async function CampusCalendarioPage({
   const gcalNotice = typeof sp.gcal === 'string' ? sp.gcal : null;
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
   let sessions: CalendarSession[] = [];
   let gcalStatus: GoogleCalendarStatus = {

@@ -16,11 +16,22 @@
 // bundle del navegador. Para chequear un build antes de subirlo:
 //   grep -rl "localhost:300" apps/<app>/.next/static/chunks   → tiene que dar vacío
 
+// Si el build no inlineó NEXT_PUBLIC_*_URL (pasó: el bundle del navegador salió
+// con `process.env.X || "http://localhost:3000"` sin resolver y "Volver al
+// admin" mandaba a localhost), el navegador se resuelve solo: en *.siendohome.com
+// los orígenes son fijos. En el servidor process.env sí existe en runtime.
+function fallbackOrigin(app: 'marketing' | 'campus'): string {
+  if (typeof window !== 'undefined' && /(^|\.)siendohome\.com$/.test(window.location.hostname)) {
+    return app === 'marketing' ? 'https://siendohome.com' : 'https://campus.siendohome.com';
+  }
+  return app === 'marketing' ? 'http://localhost:3000' : 'http://localhost:3001';
+}
+
 /** Origin del sitio principal (landing + admin). */
-export const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3000';
+export const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || fallbackOrigin('marketing');
 
 /** Origin del campus (alumno). */
-export const CAMPUS_URL = process.env.NEXT_PUBLIC_CAMPUS_URL || 'http://localhost:3001';
+export const CAMPUS_URL = process.env.NEXT_PUBLIC_CAMPUS_URL || fallbackOrigin('campus');
 
 /**
  * Valida un `?next=` antes de redirigir.

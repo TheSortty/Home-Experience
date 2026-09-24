@@ -1,4 +1,4 @@
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import { resolveRole } from '@home/services/roleService';
 import { getStudentProgress, getLmsCourseProgress, type LmsCourseProgress } from '@home/services/progressService';
 import { normalizeImageUrl } from '@home/services/imageUrl';
@@ -66,7 +66,7 @@ export default async function CampusCursosPage({
     : 'activos';
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   const role = user ? await resolveRole(supabase, user.id) : null;
   const viewMode = resolveViewMode(role, sp);
 

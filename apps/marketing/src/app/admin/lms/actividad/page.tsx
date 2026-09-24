@@ -1,4 +1,4 @@
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { isAdminRole } from '@home/services/roleService';
@@ -39,7 +39,7 @@ export default async function ActividadPage({
   const { course: filterCourse, lesson: filterLesson } = await searchParams;
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) redirect('/auth/login');
 
   const { data: profile } = await supabase

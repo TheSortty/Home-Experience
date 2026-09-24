@@ -1,4 +1,4 @@
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import { normalizeImageUrl } from '@home/services/imageUrl';
 import { isAdminRole } from '@home/services/roleService';
 import { lessonDueMs } from '@home/services/lessonDeadline';
@@ -17,7 +17,7 @@ export default async function CursoDetallePage({
   const { cursoId } = await params;
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) notFound();
 
   const { data: profile } = await supabase

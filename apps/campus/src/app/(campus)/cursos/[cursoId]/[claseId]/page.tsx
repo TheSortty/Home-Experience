@@ -1,4 +1,4 @@
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -54,7 +54,7 @@ export default async function ClasePage({
   const requestedTab = typeof sp.tab === 'string' ? sp.tab : null;
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) notFound();
 
   const { data: profile } = await supabase

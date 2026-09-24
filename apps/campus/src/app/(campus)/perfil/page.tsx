@@ -1,10 +1,10 @@
-import { createClient } from '@home/services/supabase/server';
+import { createClient, getSessionUser } from '@home/services/supabase/server';
 import { IoPersonOutline } from 'react-icons/io5';
 import ProfileTabs from './ProfileTabs';
 
 export default async function CampusPerfilPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
   let profile: any = null;
   let medical: any = null;
