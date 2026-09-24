@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { IoLogOutOutline, IoPersonOutline, IoChevronDownOutline } from 'react-icons/io5';
 import { supabase } from '@home/services/supabaseClient';
+import { MARKETING_URL } from '@home/services/siteUrls';
 
 interface Props {
   firstName: string;
@@ -20,7 +21,6 @@ export default function ProfileMenu({ firstName, lastName, fullName, email, init
   const [signingOut, setSigningOut] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const router = useRouter();
 
   const handleLogout = async () => {
     if (signingOut) return;
@@ -30,8 +30,10 @@ export default function ProfileMenu({ firstName, lastName, fullName, email, init
     // client's in-memory session intact, causing /auth/login to redirect-loop
     // back to /dashboard until F5.
     await supabase.auth.signOut();
-    router.replace('/auth/login');
-    router.refresh();
+    // El login vive en el otro Worker (siendohome.com): '/auth/login' relativo
+    // caía en el campus, que no tiene esa ruta, y el middleware lo rebotaba al
+    // login con ?next=<campus>/auth/login → al volver a entrar, un 404.
+    window.location.href = `${MARKETING_URL}/auth/login`;
   };
 
   // Close on outside click

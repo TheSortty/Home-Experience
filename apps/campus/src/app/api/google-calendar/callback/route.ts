@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@home/services/supabase/server';
+import { MARKETING_URL } from '@home/services/siteUrls';
 import { exchangeCodeForTokens } from '@home/services/googleCalendar';
 import { serviceClient, syncAllForProfile } from '@home/services/calendarSync';
 import { OAUTH_STATE_COOKIE } from '../connect/route';
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.redirect(`${origin}/auth/login`);
+  if (!user) return NextResponse.redirect(`${MARKETING_URL}/auth/login`);
 
   const { data: profile } = await supabase
     .from('profiles')

@@ -44,6 +44,12 @@ export const CAMPUS_URL = process.env.NEXT_PUBLIC_CAMPUS_URL || fallbackOrigin('
 export function safeNextUrl(next: string | null | undefined, fallback: string): string {
   if (!next) return fallback;
 
+  // Nunca volver al login: sería un loop, y en el campus (que no tiene /auth/*)
+  // un 404. Pasó: el logout del campus mandaba a /auth/login del propio campus
+  // y el middleware lo guardaba como ?next=. (/auth/update-password sí es un
+  // destino válido: es a donde apunta el mail de recuperar contraseña.)
+  if (/^(https?:\/\/[^/]+)?\/auth\/login(\/|$|\?)/.test(next)) return fallback;
+
   // Path relativo ("/cursos/abc"). Rechazamos "//host" y "/\host", que el
   // navegador interpreta como protocol-relative y salen del sitio.
   if (next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\')) {
