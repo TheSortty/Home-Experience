@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState } from 'react'
-import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Login from '@/src/features/auth/Login'
 import { supabase } from '@home/services/supabaseClient'
@@ -47,30 +46,12 @@ export default function LoginPage() {
     }
   }
 
-  const BackButton = (
-    <Link href="/" aria-label="Volver al inicio" className="auth-back">
-      <span className="auth-back__pulse" aria-hidden="true" />
-      <span className="auth-back__arrow" aria-hidden="true">
-        <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M8.5 2.5L4 7l4.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M4 7h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      </span>
-      <span>Volver</span>
-      <span className="auth-back__divider" aria-hidden="true" />
-      <span className="auth-back__label-extended">al inicio</span>
-    </Link>
-  )
-
-  // Mostrar pantalla de carga mientras verificamos la sesión
+  // Mientras verificamos la sesión mostramos sólo un spinner
   if (checking) {
     return (
-      <>
-        {BackButton}
-        <div className="w-full max-w-md mx-auto flex items-center justify-center min-h-[300px]">
-          <div className="w-8 h-8 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
-        </div>
-      </>
+      <div className="w-full flex items-center justify-center min-h-screen">
+        <div className="w-8 h-8 border-4 border-slate-300 border-t-[#00A9CE] rounded-full animate-spin" />
+      </div>
     )
   }
 
@@ -84,22 +65,11 @@ export default function LoginPage() {
     }
   }
 
-  return (
-    <>
-      {BackButton}
-      <div className="w-full max-w-md mx-auto">
-        {passwordSet && (
-          <div className="mb-4 bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-medium px-4 py-3 rounded-lg text-center">
-            ¡Contraseña creada! Ya podés iniciar sesión.
-          </div>
-        )}
-        {invalidToken && (
-          <div className="mb-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium px-4 py-3 rounded-lg text-center">
-            El enlace expiró o ya fue utilizado. Solicitá uno nuevo desde "¿Olvidaste tu contraseña?".
-          </div>
-        )}
-        <Login onLoginSuccess={handleLoginSuccess} />
-      </div>
-    </>
-  )
+  const notice = passwordSet
+    ? { tone: 'success' as const, text: '¡Contraseña creada! Ya podés iniciar sesión.' }
+    : invalidToken
+      ? { tone: 'error' as const, text: 'El enlace expiró o ya fue utilizado. Solicitá uno nuevo desde "¿Olvidaste tu contraseña?".' }
+      : null
+
+  return <Login onLoginSuccess={handleLoginSuccess} notice={notice} />
 }

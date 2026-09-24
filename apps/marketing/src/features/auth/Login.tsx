@@ -1,21 +1,31 @@
 import React, { useState } from 'react';
-import './Login.css';
-import { IoEyeOutline, IoEyeOffOutline, IoMailOutline, IoLockClosedOutline } from 'react-icons/io5';
+import Link from 'next/link';
+import './LoginNeu.css';
+import { IoEyeOutline, IoEyeOffOutline, IoMailOutline, IoLockClosedOutline, IoArrowBack } from 'react-icons/io5';
 import { FcGoogle } from 'react-icons/fc';
 import { supabase } from '@home/services/supabaseClient';
 import toast from 'react-hot-toast';
 
 interface LoginProps {
   onLoginSuccess: () => void;
+  /** Aviso arriba del formulario (contraseña creada, link vencido...). */
+  notice?: { tone: 'success' | 'error'; text: string } | null;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess, notice }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // "Recuperar contraseña" es la segunda cara del mismo panel: al activarla
+  // los dos paneles se cruzan (ver .nl--recover en LoginNeu.css).
   const [isForgotView, setIsForgotView] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const switchView = (forgot: boolean) => {
+    setIsForgotView(forgot);
+    setError('');
+  };
 
   // Email / Password Login
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -32,17 +42,17 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       if (error) {
         // Traducir los errores más comunes
         if (error.message.includes('Invalid login credentials')) {
-          setError('Credenciales incorrectas. Verifica tu email y contraseña.');
+          setError('Credenciales incorrectas. Verificá tu email y contraseña.');
         } else if (error.message.includes('Email not confirmed')) {
-          setError('Debes confirmar tu correo electrónico primero.');
+          setError('Tenés que confirmar tu correo electrónico primero.');
         } else {
-          setError('Ocurrió un error al iniciar sesión. Intenta más tarde.');
+          setError('Ocurrió un error al iniciar sesión. Intentá más tarde.');
         }
       } else if (data.session) {
         onLoginSuccess();
       }
     } catch (err) {
-      setError('Error de conexión. Revisa tu internet.');
+      setError('Error de conexión. Revisá tu internet.');
     } finally {
       setIsLoading(false);
     }
@@ -93,7 +103,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         }
       } else {
         toast.success('Te enviamos un correo con un link. Revisá tu bandeja de entrada (y spam).', { duration: 6000 });
-        setIsForgotView(false); // volver al login
+        switchView(false); // volver al login
       }
     } catch (err) {
       setError('Error de conexión.');
@@ -102,174 +112,142 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  const emailField = (id: string) => (
+    <label className="nl-field" htmlFor={id}>
+      <span className="nl-field__icon"><IoMailOutline size={18} /></span>
+      <input
+        id={id}
+        type="email"
+        className="nl-field__input"
+        placeholder="Correo electrónico"
+        value={email}
+        onChange={(e) => {
+          setEmail(e.target.value);
+          setError('');
+        }}
+        autoComplete="email"
+        required
+      />
+    </label>
+  );
+
+  const errorBox = error ? (
+    <p className="nl-error" role="alert">{error}</p>
+  ) : null;
+
   return (
-    <div className="relative w-full z-10 flex flex-col items-center max-w-md mx-auto">
-      {/* Brand mark at top */}
-      <div className="absolute -top-20 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-        <div className="text-3xl font-black tracking-tighter text-white drop-shadow-[0_4px_20px_rgba(0,169,206,0.4)]">
-          HOME
-        </div>
-        <span className="text-[10px] font-bold tracking-[0.3em] text-[#8BD8DF] uppercase">
-          Management System
-        </span>
-      </div>
+    <div className="nl-page">
+      <Link href="/" className="nl-back" aria-label="Volver al inicio">
+        <IoArrowBack size={16} aria-hidden="true" />
+        <span>Volver al inicio</span>
+      </Link>
 
-      <div className="w-full">
-        <div className="w-full">
-          <div className="w-full flex justify-center">
-            <div className="col-12 text-center align-self-center py-5">
-              <div className="section pb-5 pt-5 pt-sm-2 text-center">
-                <div className="card-3d-wrap mx-auto" style={{ height: '600px' }}>
-                  <div className="card-3d-wrapper">
-                    {/* Log In Card */}
-                    <div className="card-front">
-                      {/* Decorative top accent */}
-                      <div className="card-front__accent" aria-hidden="true" />
-                      <div className="card-front__glow" aria-hidden="true" />
+      <div className={`nl ${isForgotView ? 'nl--recover' : ''}`}>
+        {/* ── Panel de formularios ───────────────────────────── */}
+        <section className="nl__panel nl__panel--form">
+          <div className="nl__brand-mobile" aria-hidden="true">HOME</div>
 
-                      <div className="center-wrap">
-                        <div className="section text-center">
-                          {!isForgotView ? (
-                            <div className="mb-6 flex flex-col items-center gap-2">
-                              <span className="inline-flex items-center gap-2 text-[10px] font-bold tracking-[0.4em] uppercase text-[#8BD8DF]">
-                                <span className="w-6 h-px bg-[#8BD8DF]/70" />
-                                Acceso
-                                <span className="w-6 h-px bg-[#8BD8DF]/70" />
-                              </span>
-                              <h1 className="font-serif text-5xl font-bold tracking-tight text-white leading-none">
-                                CAMPUS
-                              </h1>
-                              <p className="text-xs text-white/75 font-medium tracking-wide">
-                                Ingresá con tu cuenta de Home
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="mb-6 flex flex-col items-center gap-2">
-                              <span className="text-[10px] font-bold tracking-[0.4em] uppercase text-[#8BD8DF]">
-                                Recuperación
-                              </span>
-                              <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tight text-white leading-tight">
-                                Recuperar Contraseña
-                              </h1>
-                            </div>
-                          )}
+          {notice && !isForgotView && (
+            <p className={`nl-notice nl-notice--${notice.tone}`} role="status">{notice.text}</p>
+          )}
 
-                          <form onSubmit={isForgotView ? handleResetPassword : handleLoginSubmit}>
-                            {isForgotView && (
-                                <p className="text-sm text-white/85 mb-4 px-4 text-center">
-                                    Ingrese el correo electrónico con el cual desea recuperar su contraseña.
-                                </p>
-                            )}
+          {/* Iniciar sesión */}
+          <div className="nl__view nl__view--login" aria-hidden={isForgotView}>
+            <span className="nl-eyebrow">Acceso</span>
+            <h1 className="nl-title">Ingresá al Campus</h1>
 
-                            <div className="form-group">
-                              <input
-                                type="email"
-                                className="form-style"
-                                placeholder="Correo Electrónico"
-                                value={email}
-                                onChange={(e) => {
-                                  setEmail(e.target.value);
-                                  setError('');
-                                }}
-                                autoComplete="email"
-                                required
-                              />
-                              <div className="input-icon"><IoMailOutline size={20} /></div>
-                            </div>
+            <button type="button" onClick={handleGoogleLogin} className="nl-google" tabIndex={isForgotView ? -1 : 0}>
+              <FcGoogle size={20} aria-hidden="true" />
+              Continuar con Google
+            </button>
+            <p className="nl-or"><span>o con tu correo</span></p>
 
-                            {!isForgotView && (
-                                <div className="form-group mt-4 relative">
-                                  <input
-                                    type={showPassword ? 'text' : 'password'}
-                                    className="form-style pr-12"
-                                    placeholder="Contraseña"
-                                    value={password}
-                                    onChange={(e) => {
-                                      setPassword(e.target.value);
-                                      setError('');
-                                    }}
-                                    autoComplete="current-password"
-                                    required
-                                  />
-                                  <div className="input-icon"><IoLockClosedOutline size={20} /></div>
-                                  <button 
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white focus:outline-none flex items-center justify-center p-2"
-                                  >
-                                    {showPassword ? (
-                                      <span className="w-5 h-5 flex items-center justify-center">
-                                        <IoEyeOffOutline size={20} />
-                                      </span>
-                                    ) : (
-                                      <span className="w-5 h-5 flex items-center justify-center">
-                                        <IoEyeOutline size={20} />
-                                      </span>
-                                    )}
-                                  </button>
-                                </div>
-                            )}
+            <form onSubmit={handleLoginSubmit} className="nl-form" noValidate={false}>
+              {emailField('nl-email')}
 
-                            {error && (
-                              <div className="text-red-300 text-sm mt-4 font-medium px-4">
-                                {error}
-                              </div>
-                            )}
+              <label className="nl-field" htmlFor="nl-password">
+                <span className="nl-field__icon"><IoLockClosedOutline size={18} /></span>
+                <input
+                  id="nl-password"
+                  type={showPassword ? 'text' : 'password'}
+                  className="nl-field__input"
+                  placeholder="Contraseña"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError('');
+                  }}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="nl-field__toggle"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  {showPassword ? <IoEyeOffOutline size={18} /> : <IoEyeOutline size={18} />}
+                </button>
+              </label>
 
-                            <button
-                              type="submit"
-                              className={`login-btn mt-6 w-full flex justify-center items-center gap-2 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
-                              disabled={isLoading}
-                            >
-                              {isLoading ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                              ) : (
-                                isForgotView ? 'ENVIAR ENLACE' : 'INICIAR SESIÓN'
-                              )}
-                            </button>
-                          </form>
+              {!isForgotView && errorBox}
 
-                          {!isForgotView && (
-                              <div className="mt-6 flex flex-col gap-4">
-                                <div className="mt-6 mb-6 flex items-center justify-center">
-                                  <div className="h-[1px] w-full bg-white/25" />
-                                  <span className="px-4 text-xs font-medium text-white/70 uppercase tracking-wider">O</span>
-                                  <div className="h-[1px] w-full bg-white/25" />
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={handleGoogleLogin}
-                                  className="w-full relative flex h-11 w-full items-center justify-center gap-3 rounded-md bg-white px-8 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                                >
-                                  <span className="w-5 h-5 flex items-center justify-center">
-                                    <FcGoogle size={20} />
-                                  </span>
-                                  Continuar con Google
-                                </button>
-                              </div>
-                          )}
+              <button type="button" className="nl-link" onClick={() => switchView(true)}>
+                ¿Olvidaste tu contraseña?
+              </button>
 
-                          <div className="mt-4">
-                            <button 
-                                onClick={() => {
-                                    setIsForgotView(!isForgotView);
-                                    setError('');
-                                }} 
-                                type="button" 
-                                className="text-white hover:text-[#8BD8DF] underline decoration-white/30 underline-offset-4 hover:decoration-[#8BD8DF] transition-colors text-sm"
-                            >
-                                {isForgotView ? 'Volver al inicio de sesión' : '¿Olvidaste tu contraseña?'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+              <button type="submit" className="nl-btn" disabled={isLoading}>
+                {isLoading ? <span className="nl-spinner" aria-label="Ingresando" /> : 'Iniciar sesión'}
+              </button>
+            </form>
           </div>
-        </div>
+
+          {/* Recuperar contraseña */}
+          <div className="nl__view nl__view--recover" aria-hidden={!isForgotView}>
+            <span className="nl-eyebrow">Recuperación</span>
+            <h2 className="nl-title">Recuperá tu contraseña</h2>
+            <p className="nl-lead">
+              Ingresá el correo de tu cuenta y te enviamos un link para crear una contraseña nueva.
+            </p>
+
+            <form onSubmit={handleResetPassword} className="nl-form">
+              {emailField('nl-email-recover')}
+              {isForgotView && errorBox}
+              <button type="submit" className="nl-btn" disabled={isLoading} tabIndex={isForgotView ? 0 : -1}>
+                {isLoading ? <span className="nl-spinner" aria-label="Enviando" /> : 'Enviar enlace'}
+              </button>
+            </form>
+          </div>
+        </section>
+
+        {/* ── Panel de marca (se cruza con el de formularios) ── */}
+        <aside className="nl__panel nl__panel--brand">
+          <span className="nl__circle nl__circle--a" aria-hidden="true" />
+          <span className="nl__circle nl__circle--b" aria-hidden="true" />
+
+          <div className="nl__brand-copy nl__brand-copy--login" aria-hidden={isForgotView}>
+            <span className="nl-logo">HOME</span>
+            <h2>Tu camino sigue acá</h2>
+            <p>Tus clases, tu comunidad y tu avance, en un solo lugar.</p>
+            <Link href="/auth/register" className="nl-btn nl-btn--ghost" tabIndex={isForgotView ? -1 : 0}>
+              Quiero inscribirme
+            </Link>
+          </div>
+
+          <div className="nl__brand-copy nl__brand-copy--recover" aria-hidden={!isForgotView}>
+            <span className="nl-logo">HOME</span>
+            <h2>¿Ya te acordaste?</h2>
+            <p>Volvé al inicio de sesión con tu cuenta de siempre.</p>
+            <button
+              type="button"
+              className="nl-btn nl-btn--ghost"
+              onClick={() => switchView(false)}
+              tabIndex={isForgotView ? 0 : -1}
+            >
+              Iniciar sesión
+            </button>
+          </div>
+        </aside>
       </div>
     </div>
   );
