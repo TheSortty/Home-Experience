@@ -1,10 +1,12 @@
 'use client';
 
 import { MARKETING_URL } from '@home/services/siteUrls';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { markLessonComplete } from '../actions';
 import {
   IoCheckmarkCircle,
+  IoCheckmarkCircleOutline,
   IoChevronDownOutline,
   IoPlayCircleOutline,
   IoDocumentTextOutline,
@@ -125,7 +127,31 @@ export default function CursoContent({
   nextLessonId,
   isOrganizer,
 }: Props) {
-  const completedSet = useMemo(() => new Set(completedLessonIds), [completedLessonIds]);
+  // Las clases marcadas desde el desplegable, mientras el server action va y
+  // vuelve. Se unen a las que ya vinieron del servidor para que el tilde, los
+  // contadores del módulo y la barra de progreso se muevan en el acto; si la
+  // acción falla, se saca y todo vuelve a como estaba.
+  const [justMarked, setJustMarked] = useState<Set<string>>(() => new Set());
+  const [, startMarking] = useTransition();
+
+  const completedSet = useMemo(
+    () => new Set([...completedLessonIds, ...justMarked]),
+    [completedLessonIds, justMarked]
+  );
+
+  const markSeen = useCallback((lessonId: string) => {
+    setJustMarked((prev) => (prev.has(lessonId) ? prev : new Set(prev).add(lessonId)));
+    startMarking(async () => {
+      const res = await markLessonComplete(lessonId, cursoId);
+      if (res?.error) {
+        setJustMarked((prev) => {
+          const next = new Set(prev);
+          next.delete(lessonId);
+          return next;
+        });
+      }
+    });
+  }, [cursoId]);
   const totalLessons = modules.reduce((s, m) => s + m.lessons.length, 0)
                      + workshopModules.reduce((s, m) => s + m.lessons.length, 0)
                      + campoClasses.length;
@@ -215,6 +241,7 @@ export default function CursoContent({
               completedSet={completedSet}
               nextLessonId={nextLessonId}
               isOrganizer={isOrganizer}
+              onMarkSeen={markSeen}
             />
           )}
           {tab === 'campo' && (
@@ -485,24 +512,20 @@ function ModulosTab({
 }
 
 function TalleresTab({
-  cursoId, workshopModules, completedSet, nextLessonId, isOrganizer,
+  cursoId, workshopModules, completedSet, nextLessonId, isOrganizer, onMarkSeen,
 }: {
   cursoId: string;
   workshopModules: ModuleNode[];
   completedSet: Set<string>;
   nextLessonId: string | null;
   isOrganizer: boolean;
+  onMarkSeen: (lessonId: string) => void;
 }) {
-  // Abre el taller donde está la próxima clase; si no hay, el primero.
-  const initialOpenId = useMemo(() => {
-    if (!isOrganizer && nextLessonId) {
-      const withNext = workshopModules.find((m) => m.lessons.some((l) => l.id === nextLessonId));
-      if (withNext) return withNext.id;
-    }
-    return workshopModules[0]?.id ?? null;
-  }, [workshopModules, nextLessonId, isOrganizer]);
-
-  const { openIds, toggle, allOpen, toggleAll } = useModuleToggles(workshopModules, initialOpenId);
+  // Todos cerrados de entrada: los talleres son complementarios y son varios,
+  // así que abrir uno solo porque ahí cayó la próxima clase dejaba la lista
+  // desbalanceada y empujaba el resto fuera de pantalla. Se ven los títulos
+  // y cada uno se abre a mano. ("Abrir todos" sigue estando arriba.)
+  const { openIds, toggle, allOpen, toggleAll } = useModuleToggles(workshopModules, null);
 
   if (workshopModules.length === 0) {
     return <EmptyState icon={<IoFlashOutline size={36} />} title="Sin talleres todavía" message="Cuando se publiquen talleres complementarios al programa, los vas a ver aquí." />;
@@ -554,14 +577,21 @@ function TalleresTab({
                   const isDone = !isOrganizer && completedSet.has(lesson.id);
                   const isNext = !isOrganizer && lesson.id === nextLessonId;
                   return (
-                    <Link
+                    /* Fila = contenedor, no <Link>: el botón de "Marcar vista"
+                       no puede ir anidado dentro de un enlace (el click se lo
+                       comería la navegación, y anidar interactivos es HTML
+                       inválido). El enlace ocupa el área del texto; el botón
+                       vive al lado. */
+                    <div
                       key={lesson.id}
-                      href={`/cursos/${cursoId}/${lesson.id}`}
-                      className={`flex items-center justify-between p-4 transition-colors group ${
+                      className={`flex items-center justify-between gap-2 p-4 transition-colors group ${
                         isNext ? 'bg-amber-50/60 hover:bg-amber-50' : 'hover:bg-slate-50'
                       }`}
                     >
-                      <div className="flex items-center gap-4">
+                      <Link
+                        href={`/cursos/${cursoId}/${lesson.id}`}
+                        className="flex items-center gap-4 min-w-0 flex-1"
+                      >
                         {isDone ? (
                           <IoCheckmarkCircle size={24} className="text-emerald-500 shrink-0" />
                         ) : isNext ? (
@@ -571,7 +601,7 @@ function TalleresTab({
                         ) : (
                           <IoEllipseOutline size={24} className="text-amber-200 shrink-0" />
                         )}
-                        <div>
+                        <div className="min-w-0">
                           <p className={`text-sm font-bold transition-colors ${
                             isNext ? 'text-amber-600' : isDone ? 'text-slate-700 group-hover:text-amber-600' : 'text-slate-900 group-hover:text-amber-600'
                           }`}>
@@ -585,13 +615,28 @@ function TalleresTab({
                             )}
                           </p>
                         </div>
+                      </Link>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isNext && (
+                          <span className="hidden sm:inline text-xs font-bold bg-white text-amber-600 px-2 py-1 rounded shadow-sm border border-amber-200">
+                            Continuar
+                          </span>
+                        )}
+                        {!isOrganizer && !isDone && (
+                          <button
+                            type="button"
+                            onClick={() => onMarkSeen(lesson.id)}
+                            title={`Marcar "${lesson.title}" como vista`}
+                            aria-label={`Marcar "${lesson.title}" como vista`}
+                            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-emerald-600 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 rounded-lg px-2.5 py-1.5 transition-colors"
+                          >
+                            <IoCheckmarkCircleOutline size={16} />
+                            <span className="hidden sm:inline">Marcar vista</span>
+                          </button>
+                        )}
                       </div>
-                      {isNext && (
-                        <span className="text-xs font-bold bg-white text-amber-600 px-2 py-1 rounded shadow-sm border border-amber-200 shrink-0">
-                          Continuar
-                        </span>
-                      )}
-                    </Link>
+                    </div>
                   );
                 })}
               </div>
