@@ -10,6 +10,7 @@ import {
   IoBookOutline,
   IoPersonOutline,
   IoCloudUploadOutline,
+  IoPersonAddOutline,
   IoSearchOutline,
   IoCloseOutline,
 } from 'react-icons/io5';
@@ -126,6 +127,14 @@ export default function AdminPersonas({ role }: Props) {
               </button>
             )}
           </div>
+
+          <Link
+            href="/admin/personas/cargar"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-700 transition-colors flex-shrink-0 whitespace-nowrap"
+          >
+            <IoPersonAddOutline className="w-4 h-4" />
+            Cargar ficha
+          </Link>
 
           <Link
             href="/admin/personas/importar"

@@ -12,7 +12,7 @@ export interface ProgramHistoryItem {
     cycleId?: string | null;
     cycleName: string;
     cycleType: string;
-    status: 'ACTIVE' | 'CONFLICT' | 'GRADUATED';
+    status: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' | 'DROPPED';
     attendanceCount: number;
     totalSessions: number;
     paymentStatus?: string; // enrollment.payment_status: 'paid' | 'pending'
@@ -135,17 +135,29 @@ const EnrollmentPayments: React.FC<{ enrollmentId: string; initialPaymentStatus?
     const [showForm, setShowForm] = useState(false);
     const [amount, setAmount] = useState('');
     const [method, setMethod] = useState('transfer');
+    const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+    const [payNote, setPayNote] = useState('');
     const [payStatus, setPayStatus] = useState(initialPaymentStatus || 'pending');
     const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+    // Lo acordado en la inscripción (monto, beca, enrolador, promo): ver migración 000007.
+    const [deal, setDeal] = useState<{ agreed_amount: number | null; scholarship: string; enrolled_by_name: string | null; deal_notes: string | null } | null>(null);
 
     const fetchPayments = async () => {
         setIsLoading(true);
         try {
-            const { data } = await restSelect<any>('payments', {
-                filters: { enrollment_id: `eq.${enrollmentId}` },
-                order: 'created_at.asc',
-            });
+            const [{ data }, { data: enr }] = await Promise.all([
+                restSelect<any>('payments', {
+                    filters: { enrollment_id: `eq.${enrollmentId}` },
+                    order: 'paid_at.asc.nullslast,created_at.asc',
+                }),
+                restSelect<any>('enrollments', {
+                    columns: 'agreed_amount,scholarship,enrolled_by_name,deal_notes',
+                    filters: { id: `eq.${enrollmentId}` },
+                    limit: 1,
+                }).catch(() => ({ data: [] })),
+            ]);
             setPayments(data || []);
+            setDeal(enr[0] ?? null);
         } catch (err) {
             console.error('Error fetching payments:', err);
         }
@@ -169,10 +181,12 @@ const EnrollmentPayments: React.FC<{ enrollmentId: string; initialPaymentStatus?
                 amount: amt,
                 method,
                 status: 'paid',
-                paid_at: new Date().toISOString(),
+                paid_at: paidAt || new Date().toISOString(),
+                notes: payNote.trim() || null,
             }, { returning: 'minimal' });
             toast.success('Pago registrado');
             setAmount('');
+            setPayNote('');
             setShowForm(false);
             await fetchPayments();
         } catch (err: any) {
@@ -214,6 +228,23 @@ const EnrollmentPayments: React.FC<{ enrollmentId: string; initialPaymentStatus?
                 </button>
             </div>
 
+            {deal && (deal.agreed_amount != null || deal.scholarship !== 'none' || deal.enrolled_by_name || deal.deal_notes) && (
+                <div className="mb-4 space-y-1 text-xs text-slate-500">
+                    {deal.agreed_amount != null && (
+                        <p>
+                            Acordado <b className="text-slate-700">${Number(deal.agreed_amount).toLocaleString('es-AR')}</b>
+                            {' · '}
+                            {deal.agreed_amount - total > 0
+                                ? <b className="text-amber-700">A cobrar ${(deal.agreed_amount - total).toLocaleString('es-AR')}</b>
+                                : <b className="text-emerald-700">Sin saldo</b>}
+                        </p>
+                    )}
+                    {deal.scholarship !== 'none' && <p>{deal.scholarship === 'half' ? 'Media beca' : 'Beca completa'}</p>}
+                    {deal.enrolled_by_name && <p>Enrolador: <b className="text-slate-700">{deal.enrolled_by_name}</b></p>}
+                    {deal.deal_notes && <p>Acuerdo: {deal.deal_notes}</p>}
+                </div>
+            )}
+
             {/* Payment list */}
             <div className="space-y-2 mb-4 flex-1 min-h-[40px]">
                 {isLoading ? (
@@ -226,6 +257,7 @@ const EnrollmentPayments: React.FC<{ enrollmentId: string; initialPaymentStatus?
                             <div className="flex flex-col">
                                 <span className="text-sm font-bold text-slate-700">${Number(p.amount || 0).toLocaleString('es-AR')}</span>
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{paymentMethodLabel(p.method)}</span>
+                                {p.notes && <span className="text-[11px] text-slate-500 mt-0.5">{p.notes}</span>}
                             </div>
                             <span className="text-[10px] font-bold text-slate-400">
                                 {p.paid_at ? new Date(p.paid_at).toLocaleDateString('es-AR') : (p.created_at ? new Date(p.created_at).toLocaleDateString('es-AR') : '—')}
@@ -253,7 +285,20 @@ const EnrollmentPayments: React.FC<{ enrollmentId: string; initialPaymentStatus?
                         >
                             {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                         </select>
+                        <input
+                            type="date"
+                            value={paidAt}
+                            onChange={(e) => setPaidAt(e.target.value)}
+                            className="p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
+                        />
                     </div>
+                    <input
+                        type="text"
+                        value={payNote}
+                        onChange={(e) => setPayNote(e.target.value)}
+                        placeholder="Comentario del pago (opcional)"
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-sm text-sm outline-none focus:ring-1 focus:ring-blue-400"
+                    />
                     <div className="flex gap-2 justify-end">
                         <button
                             onClick={() => { setShowForm(false); setAmount(''); }}
@@ -956,12 +1001,13 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
     const latestProgram = student.programHistory?.[0];
     const hasConflict = student.programHistory?.some(p => p.status === 'CONFLICT');
-    const overallStatus: 'CONFLICT' | 'ACTIVE' | 'GRADUATED' | 'NONE' =
+    const overallStatus: 'CONFLICT' | 'ACTIVE' | 'GRADUATED' | 'DROPPED' | 'NONE' =
         hasConflict ? 'CONFLICT' : latestProgram ? latestProgram.status : 'NONE';
     const STATUS_STYLES: Record<typeof overallStatus, { label: string; classes: string }> = {
         CONFLICT: { label: 'En conflicto', classes: 'bg-rose-50 text-rose-700 border-rose-200' },
         ACTIVE: { label: 'Activo', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
         GRADUATED: { label: 'Graduado', classes: 'bg-slate-100 text-slate-600 border-slate-200' },
+        DROPPED: { label: 'De baja', classes: 'bg-slate-50 text-slate-400 border-slate-200' },
         NONE: { label: 'Sin programa', classes: 'bg-slate-100 text-slate-400 border-slate-200' },
     };
     const statusStyle = STATUS_STYLES[overallStatus];
@@ -1297,7 +1343,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                                 </button>
                                                             )}
                                                             <span className={`text-[10px] font-bold px-3 py-1 rounded-sm uppercase tracking-wider border ${prog.status === 'ACTIVE' ? 'text-emerald-700 bg-emerald-100 border-emerald-200' : prog.status === 'CONFLICT' ? 'text-red-700 bg-red-100 border-red-200' : 'text-slate-700 bg-slate-200 border-slate-300'}`}>
-                                                                {prog.status === 'ACTIVE' ? 'Cursando' : prog.status === 'CONFLICT' ? 'En Conflicto' : 'Graduado'}
+                                                                {prog.status === 'ACTIVE' ? 'Cursando' : prog.status === 'CONFLICT' ? 'En Conflicto' : prog.status === 'DROPPED' ? 'De baja' : 'Graduado'}
                                                             </span>
                                                         </div>
                                                     </div>

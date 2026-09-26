@@ -283,7 +283,7 @@ const AdminCalendar: React.FC = () => {
                     id: e.id,
                     cycleName: e.cycle?.name || 'Desconocido',
                     cycleType: e.cycle?.type || 'initial',
-                    status: e.status === 'active' ? 'ACTIVE' : (e.status === 'conflict' ? 'CONFLICT' : 'GRADUATED'),
+                    status: e.status === 'active' ? 'ACTIVE' : e.status === 'conflict' ? 'CONFLICT' : e.status === 'dropped' ? 'DROPPED' : 'GRADUATED',
                     attendanceCount: attCount,
                     totalSessions: totalSess,
                     paymentInfo: pay ? {

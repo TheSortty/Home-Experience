@@ -16,6 +16,7 @@ const STATUS_DOT: Record<ProgramChipData['status'], string> = {
   ACTIVE:    'bg-emerald-500',
   CONFLICT:  'bg-rose-500',
   GRADUATED: 'bg-slate-400',
+  DROPPED:   'bg-slate-200',
 };
 
 const CATEGORY_STYLES: Record<'creser' | 'campus', { bg: string; text: string; border: string }> = {

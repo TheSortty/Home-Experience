@@ -30,7 +30,7 @@ export interface ProgramChipData {
   cycleName: string;
   cycleType: string;
   category: ProgramCategory;
-  status: 'ACTIVE' | 'CONFLICT' | 'GRADUATED';
+  status: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' | 'DROPPED';
   courseId: string | null;
   courseTitle: string | null;
 }

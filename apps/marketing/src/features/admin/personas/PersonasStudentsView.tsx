@@ -14,7 +14,7 @@ import MoveCycleModal from './MoveCycleModal';
 
 type Scope = 'all' | 'creser' | 'campus';
 type ViewMode = 'table' | 'grid';
-type StatusFilter = 'ALL' | 'ACTIVE' | 'CONFLICT' | 'GRADUATED';
+type StatusFilter = 'ALL' | 'ACTIVE' | 'CONFLICT' | 'GRADUATED' | 'DROPPED';
 
 interface Props {
   scope: Scope;
@@ -159,8 +159,9 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
           const cycle = e.cycle || {};
           const course = cycle.course || null;
           const isOverdue = e.status === 'active' && e.payment_status !== 'paid';
-          let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' = 'ACTIVE';
-          if (e.status === 'conflict' || isOverdue) derivedStatus = 'CONFLICT';
+          let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' | 'DROPPED' = 'ACTIVE';
+          if (e.status === 'dropped') derivedStatus = 'DROPPED';
+          else if (e.status === 'conflict' || isOverdue) derivedStatus = 'CONFLICT';
           else if (e.status === 'graduated' || e.status === 'completed') derivedStatus = 'GRADUATED';
 
           return {
@@ -182,8 +183,9 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
           const pay = e.payments?.[0];
           const startDate = e.cycle?.start_date || '9999-12-31';
           const isOverdue = e.status === 'active' && e.payment_status !== 'paid';
-          let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' = 'ACTIVE';
-          if (e.status === 'conflict' || isOverdue) derivedStatus = 'CONFLICT';
+          let derivedStatus: 'ACTIVE' | 'CONFLICT' | 'GRADUATED' | 'DROPPED' = 'ACTIVE';
+          if (e.status === 'dropped') derivedStatus = 'DROPPED';
+          else if (e.status === 'conflict' || isOverdue) derivedStatus = 'CONFLICT';
           else if (e.status === 'graduated' || e.status === 'completed') derivedStatus = 'GRADUATED';
           return {
             id: e.id,
@@ -525,6 +527,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
               <option value="ACTIVE">Activos</option>
               <option value="CONFLICT">En conflicto</option>
               <option value="GRADUATED">Graduados</option>
+              <option value="DROPPED">De baja</option>
             </select>
           </div>
         </div>
