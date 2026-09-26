@@ -67,7 +67,7 @@ export default async function ClasePage({
   // Rol con el que el campus trata a la persona: un admin que además cursa
   // ve las clases como un alumno (con su bloqueo por fecha).
   const campusRole = await resolveCampusRole(supabase, user.id, profile?.role);
-  const isAdmin = !!campusRole && isAdminRole(campusRole);
+  const isAdmin = isAdminRole(campusRole ?? '');
   // Staff bypasses the lesson lock regardless of view mode — both 'organizer'
   // and 'preview as student' need to be able to navigate into scheduled
   // lessons for review.

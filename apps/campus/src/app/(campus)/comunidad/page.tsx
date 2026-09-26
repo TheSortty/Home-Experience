@@ -7,6 +7,8 @@ export default async function CampusComunidadPage() {
   const user = await getSessionUser(supabase);
 
   let profileId = '';
+  let actorRole: string | undefined;
+  let actorName: string | null = null;
   let courses: CourseTab[] = [];
   let initialPosts: ForumPost[] = [];
 
@@ -30,6 +32,8 @@ export default async function CampusComunidadPage() {
         .order('title');
 
       const campusRole = await resolveCampusRole(supabase, user.id, profile.role);
+      actorRole = campusRole ?? undefined;
+      actorName = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || null;
       const access = await resolveCourseAccess(supabase, profile.id, campusRole);
       const visibleCourses = (publishedCourses || []).filter((c: any) => access.can(c.id));
 
@@ -95,18 +99,6 @@ export default async function CampusComunidadPage() {
         );
       }
     }
-  }
-
-  let actorRole: string | undefined;
-  let actorName: string | null = null;
-  if (user) {
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('role, first_name, last_name')
-      .eq('user_id', user.id)
-      .single();
-    actorRole = (await resolveCampusRole(supabase, user.id, prof?.role)) ?? undefined;
-    actorName = `${prof?.first_name ?? ''} ${prof?.last_name ?? ''}`.trim() || null;
   }
 
   return (

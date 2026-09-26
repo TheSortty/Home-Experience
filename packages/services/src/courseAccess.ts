@@ -91,13 +91,9 @@ export async function resolveCampusRole(
 ): Promise<string | null> {
   if (!userId || !isAdminRole(role ?? '')) return role ?? null;
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (!profile?.id) return role ?? null;
-
-  const assigned = await getAssignedCourseIds(supabase, profile.id as string);
-  return assigned.size > 0 ? 'student' : (role ?? null);
+  const { count } = await supabase
+    .from('course_access')
+    .select('course_id, owner:profiles!course_access_profile_id_fkey!inner(user_id)', { count: 'exact', head: true })
+    .eq('owner.user_id', userId);
+  return count ? 'student' : (role ?? null);
 }

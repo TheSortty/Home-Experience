@@ -19,12 +19,10 @@
  * `?preview=true` alias) flips to 'preview'.
  */
 
-export type CampusRole = 'student' | 'coach' | 'admin' | 'sysadmin' | 'super_admin' | string;
-export type CampusViewMode = 'student' | 'organizer' | 'preview';
+import { isAdminRole } from './roleService';
 
-export function isStaffRole(role: CampusRole | null | undefined): boolean {
-  return role === 'admin' || role === 'sysadmin' || role === 'super_admin';
-}
+export type CampusRole ='student' | 'coach' | 'admin' | 'sysadmin' | 'super_admin' | string;
+export type CampusViewMode = 'student' | 'organizer' | 'preview';
 
 /**
  * Resolve the active view mode from role + URL search params.
@@ -46,7 +44,7 @@ export function resolveViewMode(
     return v ?? undefined;
   };
 
-  if (!isStaffRole(role)) return 'student';
+  if (!isAdminRole(role ?? '')) return 'student';
 
   const as = get('as');
   const preview = get('preview');

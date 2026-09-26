@@ -114,32 +114,21 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
         }
       }
 
-      // Staff que además cursa (admin con inscripciones): sigue siendo alumno
-      // para el seguimiento de programas, asistencia y pagos, aunque su rol sea
-      // admin. Los admins sin inscripciones no entran a la lista.
-      const { data: staffLearners } = await restSelect<{ id: string }>('profiles', {
-        columns: 'id,enrollments!inner(id)',
-        filters: {
-          role: 'in.(admin,sysadmin,super_admin)',
-          is_deleted: `eq.${trashMode === 'trash'}`,
-        },
-      }).catch(() => ({ data: [] as { id: string }[] }));
-      const staffLearnerIds = staffLearners.map(p => p.id);
-
-      const { data } = await restSelect<any>('profiles', {
+      const { data: rows } = await restSelect<any>('profiles', {
         columns:
-          'id,user_id,first_name,last_name,email,phone,avatar_url,is_deleted,' +
+          'id,user_id,role,first_name,last_name,email,phone,avatar_url,is_deleted,' +
           'enrollments(id,status,payment_status,cycle:cycles(id,name,type,course_id,start_date,course:courses(id,title)),attendance(id,status),payments(amount,method,status,paid_at))',
         filters: {
-          ...(staffLearnerIds.length > 0
-            ? { or: `(role.eq.student,id.in.(${staffLearnerIds.join(',')}))` }
-            : { role: 'eq.student' }),
+          role: 'in.(student,admin,sysadmin,super_admin)',
           is_deleted: `eq.${trashMode === 'trash'}`,
           ...(matchedIds ? { id: `in.(${matchedIds.join(',')})` } : {}),
         },
       });
 
-      if (!data) return;
+      if (!rows) return;
+      // Staff que además cursa (admin con inscripciones) sigue siendo alumno
+      // para programas, asistencia y pagos. Los admins sin inscripciones no.
+      const data = rows.filter((p: any) => p.role === 'student' || p.enrollments?.length);
 
       const emails = data.map((p: any) => p.email).filter(Boolean);
       const profileIds = data.map((p: any) => p.id);

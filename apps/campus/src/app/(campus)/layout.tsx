@@ -35,7 +35,7 @@ export default async function CampusLayout({ children }: { children: React.React
     realRole = await resolveRole(supabase, user.id);
     role = await resolveCampusRole(supabase, user.id, realRole);
   } catch { /* safe default */ }
-  const isAdminAlsoStudent = role === 'student' && !!realRole && isAdminRole(realRole);
+  const isAdminAlsoStudent = role === 'student' && isAdminRole(realRole ?? '');
 
   type ProfileRow = { first_name: string; last_name: string; email: string; avatar_url: string | null; profile_completed_at: string | null };
   let profile: ProfileRow | null = null;
