@@ -6,10 +6,9 @@ import {
   IoEyeOutline,
 } from 'react-icons/io5';
 import { createClient } from '@home/services/supabase/server';
-import { resolveRole } from '@home/services/roleService';
+import { resolveRole, isAdminRole } from '@home/services/roleService';
 import { getStudentProgress, getLmsCourseProgress, type LmsCourseProgress } from '@home/services/progressService';
 import { normalizeImageUrl } from '@home/services/imageUrl';
-import { resolveViewMode } from '@home/services/campusViewMode';
 import { resolveCourseAccess, resolveCampusRole } from '@home/services/courseAccess';
 import QuoteOfTheDay from '../_components/QuoteOfTheDay';
 
@@ -45,12 +44,7 @@ function getYoutubeThumbnail(url: string | null): string | null {
   return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
 }
 
-export default async function CampusDashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
-  const sp = await searchParams;
+export default async function CampusDashboardPage() {
   const supabase = await createClient();
 
   // ── Option B: use getSession() instead of getUser() to avoid a redundant
@@ -68,7 +62,7 @@ export default async function CampusDashboardPage({
     role = null;
   }
 
-  const viewMode = resolveViewMode(role, sp);
+  const isOrganizer = isAdminRole(role ?? '');
 
   let firstName = 'Alumno';
   let enrollments: any[] = [];
@@ -101,7 +95,7 @@ export default async function CampusDashboardPage({
 
     if (profile?.first_name) firstName = profile.first_name;
 
-    const canSeeEverything = viewMode === 'organizer';
+    const canSeeEverything = isOrganizer;
 
     // Courses ────────────────────────────────────────────────────────────────
     // Sólo los programas que la persona tiene asignados. Los demás existen y se
@@ -291,12 +285,12 @@ export default async function CampusDashboardPage({
             <IoBookOutline size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500">{viewMode === 'organizer' ? 'Programas activos' : 'Programas en curso'}</p>
+            <p className="text-sm font-medium text-slate-500">{isOrganizer ? 'Programas activos' : 'Programas en curso'}</p>
             <p className="text-2xl font-bold text-slate-900">{activeCoursesCount}</p>
           </div>
         </div>
 
-        {viewMode === 'organizer' ? (
+        {isOrganizer ? (
           <div data-anim="card" className="bg-amber-50 rounded-xl p-5 border border-amber-200 shadow-sm flex items-center gap-4 col-span-1 md:col-span-1">
             <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
               <IoEyeOutline size={24} />
@@ -318,7 +312,7 @@ export default async function CampusDashboardPage({
           </div>
         )}
 
-        {viewMode === 'organizer' ? (
+        {isOrganizer ? (
           <div data-anim="card" className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center gap-4 col-span-1 md:col-span-1 opacity-40">
             <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center">
               <IoFlameOutline size={24} />
@@ -415,7 +409,7 @@ export default async function CampusDashboardPage({
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-serif text-2xl font-medium tracking-tight text-slate-900">
-              {viewMode === 'organizer' ? 'Programas del campus' : 'Tus programas'}
+              {isOrganizer ? 'Programas del campus' : 'Tus programas'}
             </h2>
             <Link href="/cursos" className="text-sm font-medium text-[#00A9CE] hover:underline flex items-center gap-1">
               Ver todos <IoChevronForwardOutline />
@@ -451,7 +445,7 @@ export default async function CampusDashboardPage({
                         />
                       )}
                       <div className="absolute top-3 right-3 px-2 py-1 bg-white/20 backdrop-blur-md rounded-md text-white text-xs font-bold flex items-center gap-1">
-                        {viewMode === 'organizer' ? <><IoEyeOutline size={11} /> Organizando</> : 'Cursando'}
+                        {isOrganizer ? <><IoEyeOutline size={11} /> Organizando</> : 'Cursando'}
                       </div>
                     </div>
                     <div className="p-4 flex flex-col flex-1">
@@ -460,7 +454,7 @@ export default async function CampusDashboardPage({
                         <p className="text-xs text-slate-500 mb-1">{enr.cycles.name}</p>
                       )}
                       <div className="mt-auto pt-4 border-t border-slate-100">
-                        {viewMode === 'organizer' ? (
+                        {isOrganizer ? (
                           <p className="text-xs text-amber-600 font-bold uppercase tracking-wide flex items-center gap-1">
                             <IoEyeOutline size={11} /> Vista completa
                           </p>

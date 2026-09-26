@@ -1,8 +1,7 @@
 import { createClient, getSessionUser } from '@home/services/supabase/server';
-import { resolveRole } from '@home/services/roleService';
+import { resolveRole, isAdminRole } from '@home/services/roleService';
 import { getStudentProgress, getLmsCourseProgress, type LmsCourseProgress } from '@home/services/progressService';
 import { normalizeImageUrl } from '@home/services/imageUrl';
-import { resolveViewMode } from '@home/services/campusViewMode';
 import { resolveCourseAccess, resolveCampusRole } from '@home/services/courseAccess';
 import { CAMPUS_WHATSAPP } from '@home/services/contact';
 import Link from 'next/link';
@@ -68,7 +67,7 @@ export default async function CampusCursosPage({
   const supabase = await createClient();
   const user = await getSessionUser(supabase);
   const role = user ? await resolveCampusRole(supabase, user.id, await resolveRole(supabase, user.id)) : null;
-  const viewMode = resolveViewMode(role, sp);
+  const isOrganizer = isAdminRole(role ?? '');
 
   type CourseCard = {
     enrollmentId: string;
@@ -106,7 +105,7 @@ export default async function CampusCursosPage({
     // Organizer mode (admin/sysadmin browsing campus as staff) shows the full
     // catalogue without faking progress. Preview-as-student narrows to what
     // the alumno actually has access to.
-    const canSeeEverything = viewMode === 'organizer';
+    const canSeeEverything = isOrganizer;
 
     // El catálogo completo se carga siempre: los cursos sin acceso no se
     // ocultan, se muestran bloqueados (vidriera). Lo que queda fuera de
@@ -265,7 +264,7 @@ export default async function CampusCursosPage({
                       <StatusBadge
                         status={course.enrollmentStatus}
                         progress={course.progressPercent}
-                        isOrganizer={viewMode === 'organizer'}
+                        isOrganizer={isOrganizer}
                       />
                     </div>
                     {!course.hasLms && (
@@ -290,7 +289,7 @@ export default async function CampusCursosPage({
                     )}
 
                     <div className="mt-auto">
-                      {viewMode === 'organizer' ? (
+                      {isOrganizer ? (
                         <p className="text-xs text-amber-600 font-bold uppercase tracking-wide flex items-center gap-1">
                           <IoEyeOutline size={12} /> Vista completa del programa
                         </p>

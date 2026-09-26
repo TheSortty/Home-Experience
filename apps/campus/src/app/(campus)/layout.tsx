@@ -7,7 +7,6 @@ import { resolveCampusRole } from '@home/services/courseAccess';
 import { MARKETING_URL } from '@home/services/siteUrls';
 import CampusNav from './_components/CampusNav';
 import ProfileMenu from './_components/ProfileMenu';
-import StaffModeBar from './_components/StaffModeBar';
 import WelcomeProfileModal from './_components/WelcomeProfileModal';
 import CampusAnimator     from './_components/CampusAnimator';
 
@@ -35,7 +34,6 @@ export default async function CampusLayout({ children }: { children: React.React
     realRole = await resolveRole(supabase, user.id);
     role = await resolveCampusRole(supabase, user.id, realRole);
   } catch { /* safe default */ }
-  const isAdminAlsoStudent = role === 'student' && isAdminRole(realRole ?? '');
 
   type ProfileRow = { first_name: string; last_name: string; email: string; avatar_url: string | null; profile_completed_at: string | null };
   let profile: ProfileRow | null = null;
@@ -61,9 +59,6 @@ export default async function CampusLayout({ children }: { children: React.React
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
-
-      {/* ── Staff context bar (only for admin/sysadmin visiting campus) ──── */}
-      <StaffModeBar role={role} actorName={fullName} />
 
       {/* ── Top navbar ─────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200">
@@ -97,7 +92,7 @@ export default async function CampusLayout({ children }: { children: React.React
             email={email}
             initials={initials}
             avatarUrl={profile?.avatar_url}
-            adminUrl={isAdminAlsoStudent ? `${MARKETING_URL}/admin/dashboard` : undefined}
+            adminUrl={isAdminRole(realRole ?? '') ? `${MARKETING_URL}/admin/dashboard` : undefined}
           />
         </div>
       </header>

@@ -14,7 +14,7 @@ interface Props {
   email: string;
   initials: string;
   avatarUrl?: string | null;
-  /** Sólo para admins que además cursan: link al panel de administración. */
+  /** Sólo para staff: link al panel de administración. */
   adminUrl?: string;
 }
 
