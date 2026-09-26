@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@home/services/supabase/server';
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js';
-import { resolveRole } from '@home/services/roleService';
+import { resolveRole, isAdminRole } from '@home/services/roleService';
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     }
 
     const role = await resolveRole(supabase, user.id);
-    if (role !== 'admin' && role !== 'sysadmin') {
+    if (!role || !isAdminRole(role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

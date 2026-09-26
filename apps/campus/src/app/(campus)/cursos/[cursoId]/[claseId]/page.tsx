@@ -13,6 +13,7 @@ import type { LessonPost } from './LessonForum';
 import type { SubmissionTabData } from '@home/db-types/submissions';
 import { lessonDueMs } from '@home/services/lessonDeadline';
 import { resolveCourseAccess } from '@home/services/courseAccess';
+import { isAdminRole } from '@home/services/roleService';
 import { getStudentThread } from '../../actions';
 
 
@@ -63,7 +64,7 @@ export default async function ClasePage({
     .eq('user_id', user.id)
     .maybeSingle();
 
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'sysadmin';
+  const isAdmin = !!profile?.role && isAdminRole(profile.role);
   // Staff bypasses the lesson lock regardless of view mode — both 'organizer'
   // and 'preview as student' need to be able to navigate into scheduled
   // lessons for review.
