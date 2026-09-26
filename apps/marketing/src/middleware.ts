@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { resolveRole } from '@home/services/roleService'
+import { resolveRole, isAdminRole } from '@home/services/roleService'
 import { CAMPUS_URL, safeNextUrl } from '@home/services/siteUrls'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -82,7 +82,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   // — la landing, /auth/register, todo — para después descartarlo.
   const needsRole = user && (isAdminRoute || isLoginRoute)
   const role = needsRole ? await resolveRole(supabase, user.id) : null
-  const isAdmin = role === 'admin' || role === 'sysadmin'
+  const isAdmin = role !== null && isAdminRole(role)
   const isCoach = role === 'coach'
   // Coaches can access /admin/lms (entregas + course overview) but nothing else in /admin.
   const isCoachLmsRoute = matchesPrefix('/admin/lms')
