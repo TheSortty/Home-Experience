@@ -3,7 +3,7 @@ import { resolveRole } from '@home/services/roleService';
 import { getStudentProgress, getLmsCourseProgress, type LmsCourseProgress } from '@home/services/progressService';
 import { normalizeImageUrl } from '@home/services/imageUrl';
 import { resolveViewMode } from '@home/services/campusViewMode';
-import { resolveCourseAccess } from '@home/services/courseAccess';
+import { resolveCourseAccess, resolveCampusRole } from '@home/services/courseAccess';
 import { CAMPUS_WHATSAPP } from '@home/services/contact';
 import Link from 'next/link';
 import {
@@ -67,7 +67,7 @@ export default async function CampusCursosPage({
 
   const supabase = await createClient();
   const user = await getSessionUser(supabase);
-  const role = user ? await resolveRole(supabase, user.id) : null;
+  const role = user ? await resolveCampusRole(supabase, user.id, await resolveRole(supabase, user.id)) : null;
   const viewMode = resolveViewMode(role, sp);
 
   type CourseCard = {
@@ -119,7 +119,7 @@ export default async function CampusCursosPage({
 
     // Quién tiene acceso a qué: asignación directa del organizador
     // (course_access). Staff y coaches ven todo el catálogo.
-    const access = await resolveCourseAccess(supabase, profile?.id, profile?.role);
+    const access = await resolveCourseAccess(supabase, profile?.id, role);
 
     // Si hay perfil, mezclamos el progreso real del alumno
     const studentProgressList = profile && !canSeeEverything

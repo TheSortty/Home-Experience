@@ -2,7 +2,7 @@ import { createClient, getSessionUser } from '@home/services/supabase/server';
 import { IoCalendarOutline } from 'react-icons/io5';
 import CalendarView, { type CalendarSession } from './_components/CalendarView';
 import GoogleCalendarCard, { type GoogleCalendarStatus } from './_components/GoogleCalendarCard';
-import { resolveCourseAccess } from '@home/services/courseAccess';
+import { resolveCourseAccess, resolveCampusRole } from '@home/services/courseAccess';
 
 // Buenos Aires "today" as YYYY-MM-DD — the source of truth for past/future split.
 function todayInArgentinaISO(): string {
@@ -60,7 +60,8 @@ export default async function CampusCalendarioPage({
       .select('id, title')
       .eq('is_published', true);
 
-    const access = await resolveCourseAccess(supabase, profile?.id, profile?.role);
+    const campusRole = await resolveCampusRole(supabase, user.id, profile?.role);
+    const access = await resolveCourseAccess(supabase, profile?.id, campusRole);
     const visibleCourses = (publishedCourses || []).filter((c: any) => access.can(c.id));
 
     const courseTitleById: Record<string, string> = {};

@@ -12,7 +12,7 @@ import LessonViewer, { type LessonResource, type LessonVideo } from './LessonVie
 import type { LessonPost } from './LessonForum';
 import type { SubmissionTabData } from '@home/db-types/submissions';
 import { lessonDueMs } from '@home/services/lessonDeadline';
-import { resolveCourseAccess } from '@home/services/courseAccess';
+import { resolveCourseAccess, resolveCampusRole } from '@home/services/courseAccess';
 import { isAdminRole } from '@home/services/roleService';
 import { getStudentThread } from '../../actions';
 
@@ -64,7 +64,10 @@ export default async function ClasePage({
     .eq('user_id', user.id)
     .maybeSingle();
 
-  const isAdmin = !!profile?.role && isAdminRole(profile.role);
+  // Rol con el que el campus trata a la persona: un admin que además cursa
+  // ve las clases como un alumno (con su bloqueo por fecha).
+  const campusRole = await resolveCampusRole(supabase, user.id, profile?.role);
+  const isAdmin = !!campusRole && isAdminRole(campusRole);
   // Staff bypasses the lesson lock regardless of view mode — both 'organizer'
   // and 'preview as student' need to be able to navigate into scheduled
   // lessons for review.
@@ -73,7 +76,7 @@ export default async function ClasePage({
   // Sin acceso al curso no hay clase: se vuelve a la vidriera del programa.
   // El RLS respalda esto (lessons/lesson_videos/lesson_resources), pero cortamos
   // acá para no mostrar un 404 confuso.
-  const access = await resolveCourseAccess(supabase, profile?.id, profile?.role);
+  const access = await resolveCourseAccess(supabase, profile?.id, campusRole);
   if (!access.can(cursoId)) redirect(`/cursos/${cursoId}`);
 
   // El enrollment se usa para el tracking de progreso individual.
@@ -375,7 +378,7 @@ export default async function ClasePage({
               resources={resources}
               initialPosts={lessonPosts}
               currentUserName={currentUserName}
-              currentUserRole={profile?.role ?? null}
+              currentUserRole={campusRole}
               studentProfileId={profile?.id ?? null}
               videos={lessonVideos}
               submissionData={submissionData}

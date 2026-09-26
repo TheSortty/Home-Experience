@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { IoLogOutOutline, IoPersonOutline, IoChevronDownOutline } from 'react-icons/io5';
+import { IoLogOutOutline, IoPersonOutline, IoChevronDownOutline, IoBriefcaseOutline } from 'react-icons/io5';
 import { supabase } from '@home/services/supabaseClient';
 import { MARKETING_URL } from '@home/services/siteUrls';
 
@@ -14,9 +14,11 @@ interface Props {
   email: string;
   initials: string;
   avatarUrl?: string | null;
+  /** Sólo para admins que además cursan: link al panel de administración. */
+  adminUrl?: string;
 }
 
-export default function ProfileMenu({ firstName, lastName, fullName, email, initials, avatarUrl }: Props) {
+export default function ProfileMenu({ firstName, lastName, fullName, email, initials, avatarUrl, adminUrl }: Props) {
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -113,6 +115,17 @@ export default function ProfileMenu({ firstName, lastName, fullName, email, init
             <IoPersonOutline size={18} className="text-terra shrink-0" />
             Tu espacio
           </Link>
+
+          {adminUrl && (
+            <a
+              href={adminUrl}
+              role="menuitem"
+              className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <IoBriefcaseOutline size={18} className="text-terra shrink-0" />
+              Ir a administración
+            </a>
+          )}
 
           <div className="border-t border-slate-100">
             <button

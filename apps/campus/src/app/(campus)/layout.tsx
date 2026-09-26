@@ -2,7 +2,8 @@ import React from 'react';
 import Link from 'next/link';
 import { createClient, getSessionUser } from '@home/services/supabase/server';
 import { redirect } from 'next/navigation';
-import { resolveRole } from '@home/services/roleService';
+import { resolveRole, isAdminRole } from '@home/services/roleService';
+import { resolveCampusRole } from '@home/services/courseAccess';
 import { MARKETING_URL } from '@home/services/siteUrls';
 import CampusNav from './_components/CampusNav';
 import ProfileMenu from './_components/ProfileMenu';
@@ -26,10 +27,15 @@ export default async function CampusLayout({ children }: { children: React.React
   // Wrap role + profile in try/catch so a transient Supabase I/O error
   // (Cloudflare Error 1101) doesn't crash the layout — we fall back to safe
   // defaults and the page still renders (Option A).
+  // `role` es el rol con el que el campus trata a la persona: un admin que
+  // además cursa entra como alumno. `realRole` es el de la base.
   let role: string | null = null;
+  let realRole: string | null = null;
   try {
-    role = await resolveRole(supabase, user.id);
+    realRole = await resolveRole(supabase, user.id);
+    role = await resolveCampusRole(supabase, user.id, realRole);
   } catch { /* safe default */ }
+  const isAdminAlsoStudent = role === 'student' && !!realRole && isAdminRole(realRole);
 
   type ProfileRow = { first_name: string; last_name: string; email: string; avatar_url: string | null; profile_completed_at: string | null };
   let profile: ProfileRow | null = null;
@@ -91,6 +97,7 @@ export default async function CampusLayout({ children }: { children: React.React
             email={email}
             initials={initials}
             avatarUrl={profile?.avatar_url}
+            adminUrl={isAdminAlsoStudent ? `${MARKETING_URL}/admin/dashboard` : undefined}
           />
         </div>
       </header>

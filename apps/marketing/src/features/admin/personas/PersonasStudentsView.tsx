@@ -86,10 +86,10 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
       if (term) {
         const pattern = `ilike.*${term}*`;
         const [byFirst, byLast, byEmail, byDni, byCycleName] = await Promise.all([
-          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { role: 'eq.student', first_name: pattern } }),
-          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { role: 'eq.student', last_name: pattern } }),
-          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { role: 'eq.student', email: pattern } }),
-          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { role: 'eq.student', dni: pattern } }),
+          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { first_name: pattern } }),
+          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { last_name: pattern } }),
+          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { email: pattern } }),
+          restSelect<{ id: string }>('profiles', { columns: 'id', filters: { dni: pattern } }),
           restSelect<{ id: string }>('cycles', { columns: 'id', filters: { name: pattern } }),
         ]);
 
@@ -114,12 +114,26 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
         }
       }
 
+      // Staff que además cursa (admin con inscripciones): sigue siendo alumno
+      // para el seguimiento de programas, asistencia y pagos, aunque su rol sea
+      // admin. Los admins sin inscripciones no entran a la lista.
+      const { data: staffLearners } = await restSelect<{ id: string }>('profiles', {
+        columns: 'id,enrollments!inner(id)',
+        filters: {
+          role: 'in.(admin,sysadmin,super_admin)',
+          is_deleted: `eq.${trashMode === 'trash'}`,
+        },
+      }).catch(() => ({ data: [] as { id: string }[] }));
+      const staffLearnerIds = staffLearners.map(p => p.id);
+
       const { data } = await restSelect<any>('profiles', {
         columns:
           'id,user_id,first_name,last_name,email,phone,avatar_url,is_deleted,' +
           'enrollments(id,status,payment_status,cycle:cycles(id,name,type,course_id,start_date,course:courses(id,title)),attendance(id,status),payments(amount,method,status,paid_at))',
         filters: {
-          role: 'eq.student',
+          ...(staffLearnerIds.length > 0
+            ? { or: `(role.eq.student,id.in.(${staffLearnerIds.join(',')}))` }
+            : { role: 'eq.student' }),
           is_deleted: `eq.${trashMode === 'trash'}`,
           ...(matchedIds ? { id: `in.(${matchedIds.join(',')})` } : {}),
         },

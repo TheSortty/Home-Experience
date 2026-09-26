@@ -4,6 +4,7 @@ import { createClient } from '@home/services/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { logEventServer } from '@home/services/activityEvents';
 import { isAdminRole, isReviewerRole } from '@home/services/roleService';
+import { resolveCampusRole } from '@home/services/courseAccess';
 import {
   buildSubmissionKey, putEntregaObject, deleteEntregaObjects,
   isAllowedFile, MAX_FILE_BYTES, MAX_FILES_PER_SUBMISSION,
@@ -40,7 +41,9 @@ async function getActor() {
   if (!profile) return null;
   return {
     profileId: profile.id as string,
-    role: (profile.role as string) ?? 'student',
+    // Rol con el que el campus trata a la persona: un admin que además cursa
+    // actúa como alumno (se le registra el progreso, sus posts son de alumno).
+    role: (await resolveCampusRole(supabase, user.id, profile.role as string | null)) ?? 'student',
     name: `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || null,
   };
 }
@@ -662,7 +665,8 @@ export async function getStudentThread(lessonId: string): Promise<SubmissionThre
       body: m.body,
       created_at: m.created_at,
       author_name: p ? `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || null : null,
-      author_side: isReviewerRole(role) ? 'reviewer' : 'student',
+      // El dueño del hilo siempre habla como alumno, aunque su rol sea admin.
+      author_side: m.author_id === profileId ? 'student' : isReviewerRole(role) ? 'reviewer' : 'student',
     };
   });
 

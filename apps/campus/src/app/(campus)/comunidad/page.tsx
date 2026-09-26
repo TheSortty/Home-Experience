@@ -1,5 +1,5 @@
 import { createClient, getSessionUser } from '@home/services/supabase/server';
-import { resolveCourseAccess } from '@home/services/courseAccess';
+import { resolveCourseAccess, resolveCampusRole } from '@home/services/courseAccess';
 import ForumClient, { type ForumPost, type CourseTab } from './ForumClient';
 
 export default async function CampusComunidadPage() {
@@ -29,7 +29,8 @@ export default async function CampusComunidadPage() {
         .eq('is_published', true)
         .order('title');
 
-      const access = await resolveCourseAccess(supabase, profile.id, profile.role);
+      const campusRole = await resolveCampusRole(supabase, user.id, profile.role);
+      const access = await resolveCourseAccess(supabase, profile.id, campusRole);
       const visibleCourses = (publishedCourses || []).filter((c: any) => access.can(c.id));
 
       const courseIds: string[] = visibleCourses.map((c: any) => c.id);
@@ -104,7 +105,7 @@ export default async function CampusComunidadPage() {
       .select('role, first_name, last_name')
       .eq('user_id', user.id)
       .single();
-    actorRole = prof?.role ?? undefined;
+    actorRole = (await resolveCampusRole(supabase, user.id, prof?.role)) ?? undefined;
     actorName = `${prof?.first_name ?? ''} ${prof?.last_name ?? ''}`.trim() || null;
   }
 

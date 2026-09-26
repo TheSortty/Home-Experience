@@ -2,7 +2,7 @@ import { createClient, getSessionUser } from '@home/services/supabase/server';
 import { normalizeImageUrl } from '@home/services/imageUrl';
 import { isAdminRole } from '@home/services/roleService';
 import { lessonDueMs } from '@home/services/lessonDeadline';
-import { resolveCourseAccess } from '@home/services/courseAccess';
+import { resolveCourseAccess, resolveCampusRole } from '@home/services/courseAccess';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { IoArrowBackOutline, IoDocumentTextOutline, IoEyeOutline } from 'react-icons/io5';
@@ -28,7 +28,9 @@ export default async function CursoDetallePage({
 
   if (!profile) notFound();
 
-  const isOrganizer = isAdminRole(profile.role ?? '');
+  // Rol con el que el campus trata a la persona (un admin que cursa = alumno).
+  const campusRole = await resolveCampusRole(supabase, user.id, profile.role);
+  const isOrganizer = isAdminRole(campusRole ?? '');
 
   // El curso en sí se puede mirar aunque no lo tengas (vidriera). El contenido
   // no: más abajo cortamos si no hay acceso, y el RLS lo respalda.
@@ -44,7 +46,7 @@ export default async function CursoDetallePage({
   // ── Control de acceso ──────────────────────────────────────────────────────
   // Sin el curso asignado (course_access), el alumno ve la vidriera en vez del
   // contenido. Staff y coaches pasan siempre.
-  const access = await resolveCourseAccess(supabase, profile.id, profile.role);
+  const access = await resolveCourseAccess(supabase, profile.id, campusRole);
   if (!access.can(cursoId)) {
     return <CursoBloqueado course={course} />;
   }

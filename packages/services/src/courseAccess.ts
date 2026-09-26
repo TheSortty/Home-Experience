@@ -17,7 +17,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isReviewerRole } from './roleService';
+import { isAdminRole, isReviewerRole } from './roleService';
 
 /** True para los roles que ven el catálogo completo (staff + coach). */
 export function seesEveryCourse(role: string | null | undefined): boolean {
@@ -70,4 +70,34 @@ export async function hasCourseAccess(
 ): Promise<boolean> {
   const access = await resolveCourseAccess(supabase, profileId, role);
   return access.can(courseId);
+}
+
+/**
+ * Rol con el que el CAMPUS trata a esta persona.
+ *
+ * Un admin/sysadmin/super_admin que además cursa (tiene al menos un curso
+ * asignado en `course_access`) entra al campus como alumno normal: ve sólo sus
+ * cursos, se le registra el progreso y no aparecen los controles de staff. La
+ * administración sigue siendo suya en el sitio principal (/admin), donde el rol
+ * no cambia.
+ *
+ * Para el resto (alumnos, coaches y staff sin cursos asignados) devuelve el rol
+ * tal cual y no hace ninguna consulta extra.
+ */
+export async function resolveCampusRole(
+  supabase: SupabaseClient<any, 'public', any>,
+  userId: string | null | undefined,
+  role: string | null | undefined,
+): Promise<string | null> {
+  if (!userId || !isAdminRole(role ?? '')) return role ?? null;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!profile?.id) return role ?? null;
+
+  const assigned = await getAssignedCourseIds(supabase, profile.id as string);
+  return assigned.size > 0 ? 'student' : (role ?? null);
 }

@@ -10,7 +10,7 @@ import { resolveRole } from '@home/services/roleService';
 import { getStudentProgress, getLmsCourseProgress, type LmsCourseProgress } from '@home/services/progressService';
 import { normalizeImageUrl } from '@home/services/imageUrl';
 import { resolveViewMode } from '@home/services/campusViewMode';
-import { resolveCourseAccess } from '@home/services/courseAccess';
+import { resolveCourseAccess, resolveCampusRole } from '@home/services/courseAccess';
 import QuoteOfTheDay from '../_components/QuoteOfTheDay';
 
 const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -63,7 +63,7 @@ export default async function CampusDashboardPage({
   // doesn't abort the whole render (Option A).
   let role: string | null = null;
   try {
-    role = user ? await resolveRole(supabase, user.id) : null;
+    role = user ? await resolveCampusRole(supabase, user.id, await resolveRole(supabase, user.id)) : null;
   } catch {
     role = null;
   }
@@ -111,7 +111,7 @@ export default async function CampusDashboardPage({
       const { data: allCourses } = await supabase
         .from('courses')
         .select('id, title, cover_image_url, is_published');
-      const access = await resolveCourseAccess(supabase, profile?.id, profile?.role);
+      const access = await resolveCourseAccess(supabase, profile?.id, role);
       publishedCourses = (allCourses || []).filter(
         (c: any) => c.is_published && (canSeeEverything || access.can(c.id))
       );
