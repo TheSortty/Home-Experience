@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { reloadOnChunkError, retryAfterError } from '@home/services/chunkError';
 import Link from 'next/link';
 import { IoRefreshOutline, IoWarningOutline, IoHomeOutline } from 'react-icons/io5';
 
@@ -13,6 +14,7 @@ export default function CampusError({
 }) {
   useEffect(() => {
     console.error(error);
+    reloadOnChunkError(error);
   }, [error]);
 
   return (
@@ -28,7 +30,7 @@ export default function CampusError({
       </div>
       <div className="flex items-center gap-3">
         <button
-          onClick={reset}
+          onClick={() => retryAfterError(error, reset)}
           className="flex items-center gap-2 px-5 py-2.5 bg-[#00A9CE] text-white text-sm font-bold rounded-xl hover:bg-[#0096b8] transition-colors"
         >
           <IoRefreshOutline size={16} />
