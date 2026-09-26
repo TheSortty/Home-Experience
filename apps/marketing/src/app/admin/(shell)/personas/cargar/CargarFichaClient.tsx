@@ -14,7 +14,7 @@ import {
   IoArrowBackOutline, IoSearchOutline, IoCloseOutline, IoCheckmarkCircle,
   IoPersonAddOutline, IoAlertCircleOutline,
 } from 'react-icons/io5';
-import { restSelect, restInsert } from '@home/services/supabaseRest';
+import { restSelect, restInsert, restUpsert } from '@home/services/supabaseRest';
 import { getMyActorInfo } from '@home/services/activityEvents';
 import { findExistingProfile, normalizeDni } from '@/src/features/admin/personas/import/applyRow';
 import { CYCLE_TYPE_LABELS } from '@/src/features/admin/personas/types';
@@ -23,7 +23,23 @@ interface PersonHit { id: string; first_name: string | null; last_name: string |
 interface CycleOption { id: string; name: string; type: string; start_date: string }
 type PayMode = 'total' | 'parcial' | 'nada';
 
-const EMPTY_PERSON = { first_name: '', last_name: '', dni: '', phone: '', email: '', birth_date: '', referred_by_name: '' };
+const EMPTY_PERSON = {
+  first_name: '', last_name: '', dni: '', phone: '', email: '', birth_date: '', referred_by_name: '',
+  gender: '', address_street: '', address_city: '', current_occupation: '', instagram: '',
+};
+// Lo mismo que pregunta el formulario de inscripción (Google Form / papel).
+const EMPTY_INTAKE = {
+  dream1: '', dream2: '', dream3: '', context: '', qualities: '', daily_routine: '', energy_leaks: '', life_history: '',
+};
+const EMPTY_HEALTH = {
+  chronic: '', treatment: 'ninguno', treatment_detail: '', consumption: '', medication: '', allergies: '',
+  emergency_contact_name: '', emergency_contact_phone: '',
+};
+const INTAKE_FIELDS: [keyof typeof EMPTY_INTAKE, string][] = [
+  ['dream1', 'Sueño 1: qué quiere y para qué'], ['dream2', 'Sueño 2'], ['dream3', 'Sueño 3'],
+  ['context', 'Contexto actual (con quién vive, qué le gusta)'], ['qualities', 'Cualidades que lo/la diferencian'],
+  ['daily_routine', 'Cómo es un día suyo'], ['energy_leaks', 'Fugas de energía'], ['life_history', 'Historia de vida / algo importante'],
+];
 const EMPTY_PROGRAM = { cycle_id: '', enrolled_by_name: '', channel: 'enrolador', agreed_amount: '', scholarship: 'none', deal_notes: '' };
 const today = () => new Date().toISOString().slice(0, 10);
 const EMPTY_PAYMENT = { mode: 'nada' as PayMode, amount: '', paid_at: today(), method: 'transfer', concept: 'inicial', notes: '' };
@@ -57,6 +73,8 @@ export default function CargarFichaClient() {
   const [hits, setHits] = useState<PersonHit[]>([]);
   const [selected, setSelected] = useState<PersonHit | null>(null);
   const [person, setPerson] = useState(EMPTY_PERSON);
+  const [intake, setIntake] = useState(EMPTY_INTAKE);
+  const [health, setHealth] = useState(EMPTY_HEALTH);
   const [program, setProgram] = useState(EMPTY_PROGRAM);
   const [payment, setPayment] = useState(EMPTY_PAYMENT);
   const [comment, setComment] = useState('');
@@ -89,7 +107,9 @@ export default function CargarFichaClient() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const setP = (k: keyof typeof EMPTY_PERSON) => (e: React.ChangeEvent<HTMLInputElement>) => setPerson(s => ({ ...s, [k]: e.target.value }));
+  const setP = (k: keyof typeof EMPTY_PERSON) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setPerson(s => ({ ...s, [k]: e.target.value }));
+  const setI = (k: keyof typeof EMPTY_INTAKE) => (e: React.ChangeEvent<HTMLTextAreaElement>) => setIntake(s => ({ ...s, [k]: e.target.value }));
+  const setH = (k: keyof typeof EMPTY_HEALTH) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setHealth(s => ({ ...s, [k]: e.target.value }));
   const setG = (k: keyof typeof EMPTY_PROGRAM) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setProgram(s => ({ ...s, [k]: k === 'agreed_amount' ? formatMoney(e.target.value) : e.target.value }));
   const setPay = (k: keyof typeof EMPTY_PAYMENT) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -101,7 +121,7 @@ export default function CargarFichaClient() {
   const pick = (p: PersonHit) => { setSelected(p); setDuplicate(null); setSearch(''); setHits([]); };
 
   const reset = () => {
-    setSelected(null); setPerson(EMPTY_PERSON); setProgram(EMPTY_PROGRAM);
+    setSelected(null); setPerson(EMPTY_PERSON); setIntake(EMPTY_INTAKE); setHealth(EMPTY_HEALTH); setProgram(EMPTY_PROGRAM);
     setPayment({ ...EMPTY_PAYMENT, paid_at: today() }); setComment(''); setDuplicate(null);
   };
 
@@ -129,10 +149,39 @@ export default function CargarFichaClient() {
           email: person.email.trim() || null,
           birth_date: person.birth_date || null,
           referred_by_name: person.referred_by_name.trim() || null,
+          gender: person.gender || null,
+          address_street: person.address_street.trim() || null,
+          address_city: person.address_city.trim() || null,
+          current_occupation: person.current_occupation.trim() || null,
+          instagram: person.instagram.trim() || null,
           role: 'student',
         }, { returning: 'representation' });
         if (!created?.id) throw new Error('No se pudo crear la persona.');
         profileId = created.id;
+      }
+
+      // Ficha de inscripción: sueños e historia, y salud. Sólo lo que se completó.
+      const intakeFilled = Object.fromEntries(Object.entries(intake).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v));
+      if (Object.keys(intakeFilled).length) {
+        await restUpsert('profile_intake', { profile_id: profileId, ...intakeFilled, updated_at: new Date().toISOString() }, { onConflict: 'profile_id' });
+      }
+      const treatmentLabel = health.treatment === 'psicologico' ? 'Tratamiento psicológico' : health.treatment === 'psiquiatrico' ? 'Tratamiento psiquiátrico' : '';
+      const details = [
+        health.chronic.trim() && `Enfermedad crónica: ${health.chronic.trim()}`,
+        treatmentLabel && `${treatmentLabel}${health.treatment_detail.trim() ? `: ${health.treatment_detail.trim()}` : ''}`,
+        health.consumption.trim() && `Consumos: ${health.consumption.trim()}`,
+      ].filter(Boolean).join('\n');
+      if (details || health.medication.trim() || health.allergies.trim() || health.emergency_contact_name.trim() || health.emergency_contact_phone.trim()) {
+        await restUpsert('medical_info', {
+          user_id: profileId,
+          under_treatment: health.treatment !== 'ninguno',
+          treatment_details: details || null,
+          medication: health.medication.trim() || null,
+          allergies: health.allergies.trim() || null,
+          emergency_contact_name: health.emergency_contact_name.trim() || null,
+          emergency_contact_phone: health.emergency_contact_phone.trim() || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
       }
 
       if (program.cycle_id) {
@@ -241,7 +290,19 @@ export default function CargarFichaClient() {
               <Field label="Teléfono"><input value={person.phone} onChange={setP('phone')} inputMode="tel" className={inputCls} /></Field>
               <Field label="Email"><input value={person.email} onChange={setP('email')} type="email" className={inputCls} /></Field>
               <Field label="Fecha de nacimiento"><input value={person.birth_date} onChange={setP('birth_date')} type="date" className={inputCls} /></Field>
-              <Field label="Quién la invitó a HOME" className="sm:col-span-2">
+              <Field label="Género">
+                <select value={person.gender} onChange={setP('gender')} className={inputCls}>
+                  <option value="">—</option>
+                  <option value="Femenino">Femenino</option>
+                  <option value="Masculino">Masculino</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </Field>
+              <Field label="Ocupación / profesión"><input value={person.current_occupation} onChange={setP('current_occupation')} className={inputCls} /></Field>
+              <Field label="Domicilio (calle y altura)"><input value={person.address_street} onChange={setP('address_street')} className={inputCls} /></Field>
+              <Field label="Localidad"><input value={person.address_city} onChange={setP('address_city')} className={inputCls} /></Field>
+              <Field label="Instagram"><input value={person.instagram} onChange={setP('instagram')} placeholder="@usuario" className={inputCls} /></Field>
+              <Field label="Quién la invitó a HOME">
                 <input value={person.referred_by_name} onChange={setP('referred_by_name')} className={inputCls} />
               </Field>
             </div>
@@ -257,8 +318,38 @@ export default function CargarFichaClient() {
         )}
       </Section>
 
-      {/* 2. Programa */}
-      <Section n={2} title="Programa" hint="Dejalo vacío si la ficha es sólo de datos personales.">
+      {/* 2. Ficha de inscripción */}
+      <Section n={2} title="Ficha de inscripción" hint="Lo que trae la ficha en papel o el formulario. Todo opcional: completá lo que haya.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {INTAKE_FIELDS.map(([k, label]) => (
+            <Field key={k} label={label}>
+              <textarea value={intake[k]} onChange={setI(k)} rows={2} className={inputCls} />
+            </Field>
+          ))}
+        </div>
+        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest pt-2">Salud (confidencial)</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Enfermedad crónica (cuál y desde cuándo)"><input value={health.chronic} onChange={setH('chronic')} placeholder="Vacío si no tiene" className={inputCls} /></Field>
+          <Field label="Tratamiento psicológico / psiquiátrico">
+            <select value={health.treatment} onChange={setH('treatment')} className={inputCls}>
+              <option value="ninguno">Ninguno</option>
+              <option value="psicologico">Psicológico</option>
+              <option value="psiquiatrico">Psiquiátrico</option>
+            </select>
+          </Field>
+          {health.treatment !== 'ninguno' && (
+            <Field label="Detalle del tratamiento" className="sm:col-span-2"><input value={health.treatment_detail} onChange={setH('treatment_detail')} className={inputCls} /></Field>
+          )}
+          <Field label="Consumos (alcohol, drogas, recuperación)"><input value={health.consumption} onChange={setH('consumption')} placeholder="Vacío si no" className={inputCls} /></Field>
+          <Field label="Medicación"><input value={health.medication} onChange={setH('medication')} className={inputCls} /></Field>
+          <Field label="Alergias"><input value={health.allergies} onChange={setH('allergies')} className={inputCls} /></Field>
+          <Field label="Contacto de emergencia (nombre)"><input value={health.emergency_contact_name} onChange={setH('emergency_contact_name')} className={inputCls} /></Field>
+          <Field label="Contacto de emergencia (teléfono)"><input value={health.emergency_contact_phone} onChange={setH('emergency_contact_phone')} inputMode="tel" className={inputCls} /></Field>
+        </div>
+      </Section>
+
+      {/* 3. Programa */}
+      <Section n={3} title="Programa" hint="Dejalo vacío si la ficha es sólo de datos personales.">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Camada" className="sm:col-span-2">
             <select value={program.cycle_id} onChange={setG('cycle_id')} className={inputCls}>
@@ -293,9 +384,9 @@ export default function CargarFichaClient() {
         </div>
       </Section>
 
-      {/* 3. Pago */}
+      {/* 4. Pago */}
       {program.cycle_id && (
-        <Section n={3} title="Pago" hint={cycle ? `De ${cycle.name}` : undefined}>
+        <Section n={4} title="Pago" hint={cycle ? `De ${cycle.name}` : undefined}>
           <div className="grid grid-cols-3 gap-2">
             {([['total', 'Pago total'], ['parcial', 'Pago parcial'], ['nada', 'No pagó']] as const).map(([mode, label]) => (
               <button
@@ -344,8 +435,8 @@ export default function CargarFichaClient() {
         </Section>
       )}
 
-      {/* 4. Comentario */}
-      <Section n={program.cycle_id ? 4 : 3} title="Comentario interno" hint="Queda en la ficha con la fecha de hoy, como una nota del proceso.">
+      {/* 5. Comentario */}
+      <Section n={program.cycle_id ? 5 : 4} title="Comentario interno" hint="Queda en la ficha con la fecha de hoy, como una nota del proceso.">
         <textarea value={comment} onChange={e => setComment(e.target.value)} rows={3} className={inputCls} />
       </Section>
 

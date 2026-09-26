@@ -11,6 +11,7 @@ import {
   IoPersonOutline,
   IoCloudUploadOutline,
   IoPersonAddOutline,
+  IoGitNetworkOutline,
   IoSearchOutline,
   IoCloseOutline,
 } from 'react-icons/io5';
@@ -134,6 +135,14 @@ export default function AdminPersonas({ role }: Props) {
           >
             <IoPersonAddOutline className="w-4 h-4" />
             Cargar ficha
+          </Link>
+
+          <Link
+            href="/admin/personas/seguimientos"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors flex-shrink-0 whitespace-nowrap"
+          >
+            <IoGitNetworkOutline className="w-4 h-4" />
+            Seguimientos
           </Link>
 
           <Link
