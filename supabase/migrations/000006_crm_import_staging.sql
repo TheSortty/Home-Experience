@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.import_batches (
     -- a otro archivo con el mismo formato sin repetir el paso de mapeo.
     column_mapping  JSONB NOT NULL DEFAULT '{}'::jsonb,
     status          TEXT NOT NULL DEFAULT 'staged',
-    created_at      TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', nwow()) NOT NULL
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now()) NOT NULL
 );
 
 DO $$
