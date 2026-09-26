@@ -3,26 +3,31 @@
 // Importador histórico del CRM (Etapa 2 del plan).
 //
 // Nada de lo que sube el staff toca profiles/enrollments directamente: primero
-// se parsea el CSV client-side, se mapean columnas → campos destino, y se
-// guarda crudo en import_staging_rows. Recién al tocar "Aplicar" se resuelve
-// contra profiles existentes (por email, luego DNI) y se escribe.
+// se lee el archivo (Excel o CSV) en el navegador, se elige la hoja, se mapean
+// columnas → campos destino, cada bloque de la hoja se asigna a una camada, y
+// todo se guarda crudo en import_staging_rows. Recién al tocar "Aplicar" se
+// resuelve contra profiles existentes y se escribe (ver import/applyRow.ts).
 //
 // Sigue el patrón ya establecido en esta sección (PersonasStudentsView,
 // AssignProgramModal): REST directo a PostgREST vía supabaseRest.ts, sin
 // server actions — el panel admin evita el cliente JS de Supabase por los
 // cuelgues documentados en ese archivo.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Papa from 'papaparse';
 import {
   IoArrowBackOutline, IoCloudUploadOutline, IoDocumentTextOutline,
-  IoCheckmarkCircle, IoAlertCircleOutline, IoArrowForwardOutline,
-  IoRefreshOutline, IoTrashOutline, IoCloseOutline, IoTimeOutline,
-  IoSearchOutline, IoPlayForwardOutline,
+  IoAlertCircleOutline, IoArrowForwardOutline,
+  IoTrashOutline, IoCloseOutline, IoTimeOutline,
+  IoSearchOutline, IoPlayForwardOutline, IoGridOutline,
 } from 'react-icons/io5';
 import { restSelect, restInsert, restBulkInsert, restUpdate } from '@home/services/supabaseRest';
-import { DESTINATION_FIELDS, guessDestinationField, fieldLabel, type DestinationField } from '@/src/features/admin/personas/import/importFields';
+import { DESTINATION_FIELDS, FIELD_GROUPS, guessDestinationField, type DestinationField } from '@/src/features/admin/personas/import/importFields';
+import { readXlsx, type XlsxSheet } from '@/src/features/admin/personas/import/readXlsx';
+import { sheetToTable, BLOCK_KEY, looksLikeProgram, guessCycleType, guessCycleNumber } from '@/src/features/admin/personas/import/sheetTable';
+import { applyStagingRow, findExistingProfile } from '@/src/features/admin/personas/import/applyRow';
+import { CYCLE_TYPE_LABELS } from '@/src/features/admin/personas/types';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -44,9 +49,17 @@ interface StagingRow {
   error_message: string | null;
 }
 
+interface Table {
+  label: string;
+  headers: string[];
+  rows: Record<string, string>[];
+  blocks: { name: string; count: number }[];
+}
+
 type Screen =
   | { kind: 'list' }
-  | { kind: 'map'; fileName: string; headers: string[]; rows: Record<string, string>[] }
+  | { kind: 'sheet'; fileName: string; sheets: XlsxSheet[] }
+  | { kind: 'map'; table: Table }
   | { kind: 'batch'; batchId: string };
 
 const CHUNK_SIZE = 300;
@@ -57,19 +70,22 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-function normalizeDni(v: string): string {
-  return v.replace(/\D/g, '');
-}
-
-/** CSV row (header → texto) + mapeo (header → campo destino) → objeto crudo con claves de campo destino. */
+/**
+ * Fila (encabezado → texto) + mapeo (encabezado → campo destino) → objeto crudo
+ * con claves de campo destino. Si varias columnas van al mismo campo (ej. las
+ * preguntas de salud), se juntan todas con su pregunta adelante.
+ */
 function buildRawRow(row: Record<string, string>, mapping: Record<string, DestinationField>): Record<string, string> {
+  const repeated = new Set(
+    Object.values(mapping).filter((d, i, all) => d !== 'ignore' && all.indexOf(d) !== i),
+  );
   const out: Record<string, string> = {};
   for (const [header, value] of Object.entries(row)) {
     const dest = mapping[header];
-    if (!dest || dest === 'ignore') continue;
     const trimmed = (value ?? '').trim();
-    if (!trimmed) continue;
-    out[dest] = trimmed;
+    if (!dest || dest === 'ignore' || !trimmed) continue;
+    const piece = repeated.has(dest) ? `${header}: ${trimmed}` : trimmed;
+    out[dest] = out[dest] ? `${out[dest]}\n${piece}` : piece;
   }
   return out;
 }
@@ -99,6 +115,16 @@ export default function ImportarClient() {
 
   const handleFilePicked = async (file: File) => {
     setLoadErr(null);
+    if (/\.xlsx$/i.test(file.name)) {
+      try {
+        const sheets = (await readXlsx(file)).filter(s => s.rows.length > 0);
+        if (sheets.length === 0) { setLoadErr('El Excel no tiene hojas con datos.'); return; }
+        setScreen({ kind: 'sheet', fileName: file.name, sheets });
+      } catch (e) {
+        setLoadErr(e instanceof Error ? e.message : 'No se pudo leer el Excel.');
+      }
+      return;
+    }
     Papa.parse<Record<string, string>>(file, {
       header: true,
       skipEmptyLines: true,
@@ -108,7 +134,8 @@ export default function ImportarClient() {
           setLoadErr('No se pudieron leer columnas en ese archivo. ¿Es un CSV válido?');
           return;
         }
-        setScreen({ kind: 'map', fileName: file.name, headers, rows: results.data });
+        const label = file.name.replace(/\.csv$/i, '');
+        setScreen({ kind: 'map', table: { label, headers, rows: results.data, blocks: [] } });
       },
       error: (err) => setLoadErr(`No se pudo leer el archivo: ${err.message}`),
     });
@@ -129,8 +156,8 @@ export default function ImportarClient() {
       <div>
         <h1 className="text-xl font-bold text-slate-900">Importar histórico</h1>
         <p className="text-xs text-slate-400 mt-0.5">
-          Subí un CSV, mapeá sus columnas y revisá los duplicados antes de aplicar. Nada se escribe en las fichas
-          de alumnos hasta que confirmás la aplicación de cada importación.
+          Subí un Excel o CSV, elegí la hoja, revisá qué va a cada lugar y confirmá. Nada se escribe en las fichas
+          hasta que tocás "Aplicar".
         </p>
       </div>
 
@@ -146,9 +173,9 @@ export default function ImportarClient() {
           <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-10 text-center space-y-3">
             <IoCloudUploadOutline size={32} className="mx-auto text-slate-300" />
             <div>
-              <p className="text-sm font-bold text-slate-700">Subí un archivo CSV</p>
+              <p className="text-sm font-bold text-slate-700">Subí un Excel (.xlsx) o CSV</p>
               <p className="text-xs text-slate-400 mt-1">
-                Excel exportado como CSV, planilla de Google Sheets descargada como CSV, lo que tengas.
+                Tal cual está: con títulos, varias hojas y bloques (Inicial, Avanzado, PL). Después elegís qué hoja cargar.
               </p>
             </div>
             <button
@@ -160,7 +187,7 @@ export default function ImportarClient() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv"
+              accept=".xlsx,.csv"
               className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFilePicked(f); e.target.value = ''; }}
             />
@@ -184,11 +211,18 @@ export default function ImportarClient() {
         </>
       )}
 
+      {screen.kind === 'sheet' && (
+        <SheetStep
+          fileName={screen.fileName}
+          sheets={screen.sheets}
+          onCancel={() => setScreen({ kind: 'list' })}
+          onPick={(table) => setScreen({ kind: 'map', table })}
+        />
+      )}
+
       {screen.kind === 'map' && (
         <MapStep
-          fileName={screen.fileName}
-          headers={screen.headers}
-          rows={screen.rows}
+          table={screen.table}
           onCancel={() => setScreen({ kind: 'list' })}
           onStaged={(batchId) => { loadBatches(); setScreen({ kind: 'batch', batchId }); }}
         />
@@ -232,37 +266,139 @@ function BatchRow({ batch, onOpen }: { batch: ImportBatch; onOpen: () => void })
   );
 }
 
-// ─── Step: mapeo de columnas ────────────────────────────────────────────────
+// ─── Step: elegir hoja del Excel ────────────────────────────────────────────
 
-function MapStep({
-  fileName, headers, rows, onCancel, onStaged,
+function SheetStep({
+  fileName, sheets, onCancel, onPick,
 }: {
   fileName: string;
-  headers: string[];
-  rows: Record<string, string>[];
+  sheets: XlsxSheet[];
+  onCancel: () => void;
+  onPick: (table: Table) => void;
+}) {
+  const tables = useMemo(() => sheets.map(s => ({ sheet: s, table: sheetToTable(s.name, s.rows) })), [sheets]);
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+      <div>
+        <p className="text-sm font-bold text-slate-900">{fileName}</p>
+        <p className="text-xs text-slate-400">¿Qué hoja querés cargar? Se carga una por vez; después podés volver por las otras.</p>
+      </div>
+      <div className="space-y-1.5">
+        {tables.map(({ sheet, table }) => (
+          <button
+            key={sheet.name}
+            disabled={table.rows.length === 0}
+            onClick={() => onPick({ label: `${fileName.replace(/\.xlsx$/i, '')} · ${sheet.name}`, ...table })}
+            className="w-full flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 hover:border-[#00A9CE]/40 hover:shadow-sm transition-all text-left disabled:opacity-40 disabled:hover:shadow-none"
+          >
+            <IoGridOutline size={16} className="text-slate-400 shrink-0" />
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-bold text-slate-700 truncate">{sheet.name}</span>
+              <span className="block text-xs text-slate-400 truncate">
+                {table.rows.length === 0
+                  ? 'No se encontró una fila de encabezados'
+                  : table.blocks.length > 1
+                    ? table.blocks.map(b => `${b.name} (${b.count})`).join(' · ')
+                    : `${table.rows.length} personas`}
+              </span>
+            </span>
+            <IoArrowForwardOutline size={14} className="text-slate-300 shrink-0" />
+          </button>
+        ))}
+      </div>
+      <button onClick={onCancel} className="text-sm font-bold text-slate-500 hover:text-slate-900">Cancelar</button>
+    </div>
+  );
+}
+
+// ─── Step: mapeo de columnas + camada de cada bloque ────────────────────────
+
+interface CycleOption { id: string; name: string; type: string }
+/** Para cada bloque: una camada existente, una nueva (nombre + tipo) o ninguna. */
+type BlockChoice = { mode: 'existing'; cycleId: string } | { mode: 'new'; name: string; type: string } | { mode: 'none' };
+
+const FOLLOW_UP_TARGETS = [
+  { value: 'avanzado', label: 'Avanzado' },
+  { value: 'pl', label: 'Plan Líder (PL)' },
+  { value: 'formacion', label: 'Formación' },
+];
+
+function initialMapping(headers: string[]): Record<string, DestinationField> {
+  const m: Record<string, DestinationField> = {};
+  for (const h of headers) m[h] = guessDestinationField(h);
+  // En una hoja de seguimiento (tiene "Encargada"/"En qué están"), "Estado" es
+  // el estado del seguimiento, no el del pago.
+  if (Object.values(m).some(d => d === 'follow_up_owner' || d === 'follow_up_notes')) {
+    for (const h of headers) if (m[h] === 'deal_status') m[h] = 'follow_up_status';
+  }
+  return m;
+}
+
+function proposeNewCycle(block: string, label: string): BlockChoice & { mode: 'new' } {
+  const type = guessCycleType(block);
+  const number = guessCycleNumber(block, label);
+  return { mode: 'new', type, name: `CRESER ${CYCLE_TYPE_LABELS[type]}${number ? ` ${number}` : ''}` };
+}
+
+function initialBlockChoice(block: string, label: string, cycles: CycleOption[]): BlockChoice {
+  if (!looksLikeProgram(block) && !looksLikeProgram(label)) return { mode: 'none' };
+  const proposal = proposeNewCycle(block, label);
+  const number = guessCycleNumber(block, label);
+  const match = number
+    ? cycles.find(c => c.type === proposal.type && new RegExp(`\\b${number}\\b`).test(c.name))
+    : undefined;
+  return match ? { mode: 'existing', cycleId: match.id } : proposal;
+}
+
+function MapStep({
+  table, onCancel, onStaged,
+}: {
+  table: Table;
   onCancel: () => void;
   onStaged: (batchId: string) => void;
 }) {
-  const [sourceLabel, setSourceLabel] = useState(fileName.replace(/\.csv$/i, ''));
-  const [mapping, setMapping] = useState<Record<string, DestinationField>>(() => {
-    const initial: Record<string, DestinationField> = {};
-    for (const h of headers) initial[h] = guessDestinationField(h);
-    return initial;
-  });
+  const { headers, rows, blocks } = table;
+  const [sourceLabel, setSourceLabel] = useState(table.label);
+  const [mapping, setMapping] = useState(() => initialMapping(headers));
+  const [cycles, setCycles] = useState<CycleOption[] | null>(null);
+  const [blockChoices, setBlockChoices] = useState<Record<string, BlockChoice>>({});
+  const [followUpTarget, setFollowUpTarget] = useState('pl');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
+  useEffect(() => {
+    if (blocks.length === 0) return;
+    restSelect<CycleOption>('cycles', { columns: 'id,name,type', filters: { is_deleted: 'eq.false' }, order: 'start_date.desc', limit: 500 })
+      .then(({ data }) => {
+        setCycles(data);
+        setBlockChoices(Object.fromEntries(blocks.map(b => [b.name, initialBlockChoice(b.name, table.label, data)])));
+      })
+      .catch(() => setCycles([]));
+  }, [blocks, table.label]);
+
   const mappedCount = Object.values(mapping).filter(v => v !== 'ignore').length;
+  const hasFollowUp = Object.values(mapping).some(d => d.startsWith('follow_up_'));
+
+  const blockRaw = (block: string | undefined): Record<string, string> => {
+    const choice = block ? blockChoices[block] : undefined;
+    if (!choice || choice.mode === 'none') return {};
+    if (choice.mode === 'existing') {
+      const c = cycles?.find(x => x.id === choice.cycleId);
+      return { cycle_id: choice.cycleId, program_name: c?.name ?? '', program_type: c?.type ?? '' };
+    }
+    return choice.name.trim() ? { program_name: choice.name.trim(), program_type: choice.type } : {};
+  };
 
   const handleStage = async () => {
     setErr(null);
-    if (mappedCount === 0) { setErr('Mapeá al menos una columna antes de continuar.'); return; }
+    if (mappedCount === 0) { setErr('Elegí a dónde va al menos una columna antes de continuar.'); return; }
     setSaving(true);
     try {
       const batch = await restInsert<{ id: string }>('import_batches', {
-        source_label: sourceLabel.trim() || fileName,
-        column_mapping: mapping,
+        source_label: sourceLabel.trim() || table.label,
+        column_mapping: { columns: mapping, blocks: blockChoices, follow_up_target: hasFollowUp ? followUpTarget : null },
         status: 'staged',
       }, { returning: 'representation' });
       if (!batch?.id) throw new Error('No se pudo crear el lote de importación.');
@@ -270,7 +406,11 @@ function MapStep({
       const stagingRows = rows.map((row, i) => ({
         batch_id: batch.id,
         row_number: i + 1,
-        raw: buildRawRow(row, mapping),
+        raw: {
+          ...buildRawRow(row, mapping),
+          ...blockRaw(row[BLOCK_KEY]),
+          ...(hasFollowUp ? { follow_up_target: followUpTarget } : {}),
+        },
         status: 'pending' as const,
       }));
 
@@ -290,44 +430,47 @@ function MapStep({
     }
   };
 
+  const selectCls = 'w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30';
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
       <div>
         <label className="block text-xs font-bold text-slate-600 mb-1.5">Nombre de esta importación</label>
         <input
           value={sourceLabel}
           onChange={e => setSourceLabel(e.target.value)}
-          placeholder="ej. Excel CRESER 2022"
+          placeholder="ej. Excel CRESER 54"
           className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30"
         />
       </div>
 
+      {/* 1. Columnas */}
       <div>
         <p className="text-xs font-bold text-slate-600 mb-2">
-          Mapeo de columnas <span className="font-normal text-slate-400">({rows.length} filas detectadas, {mappedCount} de {headers.length} columnas mapeadas)</span>
+          1. ¿Qué es cada columna? <span className="font-normal text-slate-400">({rows.length} personas, {mappedCount} de {headers.length} columnas se cargan)</span>
         </p>
         <div className="overflow-x-auto border border-slate-100 rounded-xl">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               <tr>
-                <th className="text-left px-3 py-2">Columna del CSV</th>
+                <th className="text-left px-3 py-2">Columna</th>
                 <th className="text-left px-3 py-2">Ejemplo</th>
-                <th className="text-left px-3 py-2">Campo destino</th>
+                <th className="text-left px-3 py-2">Se guarda como</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {headers.map(h => (
-                <tr key={h}>
-                  <td className="px-3 py-2 font-bold text-slate-700 whitespace-nowrap">{h}</td>
-                  <td className="px-3 py-2 text-slate-400 truncate max-w-[220px]">{rows[0]?.[h] || '—'}</td>
-                  <td className="px-3 py-2">
+                <tr key={h} className={mapping[h] === 'ignore' ? 'opacity-60' : ''}>
+                  <td className="px-3 py-2 font-bold text-slate-700 max-w-[260px] truncate" title={h}>{h}</td>
+                  <td className="px-3 py-2 text-slate-400 truncate max-w-[200px]">{rows.find(r => r[h])?.[h] || '—'}</td>
+                  <td className="px-3 py-2 min-w-[220px]">
                     <select
                       value={mapping[h]}
                       onChange={e => setMapping(prev => ({ ...prev, [h]: e.target.value as DestinationField }))}
-                      className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30"
+                      className={selectCls}
                     >
-                      <option value="ignore">— Ignorar —</option>
-                      {(['Persona', 'Inscripción'] as const).map(group => (
+                      <option value="ignore">— No cargar —</option>
+                      {FIELD_GROUPS.map(group => (
                         <optgroup key={group} label={group}>
                           {DESTINATION_FIELDS.filter(f => f.group === group).map(f => (
                             <option key={f.key} value={f.key}>{f.label}</option>
@@ -343,9 +486,79 @@ function MapStep({
         </div>
       </div>
 
+      {/* 2. Camadas */}
+      {blocks.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-slate-600 mb-2">
+            2. ¿A qué camada va cada grupo? <span className="font-normal text-slate-400">(los grupos salen de los títulos de la hoja)</span>
+          </p>
+          {cycles === null ? (
+            <p className="text-xs text-slate-400">Buscando camadas…</p>
+          ) : (
+            <div className="space-y-2">
+              {blocks.map(b => {
+                const choice = blockChoices[b.name] ?? { mode: 'none' };
+                const set = (c: BlockChoice) => setBlockChoices(prev => ({ ...prev, [b.name]: c }));
+                return (
+                  <div key={b.name} className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-2 items-start border border-slate-100 rounded-xl p-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-700">{b.name}</p>
+                      <p className="text-xs text-slate-400">{b.count} personas</p>
+                    </div>
+                    <div className="space-y-2">
+                      <select
+                        value={choice.mode === 'existing' ? choice.cycleId : choice.mode}
+                        onChange={e => {
+                          const v = e.target.value;
+                          if (v === 'none') set({ mode: 'none' });
+                          else if (v === 'new') set(proposeNewCycle(b.name, table.label));
+                          else set({ mode: 'existing', cycleId: v });
+                        }}
+                        className={selectCls}
+                      >
+                        <option value="none">Sin camada (sólo cargar la persona)</option>
+                        <option value="new">+ Crear camada nueva</option>
+                        <optgroup label="Camadas que ya existen">
+                          {cycles.map(c => (
+                            <option key={c.id} value={c.id}>{c.name} · {CYCLE_TYPE_LABELS[c.type] ?? c.type}</option>
+                          ))}
+                        </optgroup>
+                      </select>
+                      {choice.mode === 'new' && (
+                        <div className="flex gap-2">
+                          <input
+                            value={choice.name}
+                            onChange={e => set({ ...choice, name: e.target.value })}
+                            placeholder="Nombre de la camada"
+                            className="flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30"
+                          />
+                          <select value={choice.type} onChange={e => set({ ...choice, type: e.target.value })} className={`${selectCls} w-40`}>
+                            {Object.entries(CYCLE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Seguimiento */}
+      {hasFollowUp && (
+        <div>
+          <p className="text-xs font-bold text-slate-600 mb-2">3. Estos seguimientos son para ofrecerles…</p>
+          <select value={followUpTarget} onChange={e => setFollowUpTarget(e.target.value)} className={`${selectCls} max-w-xs`}>
+            {FOLLOW_UP_TARGETS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+      )}
+
       {err && <p className="text-sm text-red-600 flex items-center gap-1.5"><IoAlertCircleOutline size={15} /> {err}</p>}
       {progress && (
-        <p className="text-xs text-slate-400">Cargando a staging… {progress.done}/{progress.total}</p>
+        <p className="text-xs text-slate-400">Preparando… {progress.done}/{progress.total}</p>
       )}
 
       <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
@@ -354,7 +567,7 @@ function MapStep({
           disabled={saving}
           className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-700 text-white text-sm font-bold rounded-xl disabled:opacity-50 transition-colors"
         >
-          <IoArrowForwardOutline size={15} /> {saving ? 'Cargando…' : `Cargar ${rows.length} filas a staging`}
+          <IoArrowForwardOutline size={15} /> {saving ? 'Preparando…' : `Revisar ${rows.length} personas`}
         </button>
         <button
           onClick={onCancel}
@@ -371,7 +584,7 @@ function MapStep({
 // ─── Step: revisión + resolución + aplicación de un batch ──────────────────
 
 const ROW_STATUS_LABEL: Record<StagingRow['status'], string> = {
-  pending: 'Nuevo', matched: 'Existente', created: 'Nuevo', skipped: 'Descartada', error: 'Error', applied: 'Aplicada',
+  pending: 'Nueva', matched: 'Ya existe', created: 'Nueva', skipped: 'Descartada', error: 'Error', applied: 'Cargada',
 };
 const ROW_STATUS_COLOR: Record<StagingRow['status'], string> = {
   pending: 'bg-violet-100 text-violet-700', matched: 'bg-[#00A9CE]/10 text-[#00A9CE]', created: 'bg-violet-100 text-violet-700',
@@ -409,7 +622,7 @@ function BatchStep({ batchId, onBack }: { batchId: string; onBack: () => void })
     setErr(null);
     const pending = rows.filter(r => r.status === 'pending');
     if (pending.length === 0) return;
-    setBusy({ label: 'Buscando coincidencias', done: 0, total: pending.length });
+    setBusy({ label: 'Buscando si ya existen', done: 0, total: pending.length });
     await restUpdate('import_batches', { status: 'resolving' }, { id: `eq.${batchId}` });
 
     const CONCURRENCY = 8;
@@ -417,17 +630,7 @@ function BatchStep({ batchId, onBack }: { batchId: string; onBack: () => void })
     for (const group of chunk(pending, CONCURRENCY)) {
       await Promise.all(group.map(async (row) => {
         try {
-          let matchId: string | null = null;
-          const email = row.raw.email;
-          const dni = row.raw.dni ? normalizeDni(row.raw.dni) : '';
-          if (email) {
-            const { data } = await restSelect<{ id: string }>('profiles', { columns: 'id', filters: { email: `ilike.${email}` }, limit: 1 });
-            matchId = data[0]?.id ?? null;
-          }
-          if (!matchId && dni) {
-            const { data } = await restSelect<{ id: string }>('profiles', { columns: 'id', filters: { dni: `eq.${dni}` }, limit: 1 });
-            matchId = data[0]?.id ?? null;
-          }
+          const matchId = await findExistingProfile(row.raw);
           if (matchId) {
             await restUpdate('import_staging_rows', { matched_profile_id: matchId, status: 'matched' }, { id: `eq.${row.id}` });
           }
@@ -456,11 +659,13 @@ function BatchStep({ batchId, onBack }: { batchId: string; onBack: () => void })
     setErr(null);
     const toApply = rows.filter(r => r.status === 'pending' || r.status === 'matched');
     if (toApply.length === 0) return;
-    setBusy({ label: 'Aplicando', done: 0, total: toApply.length });
+    setBusy({ label: 'Cargando', done: 0, total: toApply.length });
 
+    // De a una y en orden: si la misma persona aparece en dos bloques, la
+    // segunda fila encuentra el perfil que creó la primera.
     for (const row of toApply) {
       try {
-        await applyStagingRow(row);
+        await applyStagingRow(row.id, row.matched_profile_id, row.raw);
       } catch (e) {
         await restUpdate('import_staging_rows', {
           status: 'error',
@@ -482,7 +687,7 @@ function BatchStep({ batchId, onBack }: { batchId: string; onBack: () => void })
   };
 
   const handleDiscard = async () => {
-    if (!confirm('¿Descartar esta importación? Las filas quedan guardadas (nada se aplicó todavía) pero el lote sale de la lista activa.')) return;
+    if (!confirm('¿Descartar esta importación? Nada se cargó todavía; el lote sale de la lista activa.')) return;
     await restUpdate('import_batches', { status: 'discarded' }, { id: `eq.${batchId}` });
     onBack();
   };
@@ -506,6 +711,12 @@ function BatchStep({ batchId, onBack }: { batchId: string; onBack: () => void })
           <IoArrowBackOutline size={13} /> Volver al listado
         </button>
       </div>
+
+      <p className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3">
+        Primero tocá <b>Buscar si ya existen</b>: se compara por email, DNI o nombre y apellido. Las que figuran como
+        "Ya existe" se suman a la ficha que ya está; las "Nuevas" crean una ficha. Si algo no corresponde, descartá esa
+        fila. Después tocá <b>Cargar</b>.
+      </p>
 
       {/* Status chips */}
       <div className="flex flex-wrap gap-2">
@@ -531,14 +742,14 @@ function BatchStep({ batchId, onBack }: { batchId: string; onBack: () => void })
           disabled={!!busy || (counts.pending ?? 0) === 0}
           className="flex items-center gap-1.5 px-3.5 py-2 bg-[#00A9CE] hover:bg-blue-600 text-white text-xs font-bold rounded-lg disabled:opacity-40 transition-colors"
         >
-          <IoSearchOutline size={13} /> Resolver duplicados
+          <IoSearchOutline size={13} /> Buscar si ya existen
         </button>
         <button
           onClick={handleApply}
           disabled={!!busy || ((counts.pending ?? 0) + (counts.matched ?? 0)) === 0}
           className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg disabled:opacity-40 transition-colors"
         >
-          <IoPlayForwardOutline size={13} /> Aplicar pendientes/existentes
+          <IoPlayForwardOutline size={13} /> Cargar
         </button>
         <button
           onClick={handleDiscard}
@@ -557,7 +768,8 @@ function BatchStep({ batchId, onBack }: { batchId: string; onBack: () => void })
               <th className="text-left px-3 py-2">#</th>
               <th className="text-left px-3 py-2">Nombre</th>
               <th className="text-left px-3 py-2">Email / DNI</th>
-              <th className="text-left px-3 py-2">Programa</th>
+              <th className="text-left px-3 py-2">Camada</th>
+              <th className="text-left px-3 py-2">Pago</th>
               <th className="text-left px-3 py-2">Estado</th>
               <th className="text-left px-3 py-2"></th>
             </tr>
@@ -573,6 +785,9 @@ function BatchStep({ batchId, onBack }: { batchId: string; onBack: () => void })
                   {row.raw.email || row.raw.dni || '—'}
                 </td>
                 <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{row.raw.program_name || '—'}</td>
+                <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                  {[row.raw.payment_amount, row.raw.deal_status].filter(Boolean).join(' · ') || '—'}
+                </td>
                 <td className="px-3 py-2">
                   <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${ROW_STATUS_COLOR[row.status]}`}>
                     {ROW_STATUS_LABEL[row.status]}
@@ -598,77 +813,4 @@ function BatchStep({ batchId, onBack }: { batchId: string; onBack: () => void })
       </div>
     </div>
   );
-}
-
-// ─── Aplicar una fila: crea/actualiza profile + cycle + enrollment ─────────
-
-async function applyStagingRow(row: StagingRow): Promise<void> {
-  const raw = row.raw;
-  let profileId = row.matched_profile_id;
-
-  if (!profileId) {
-    const created = await restInsert<{ id: string }>('profiles', {
-      first_name: raw.first_name ?? null,
-      last_name: raw.last_name ?? null,
-      email: raw.email ?? null,
-      phone: raw.phone ?? null,
-      dni: raw.dni ? normalizeDni(raw.dni) : null,
-      birth_date: raw.birth_date || null,
-      gender: raw.gender || null,
-      address_street: raw.address_street || null,
-      address_city: raw.address_city || null,
-      address_province: raw.address_province || null,
-      current_occupation: raw.current_occupation || null,
-      referred_by_name: raw.referred_by_name || null,
-      instagram: raw.instagram || null,
-      bio: raw.bio || null,
-      role: 'student',
-    }, { returning: 'representation' });
-    if (!created?.id) throw new Error('No se pudo crear el perfil');
-    profileId = created.id;
-  }
-
-  let cycleId: string | null = null;
-  if (raw.program_name) {
-    const { data: existing } = await restSelect<{ id: string }>('cycles', {
-      columns: 'id', filters: { name: `ilike.${raw.program_name}` }, limit: 1,
-    });
-    if (existing[0]) {
-      cycleId = existing[0].id;
-    } else {
-      const fallbackDate = raw.enrolled_at || new Date().toISOString().slice(0, 10);
-      const createdCycle = await restInsert<{ id: string }>('cycles', {
-        name: raw.program_name,
-        type: raw.program_type || 'initial',
-        start_date: fallbackDate,
-        end_date: raw.completed_at || fallbackDate,
-        status: 'finished',
-      }, { returning: 'representation' });
-      cycleId = createdCycle?.id ?? null;
-    }
-  }
-
-  const enrollmentPayload: Record<string, unknown> = {
-    user_id: profileId,
-    cycle_id: cycleId,
-    status: raw.enrollment_status || 'completed',
-    payment_status: raw.payment_status || 'unpaid',
-  };
-  if (raw.enrolled_at) enrollmentPayload.enrolled_at = raw.enrolled_at;
-  if (raw.completed_at) enrollmentPayload.completed_at = raw.completed_at;
-
-  const enrollment = await restInsert<{ id: string }>('enrollments', enrollmentPayload, { returning: 'representation' });
-
-  if (raw.enrollment_notes && enrollment?.id) {
-    await restInsert('enrollment_notes', {
-      enrollment_id: enrollment.id,
-      content: raw.enrollment_notes,
-    }, { returning: 'minimal' });
-  }
-
-  await restUpdate('import_staging_rows', {
-    status: 'applied',
-    matched_profile_id: profileId,
-    created_profile_id: row.matched_profile_id ? null : profileId,
-  }, { id: `eq.${row.id}` });
 }
