@@ -223,7 +223,7 @@ const AdminCalendar: React.FC = () => {
 
         // Fetch enrollments with user data (PostgREST embedded resource)
         const { data: enrollments } = await restSelect<any>('enrollments', {
-            columns: 'id,payment_status,user:profiles(id,first_name,last_name,email,phone)',
+            columns: 'id,payment_status,user:profiles!enrollments_user_id_fkey(id,first_name,last_name,email,phone)',
             filters: { cycle_id: `eq.${cycle.id}` },
         });
 

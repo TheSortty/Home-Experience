@@ -79,7 +79,7 @@ export default async function ActividadPage({
     if (cycleIds.length > 0) {
       const { data: enrollments } = await supabase
         .from('enrollments')
-        .select('id, user_id, profiles(id, first_name, last_name, email)')
+        .select('id, user_id, profiles:profiles!enrollments_user_id_fkey(id, first_name, last_name, email)')
         .in('cycle_id', cycleIds)
         .in('status', ['active', 'completed']);
 

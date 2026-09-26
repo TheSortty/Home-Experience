@@ -117,7 +117,7 @@ export default function PersonasStudentsView({ scope, viewMode, searchTerm, role
       const { data: rows } = await restSelect<any>('profiles', {
         columns:
           'id,user_id,role,first_name,last_name,email,phone,avatar_url,is_deleted,' +
-          'enrollments(id,status,payment_status,cycle:cycles(id,name,type,course_id,start_date,course:courses(id,title)),attendance(id,status),payments(amount,method,status,paid_at))',
+          'enrollments:enrollments!enrollments_user_id_fkey(id,status,payment_status,cycle:cycles(id,name,type,course_id,start_date,course:courses(id,title)),attendance(id,status),payments(amount,method,status,paid_at))',
         filters: {
           role: 'in.(student,admin,sysadmin,super_admin)',
           is_deleted: `eq.${trashMode === 'trash'}`,
