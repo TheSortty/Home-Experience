@@ -41,8 +41,8 @@ Error: Cannot perform I/O on behalf of a different request (I/O type: Refcounted
 
 **Replicar el patrón `supabaseRest.ts` en los Server Components del campus.**
 
-El panel de administración ya usa `supabaseRest.ts` (fetch REST puro, sin el cliente
-JS de Supabase) para todas sus queries de datos. Esto elimina completamente los
+El panel de administración ya usa `supabaseRest.ts` (fetch REST puro desde el
+navegador, sin el cliente JS de Supabase) para sus queries de datos. Esto elimina completamente los
 `AbortController` + `setTimeout` del cliente JS.
 
 #### Archivos a migrar
@@ -81,8 +81,14 @@ const { data } = await restRpc<string>('resolve_role', { uid });
 
 #### Notas
 
-- `supabaseRest.ts` usa el **service role key** del lado del servidor (env var
-  `SUPABASE_SERVICE_ROLE_KEY`). Verificar que esté seteada en Cloudflare Pages.
+- **CORRECCIÓN (2026-09-26): la guía de arriba no se puede aplicar tal cual.**
+  `supabaseRest.ts` NO usa el service role: usa la anon key + el JWT del usuario
+  leído de `document.cookie`, así que respeta RLS pero **solo funciona en el
+  navegador** (en un Server Component `document` no existe). Para migrar los
+  Server Components hay que escribir una variante server-side que lea el token de
+  `cookies()` de `next/headers`, y **nunca** usar el service role en páginas de
+  alumnos (saltearía RLS). El service role queda solo para server actions y rutas
+  de API de staff (`calendarSync.ts`, `create-student`, pagos).
 - Las queries con joins (p. ej. `courses(title)`) son compatibles con el cliente
   REST de Supabase — usar la notación `columns: 'id, course:courses(title)'`.
 - `getStudentProgress` y `resolveRole` necesitan refactors internos propios;
