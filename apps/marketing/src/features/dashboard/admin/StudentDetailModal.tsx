@@ -33,10 +33,11 @@ interface ExtendedProfileFields {
     address_province: string | null;
     current_occupation: string | null;
     referred_by_name: string | null;
+    instagram: string | null;
 }
 const EMPTY_EXTENDED_PROFILE: ExtendedProfileFields = {
     dni: null, birth_date: null, gender: null, address_street: null,
-    address_city: null, address_province: null, current_occupation: null, referred_by_name: null,
+    address_city: null, address_province: null, current_occupation: null, referred_by_name: null, instagram: null,
 };
 
 /** Entrevista de admisión (`profile_intake`) — vive en Propósito & Sueños, ya no se duplica con formData. */
@@ -57,7 +58,7 @@ const EMPTY_INTAKE: IntakeFields = {
 };
 
 interface ProfileTag { id: string; label: string; color: string }
-interface ProfileNote { id: string; body: string; created_at: string }
+interface ProfileNote { id: string; body: string; created_at: string; author: { first_name: string | null; last_name: string | null; role: string | null } | null }
 
 interface DetailSection {
     id: string;
@@ -647,13 +648,20 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         const key = `${student.id}:${detailTab}`;
         if (loadedTabsRef.current.has(key)) return;
 
-        if (detailTab === 'PERSONAL') { fetchExtendedProfile(student.id); fetchTags(student.id); fetchProfileNotes(student.id); }
+        if (detailTab === 'PERSONAL') fetchTags(student.id);
         else if (detailTab === 'MOTIVACIÓN') fetchIntake(student.id);
         else if (detailTab === 'PROGRESO') { fetchLmsProgress(student.id); fetchCourseAccess(student.id); }
         else return;
 
         loadedTabsRef.current.add(key);
     }, [detailTab, student.id]);
+
+    // Datos del dossier (identidad, programas y comentarios): siempre visibles en el
+    // header, no atados a ninguna pestaña — se traen una sola vez por alumno.
+    useEffect(() => {
+        fetchExtendedProfile(student.id);
+        fetchProfileNotes(student.id);
+    }, [student.id]);
 
     // Seguimiento / Carta / Planilla Magna viven dentro del historial del programa Plan Líder,
     // no como pestañas propias — se traen cuando ese programa está seleccionado.
@@ -674,7 +682,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         setIsLoadingExtended(true);
         try {
             const { data } = await restSelect<ExtendedProfileFields>('profiles', {
-                columns: 'dni,birth_date,gender,address_street,address_city,address_province,current_occupation,referred_by_name',
+                columns: 'dni,birth_date,gender,address_street,address_city,address_province,current_occupation,referred_by_name,instagram',
                 filters: { id: `eq.${profileId}` }, limit: 1,
             });
             if (data[0]) setExtendedProfile(data[0]);
@@ -697,6 +705,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                 address_province: extendedProfile.address_province?.trim() || null,
                 current_occupation: extendedProfile.current_occupation?.trim() || null,
                 referred_by_name: extendedProfile.referred_by_name?.trim() || null,
+                instagram: extendedProfile.instagram?.trim() || null,
             }, { id: `eq.${student.id}` });
             toast.success('Datos guardados');
         } catch (err: any) {
@@ -785,7 +794,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         setIsLoadingProfileNotes(true);
         try {
             const { data } = await restSelect<ProfileNote>('profile_notes', {
-                columns: 'id,body,created_at', filters: { profile_id: `eq.${profileId}` }, order: 'created_at.desc', limit: 200,
+                columns: 'id,body,created_at,author:profiles!profile_notes_author_profile_id_fkey(first_name,last_name,role)', filters: { profile_id: `eq.${profileId}` }, order: 'created_at.desc', limit: 200,
             });
             setProfileNotes(data);
         } catch (err) {
@@ -1028,6 +1037,16 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         ? latestProgram.paymentInfo.status
         : (latestProgram ? 'Sin registro' : '—');
 
+    // Recorrido por programa: verde lo que completó, celeste lo que está cursando.
+    const PROGRAM_PILL_STYLES: Record<ProgramHistoryItem['status'], string> = {
+        GRADUATED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        ACTIVE: 'bg-[#00A9CE]/10 text-[#00A9CE] border-[#00A9CE]/30',
+        CONFLICT: 'bg-rose-50 text-rose-700 border-rose-200',
+        DROPPED: 'bg-slate-50 text-slate-400 border-slate-200 line-through',
+    };
+    const roleLabel = (role: string | null | undefined) =>
+        role === 'coach' ? 'Coach' : role && role !== 'student' ? 'Staff' : null;
+
     return createPortal(
         <div className="full-screen-modal-overlay" onClick={onClose}>
             <div className="formal-modal max-w-5xl w-full p-0 flex flex-col h-[85vh] animate-scale-in shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -1054,9 +1073,31 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                             </div>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
                                 <p className="text-xs font-bold text-blue-600 uppercase tracking-[0.15em] truncate">{student.email}</p>
-                                <span className="hidden sm:block w-1 h-1 bg-slate-200 rounded-full"></span>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{latestProgram?.cycleName || 'Sin programa asignado'}</p>
+                                {student.phone && <>
+                                    <span className="hidden sm:block w-1 h-1 bg-slate-200 rounded-full"></span>
+                                    <p className="text-xs font-bold text-slate-500">{student.phone}</p>
+                                </>}
+                                {extendedProfile.instagram && <>
+                                    <span className="hidden sm:block w-1 h-1 bg-slate-200 rounded-full"></span>
+                                    <p className="text-xs font-bold text-slate-500">
+                                        {extendedProfile.instagram.startsWith('@') ? extendedProfile.instagram : `@${extendedProfile.instagram}`}
+                                    </p>
+                                </>}
                             </div>
+
+                            {/* Recorrido: qué programas hizo (verde) y cuál está cursando (celeste) — a simple vista, sin entrar a Programas. */}
+                            {student.programHistory && student.programHistory.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                                    {student.programHistory.map(p => (
+                                        <span
+                                            key={p.id}
+                                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${PROGRAM_PILL_STYLES[p.status]}`}
+                                        >
+                                            {p.status === 'GRADUATED' && '✓ '}{p.cycleName}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
 
                             {/* Los tres datos que antes había que ir a buscar tab por tab.
                                 Acá, en línea: ocupaban una banda entera para tres valores cortos. */}
@@ -1081,6 +1122,50 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                         >
                             ✕
                         </button>
+                    </div>
+
+                    {/* Comentarios — coach e interno en un mismo hilo, distinguidos por quién lo escribió,
+                        siempre a la vista (antes había que entrar a la pestaña Personal). */}
+                    <div className="px-4 sm:px-8 pb-5 sm:pb-6 relative z-10">
+                        <div className="flex items-start gap-2">
+                            <textarea
+                                value={newProfileNote}
+                                onChange={e => setNewProfileNote(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddProfileNote(); } }}
+                                placeholder="Agregar un comentario…"
+                                rows={1}
+                                className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30 focus:bg-white resize-none"
+                            />
+                            <button
+                                onClick={handleAddProfileNote}
+                                disabled={isSavingProfileNote || !newProfileNote.trim()}
+                                className="shrink-0 px-4 py-2 bg-slate-900 hover:bg-slate-700 text-white text-xs font-bold rounded-lg disabled:opacity-50"
+                            >
+                                {isSavingProfileNote ? '…' : 'Agregar'}
+                            </button>
+                        </div>
+                        {profileNotes.length > 0 && (
+                            <div className="flex flex-col gap-1.5 mt-2.5 max-h-24 overflow-y-auto">
+                                {profileNotes.slice(0, 5).map(note => {
+                                    const badge = roleLabel(note.author?.role);
+                                    const authorName = note.author ? [note.author.first_name, note.author.last_name].filter(Boolean).join(' ') : null;
+                                    return (
+                                        <p key={note.id} className="text-xs text-slate-600 leading-relaxed">
+                                            {badge && (
+                                                <span className={`inline-block mr-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${badge === 'Coach' ? 'bg-violet-100 text-violet-700' : 'bg-slate-200 text-slate-600'}`}>
+                                                    {badge}
+                                                </span>
+                                            )}
+                                            <span className="text-slate-400">
+                                                {new Date(note.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                                                {authorName ? ` · ${authorName}: ` : ': '}
+                                            </span>
+                                            {note.body}
+                                        </p>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                 </div>
@@ -1178,6 +1263,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                 <ExtendedField label="Ciudad" value={extendedProfile.address_city} onChange={v => setExtendedProfile(p => ({ ...p, address_city: v }))} />
                                                 <ExtendedField label="Provincia" value={extendedProfile.address_province} onChange={v => setExtendedProfile(p => ({ ...p, address_province: v }))} />
                                                 <ExtendedField label="Recomendado por" value={extendedProfile.referred_by_name} onChange={v => setExtendedProfile(p => ({ ...p, referred_by_name: v }))} />
+                                                <ExtendedField label="Instagram" value={extendedProfile.instagram} onChange={v => setExtendedProfile(p => ({ ...p, instagram: v }))} />
                                             </div>
                                             <button
                                                 onClick={handleSaveExtendedProfile}
@@ -1267,14 +1353,24 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                             <p className="text-xs text-slate-400 italic">Sin notas todavía.</p>
                                         ) : (
                                             <div className="space-y-2">
-                                                {profileNotes.map(note => (
-                                                    <div key={note.id} className="bg-slate-50 border border-slate-100 rounded-lg px-4 py-2.5">
-                                                        <p className="text-[10px] text-slate-400 mb-1">
-                                                            {new Date(note.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                        </p>
-                                                        <p className="text-sm text-slate-700 whitespace-pre-line">{note.body}</p>
-                                                    </div>
-                                                ))}
+                                                {profileNotes.map(note => {
+                                                    const badge = roleLabel(note.author?.role);
+                                                    const authorName = note.author ? [note.author.first_name, note.author.last_name].filter(Boolean).join(' ') : null;
+                                                    return (
+                                                        <div key={note.id} className="bg-slate-50 border border-slate-100 rounded-lg px-4 py-2.5">
+                                                            <p className="text-[10px] text-slate-400 mb-1 flex items-center gap-1.5">
+                                                                {badge && (
+                                                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${badge === 'Coach' ? 'bg-violet-100 text-violet-700' : 'bg-slate-200 text-slate-600'}`}>
+                                                                        {badge}
+                                                                    </span>
+                                                                )}
+                                                                {new Date(note.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                                {authorName && ` · ${authorName}`}
+                                                            </p>
+                                                            <p className="text-sm text-slate-700 whitespace-pre-line">{note.body}</p>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                     </div>
