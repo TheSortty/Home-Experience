@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@home/services/supabase/server';
 import { serviceClient } from '@home/services/calendarSync';
 import { createPreference } from '@home/services/mercadoPago';
-import { PAYMENT_ITEMS, isPaymentItemCode, parsePrice } from '@home/services/pricing';
+import { PAYMENT_ITEMS, isPaymentItemCode, parsePrice, resolveInstallments } from '@home/services/pricing';
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -142,20 +142,4 @@ export async function POST(request: Request) {
       .eq('id', payment.id);
     return NextResponse.json({ error: 'No se pudo iniciar el pago' }, { status: 502 });
   }
-}
-
-/**
- * Cuotas a ofrecer. Vencida la promo vuelve a 1 sola, sin que nadie tenga que
- * acordarse de desactivarla el 1 de noviembre.
- */
-function resolveInstallments(rawCount: string | null, rawUntil: string | null): number {
-  const count = Number(rawCount);
-  if (!Number.isFinite(count) || count < 1) return 1;
-
-  if (rawUntil) {
-    const until = new Date(`${rawUntil}T23:59:59-03:00`);
-    if (!Number.isNaN(until.getTime()) && Date.now() > until.getTime()) return 1;
-  }
-
-  return Math.min(Math.floor(count), 24);
 }

@@ -437,6 +437,65 @@ Si algo falla, la vuelta trae el motivo en el query param:
 
 ---
 
+## Mercado Pago (Checkout Pro)
+
+El pago online de la landing (`PaymentOptions.tsx`, disparado al terminar el
+formulario de inscripción) usa Checkout Pro por redirección: `/api/pagos/checkout`
+arma la preferencia y manda al comprador a Mercado Pago; `/api/pagos/webhook`
+recibe el aviso de pago aprobado. Ver `SPEC-mercadopago.md` en la raíz para el
+detalle completo (qué está hecho, qué falta, decisiones).
+
+Sólo lo usa **marketing** — campus no cobra nada.
+
+### 1. Credenciales
+
+Desde el [panel de desarrolladores](https://www.mercadopago.com.ar/developers/panel)
+de la cuenta de Mercado Pago de HOME (no una personal — la aplicación queda
+atada a la cuenta que la crea), Checkout Pro → Credenciales:
+
+- **Access Token** (arranca con `APP_USR-...` en producción, `TEST-...` en
+  prueba) → `MP_ACCESS_TOKEN`.
+- La **Public Key** no la usa este código (sólo haría falta para un checkout
+  embebido con el SDK de JS, que no es lo que hay acá).
+
+Primero con las credenciales de **prueba**, recién después de un pago de
+punta a punta sin problemas se pasa a las de producción.
+
+### 2. Webhook
+
+Misma aplicación → Webhooks/Notificaciones:
+
+- URL: `https://siendohome.com/api/pagos/webhook`
+- Evento: sólo **Pagos** (`payment`)
+- Al guardar, Mercado Pago genera una clave secreta → `MP_WEBHOOK_SECRET`.
+  Sin ella el webhook rechaza todo (401): la firma se valida siempre, no es
+  opcional.
+
+### 3. Variables
+
+Sólo en `apps/marketing` (local: `.env.local`; producción:
+`npx wrangler secret put MP_ACCESS_TOKEN --cwd apps/marketing`, lo mismo para
+`MP_WEBHOOK_SECRET`):
+
+```env
+MP_ACCESS_TOKEN=TEST-...
+MP_WEBHOOK_SECRET=...
+```
+
+Sin `MP_ACCESS_TOKEN`, `/api/pagos/checkout` devuelve 503 ("El pago online
+no está configurado") en vez de romper — el resto del sitio sigue andando.
+
+### 4. Precios y promo de cuotas
+
+Se editan en el admin, **Configuración Web** → categoría *pricing*: los
+`site_settings` `price_initial`, `price_advanced`, `price_leadership`,
+`price_combo_1_cash`, `price_combo_2_cash`, más `promo_installments` (cuántas
+cuotas sin interés; `1` = sin promo) y `promo_installments_until`
+(`AAAA-MM-DD`; vencida, el cartel se apaga solo). El monto nunca viaja desde
+el navegador: `/api/pagos/checkout` lo lee de acá en el servidor.
+
+---
+
 ## Variables de entorno
 
 | Variable | Requerida | Descripción |
@@ -452,6 +511,8 @@ Si algo falla, la vuelta trae el motivo en el query param:
 | `GOOGLE_OAUTH_CLIENT_SECRET` | No | Idem. Secreto: nunca en `wrangler.jsonc` ni en `NEXT_PUBLIC_*` |
 | `GOOGLE_PLACES_API_KEY` | No | Clave server-side para el proxy de reseñas — sólo marketing |
 | `NEXT_PUBLIC_GOOGLE_PLACE_ID` | No | Place ID del negocio en Google Maps — sólo marketing |
+| `MP_ACCESS_TOKEN` | No | Access token de Mercado Pago (Checkout Pro) — ver [sección](#mercado-pago-checkout-pro). Sólo marketing |
+| `MP_WEBHOOK_SECRET` | No | Firma las notificaciones de pago. Idem. Sólo marketing |
 
 > **Nunca** en `NEXT_PUBLIC_*`: la `service_role` key y el client secret de OAuth. Todo lo que lleve ese prefijo termina en el bundle del navegador.
 

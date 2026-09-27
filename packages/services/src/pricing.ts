@@ -59,6 +59,24 @@ export function isPaymentItemCode(value: unknown): value is PaymentItemCode {
 }
 
 /**
+ * Cuotas a ofrecer según la promo cargada en site_settings. Vencida la fecha,
+ * vuelve a 1 sola sin que nadie tenga que acordarse de desactivarla a mano.
+ * La usan tanto /api/pagos/checkout (al armar la preferencia) como
+ * /api/pagos/precios (para mostrar el cartel en la landing).
+ */
+export function resolveInstallments(rawCount: string | null, rawUntil: string | null): number {
+  const count = Number(rawCount);
+  if (!Number.isFinite(count) || count < 1) return 1;
+
+  if (rawUntil) {
+    const until = new Date(`${rawUntil}T23:59:59-03:00`);
+    if (!Number.isNaN(until.getTime()) && Date.now() > until.getTime()) return 1;
+  }
+
+  return Math.min(Math.floor(count), 24);
+}
+
+/**
  * Los precios se cargan a mano en Configuración Web, así que llegan escritos
  * como se les cante: "480000", "$480.000", "480.000,00". Todo eso tiene que
  * terminar en el mismo número o le cobramos cualquier cosa a alguien.
