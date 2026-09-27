@@ -129,7 +129,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       paymentId: payment.id,
       preferenceId: preference.id,
-      initPoint: preference.initPoint,
+      // Con credenciales de PRUEBA, Mercado Pago devuelve además un link de
+      // sandbox — el real (initPoint) ahí no sirve, pide un comprador de
+      // prueba logueado y rompe. Con credenciales de producción no viene
+      // sandboxInitPoint, así que esto no cambia nada al pasar a cobrar en
+      // serio: se sigue el link real sin tocar código.
+      initPoint: preference.sandboxInitPoint ?? preference.initPoint,
       amount: unitPrice,
       installments: maxInstallments,
     });
