@@ -1046,6 +1046,13 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     };
     const roleLabel = (role: string | null | undefined) =>
         role === 'coach' ? 'Coach' : role && role !== 'student' ? 'Staff' : null;
+    // Pedido de Patricio (encargado de la carga de datos): "Nombre - Fecha - hora : comentario".
+    const noteMeta = (note: ProfileNote) => {
+        const when = new Date(note.created_at);
+        const fecha = when.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+        const hora = when.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        return `${note.author?.first_name ? `${note.author.first_name} - ` : ''}${fecha} - ${hora} : `;
+    };
 
     return createPortal(
         <div className="full-screen-modal-overlay" onClick={onClose}>
@@ -1148,7 +1155,6 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                             <div className="flex flex-col gap-1.5 mt-2.5 max-h-24 overflow-y-auto">
                                 {profileNotes.slice(0, 5).map(note => {
                                     const badge = roleLabel(note.author?.role);
-                                    const authorName = note.author ? [note.author.first_name, note.author.last_name].filter(Boolean).join(' ') : null;
                                     return (
                                         <p key={note.id} className="text-xs text-slate-600 leading-relaxed">
                                             {badge && (
@@ -1156,10 +1162,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                     {badge}
                                                 </span>
                                             )}
-                                            <span className="text-slate-400">
-                                                {new Date(note.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
-                                                {authorName ? ` · ${authorName}: ` : ': '}
-                                            </span>
+                                            <span className="text-slate-400">{noteMeta(note)}</span>
                                             {note.body}
                                         </p>
                                     );
@@ -1355,7 +1358,6 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                             <div className="space-y-2">
                                                 {profileNotes.map(note => {
                                                     const badge = roleLabel(note.author?.role);
-                                                    const authorName = note.author ? [note.author.first_name, note.author.last_name].filter(Boolean).join(' ') : null;
                                                     return (
                                                         <div key={note.id} className="bg-slate-50 border border-slate-100 rounded-lg px-4 py-2.5">
                                                             <p className="text-[10px] text-slate-400 mb-1 flex items-center gap-1.5">
@@ -1364,8 +1366,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                                                         {badge}
                                                                     </span>
                                                                 )}
-                                                                {new Date(note.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                                {authorName && ` · ${authorName}`}
+                                                                {noteMeta(note).replace(/ : $/, '')}
                                                             </p>
                                                             <p className="text-sm text-slate-700 whitespace-pre-line">{note.body}</p>
                                                         </div>
