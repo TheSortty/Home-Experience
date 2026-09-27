@@ -21,15 +21,17 @@ interface Props {
   viewMode: ViewMode;
   searchTerm: string;
   role: 'admin' | 'sysadmin';
+  /** Abre directo en la papelera (pestaña "Papelera" de Personas). */
+  trash?: boolean;
 }
 
 const VIEW_KEY = 'admin_personas_view_mode';
 
-export default function PersonasStudentsView({ scope, viewMode, searchTerm, role }: Props) {
+export default function PersonasStudentsView({ scope, viewMode, searchTerm, role, trash = false }: Props) {
   const [students, setStudents] = useState<PersonaStudent[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [selectedStudent, setSelectedStudent] = useState<StudentForModal | null>(null);
-  const [trashMode, setTrashMode] = useState<'active' | 'trash'>('active');
+  const [trashMode, setTrashMode] = useState<'active' | 'trash'>(trash ? 'trash' : 'active');
   const [trashCount, setTrashCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);

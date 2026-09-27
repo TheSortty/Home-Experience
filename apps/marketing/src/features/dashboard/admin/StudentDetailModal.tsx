@@ -507,10 +507,22 @@ const ExtendedField: React.FC<{
     onChange: (v: string) => void;
     type?: string;
     multiline?: boolean;
-}> = ({ label, value, onChange, type = 'text', multiline = false }) => (
+    options?: string[];
+}> = ({ label, value, onChange, type = 'text', multiline = false, options }) => (
     <div>
         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{label}</label>
-        {multiline ? (
+        {options ? (
+            <select
+                value={value ?? ''}
+                onChange={e => onChange(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#00A9CE]/30 focus:border-[#00A9CE]/40"
+            >
+                <option value="">—</option>
+                {/* Valores viejos cargados a mano (ej. "femenino") siguen visibles hasta que se elija uno. */}
+                {value && !options.includes(value) && <option value={value}>{value}</option>}
+                {options.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+        ) : multiline ? (
             <textarea
                 value={value ?? ''}
                 onChange={e => onChange(e.target.value)}
@@ -1160,7 +1172,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-5">
                                                 <ExtendedField label="DNI" value={extendedProfile.dni} onChange={v => setExtendedProfile(p => ({ ...p, dni: v }))} />
                                                 <ExtendedField label="Fecha de nacimiento" type="date" value={extendedProfile.birth_date} onChange={v => setExtendedProfile(p => ({ ...p, birth_date: v }))} />
-                                                <ExtendedField label="Género" value={extendedProfile.gender} onChange={v => setExtendedProfile(p => ({ ...p, gender: v }))} />
+                                                <ExtendedField label="Género" value={extendedProfile.gender} options={['Femenino', 'Masculino', 'Otro']} onChange={v => setExtendedProfile(p => ({ ...p, gender: v }))} />
                                                 <ExtendedField label="Ocupación" value={extendedProfile.current_occupation} onChange={v => setExtendedProfile(p => ({ ...p, current_occupation: v }))} />
                                                 <ExtendedField label="Dirección" value={extendedProfile.address_street} onChange={v => setExtendedProfile(p => ({ ...p, address_street: v }))} />
                                                 <ExtendedField label="Ciudad" value={extendedProfile.address_city} onChange={v => setExtendedProfile(p => ({ ...p, address_city: v }))} />

@@ -7,6 +7,7 @@ import {
   IoListOutline,
   IoPeopleOutline,
   IoSchoolOutline,
+  IoTrashOutline,
   IoBookOutline,
   IoPersonOutline,
   IoCloudUploadOutline,
@@ -18,7 +19,7 @@ import {
 import PersonasStudentsView from './PersonasStudentsView';
 import PersonasCoachesView from './PersonasCoachesView';
 
-type Tab = 'all' | 'creser' | 'campus' | 'coaches';
+type Tab = 'all' | 'creser' | 'campus' | 'coaches' | 'trash';
 type ViewMode = 'table' | 'grid';
 
 const VIEW_KEY = 'admin_personas_view_mode';
@@ -47,6 +48,12 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode; description: string
     label: 'Coaches',
     icon: <IoSchoolOutline className="w-4 h-4" />,
     description: 'Equipo de formadores',
+  },
+  {
+    id: 'trash',
+    label: 'Papelera',
+    icon: <IoTrashOutline className="w-4 h-4" />,
+    description: 'Personas eliminadas: se pueden restaurar',
   },
 ];
 
@@ -188,7 +195,8 @@ export default function AdminPersonas({ role }: Props) {
         {isStudentTab ? (
           <PersonasStudentsView
             key={activeTab}
-            scope={activeTab as 'all' | 'creser' | 'campus'}
+            scope={activeTab === 'trash' ? 'all' : activeTab as 'all' | 'creser' | 'campus'}
+            trash={activeTab === 'trash'}
             viewMode={viewMode}
             searchTerm={searchTerm}
             role={role}
