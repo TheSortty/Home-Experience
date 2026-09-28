@@ -1,0 +1,29 @@
+# Configuración de gitleaks. Ver CONSTRAINTS.md → "Secretos".
+[extend]
+useDefault = true
+
+# gitleaks no trae una regla para los tokens personales de Supabase (dan control
+# total de la cuenta). Ya apareció uno suelto en el repo.
+[[rules]]
+id = "supabase-personal-access-token"
+description = "Supabase personal access token"
+regex = '''\bsbp_[a-f0-9]{40}\b'''
+keywords = ["sbp_"]
+
+[[rules]]
+id = "supabase-service-role-key"
+description = "SUPABASE_SERVICE_ROLE_KEY con valor literal"
+regex = '''SUPABASE_SERVICE_ROLE_KEY\s*[=:]\s*["']?eyJ[\w-]+\.[\w-]+\.[\w-]+'''
+keywords = ["supabase_service_role_key"]
+
+[allowlist]
+description = "Salidas de build, dependencias y archivos locales ignorados por git"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.next/''',
+  '''(^|/)\.open-next/''',
+  '''(^|/)\.wrangler/''',
+  '''(^|/)graphify-out/''',
+  '''(^|/)\.env(\.[\w.]+)?$''',
+  '''package-lock\.json$''',
+]

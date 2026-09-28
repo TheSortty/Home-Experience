@@ -1,0 +1,4 @@
+[
+  { "name": "campus: JS del cliente (brotli)", "path": "apps/campus/.next/static/chunks/**/*.js", "limit": "331 kB" },
+  { "name": "marketing: JS del cliente (brotli)", "path": "apps/marketing/.next/static/chunks/**/*.js", "limit": "544 kB" }
+]

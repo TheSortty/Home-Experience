@@ -1,0 +1,12 @@
+# Hallazgos historicos: todos son la clave anon de Supabase (role=anon), publica por diseno.
+# Verificado el 2026-09-27 decodificando el claim "role" de cada JWT. No agregar nada mas aca sin revisarlo.
+5af4f57743183db0055586756e307760ee9e6528:apps/campus/wrangler.jsonc:jwt:40
+dee6efcf2aeebfae986b6f2476958ab3fbb150fc:wrangler.jsonc:jwt:27
+484619537f06a828ed7ab94bbf716e516b98c7cb:utils/supabase/server.ts:jwt:5
+c5c1f79852e122cd4e2a7c27f0405ec78206c4d9:middleware.ts:jwt:15
+c5c1f79852e122cd4e2a7c27f0405ec78206c4d9:utils/supabase/server.ts:jwt:12
+fa3896a904edab03446a2bdbece75ae49e8834a1:src/services/supabaseClient.ts:jwt:5
+4e3f7082656ea2410dec3a31782dfaab7131b241:test_supabase.mjs:jwt:4
+d1fb4b693b4f5759930879d74ccfe40d082d4279:src/services/supabaseClient.ts:jwt:7
+apps/campus/wrangler.jsonc:jwt:40
+apps/marketing/wrangler.jsonc:jwt:41

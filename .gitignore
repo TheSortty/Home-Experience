@@ -40,3 +40,10 @@ tsconfig.tsbuildinfo
 
 # Supabase temp
 supabase/.temp/
+
+# graphify (grafo de conocimiento local)
+graphify-out/
+
+# Instrucciones para agentes que genera `next dev` en cada app
+apps/*/AGENTS.md
+apps/*/CLAUDE.md

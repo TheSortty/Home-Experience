@@ -16,10 +16,19 @@
     "build:campus": "npm run build --workspace=campus",
     "typecheck": "npm run typecheck:marketing && npm run typecheck:campus",
     "typecheck:marketing": "npm exec --workspace=marketing -- tsc --noEmit",
-    "typecheck:campus": "npm exec --workspace=campus -- tsc --noEmit"
+    "typecheck:campus": "npm exec --workspace=campus -- tsc --noEmit",
+    "check:secrets": "gitleaks dir . --redact --no-banner",
+    "check:arch": "node scripts/check-arch.mjs",
+    "check:size": "size-limit || echo AVISO: el bundle supero el techo de .size-limit.json (no bloquea)",
+    "check:fast": "npm run check:secrets && npm run check:arch",
+    "check:task": "npm run check:fast && npm run typecheck",
+    "check:full": "npm run check:task && npm run build && npm run check:size && gitleaks git --redact --no-banner"
   },
   "devDependencies": {
+    "@size-limit/file": "^14.1.0",
     "concurrently": "^10.0.5",
+    "dependency-cruiser": "^18.4.0",
+    "size-limit": "^14.1.0",
     "typescript": "~5.8.2"
   }
 }
