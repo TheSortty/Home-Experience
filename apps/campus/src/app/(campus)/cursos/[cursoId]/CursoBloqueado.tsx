@@ -43,9 +43,9 @@ export default function CursoBloqueado({
               referrerPolicy="no-referrer"
             />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-slate-500 to-slate-700" />
+            <div className="absolute inset-0 bg-gradient-to-br from-[#64748b] to-[#334155]" />
           )}
-          <div className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]" />
+          <div className="absolute inset-0 bg-[#0f172a]/45 backdrop-blur-[2px]" />
           <div className="relative z-10 flex flex-col items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow">
               <IoLockClosedOutline size={22} className="text-slate-600" />
@@ -97,7 +97,7 @@ export default function CursoBloqueado({
           href={whatsappHref(`¡Hola! Me interesa sumarme a "${course.title}" en el campus de HOME.`)}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-5 py-3 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-700 transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-3 bg-slate-900 text-slate-50 text-sm font-bold rounded-xl hover:bg-slate-700 transition-colors"
         >
           <IoChatbubbleEllipsesOutline size={16} />
           Consultar por este programa

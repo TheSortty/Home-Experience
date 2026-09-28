@@ -324,7 +324,7 @@ export default async function ClasePage({
       {isLocked ? (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           <div className="xl:col-span-2">
-            <div className="bg-slate-900 rounded-2xl aspect-video flex items-center justify-center text-white/60">
+            <div className="bg-[#0f172a] rounded-2xl aspect-video flex items-center justify-center text-white/60">
               <div className="text-center px-8">
                 <IoLockClosedOutline size={64} className="mx-auto mb-4 opacity-40" />
                 <h2 className="text-xl font-bold text-white mb-2">Tema bloqueado</h2>
@@ -527,7 +527,7 @@ function CourseSidebar({
         <div className="p-4 border-t border-slate-200 bg-slate-50">
           <Link
             href={`/cursos/${cursoId}/${nextLessonId}`}
-            className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-[#00A9CE] text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-colors shadow-sm"
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-[#00A9CE] text-white text-sm font-bold rounded-xl hover:bg-[#2563eb] transition-colors shadow-sm"
           >
             Siguiente clase <IoChevronForwardOutline />
           </Link>

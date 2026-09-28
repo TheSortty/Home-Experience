@@ -189,7 +189,7 @@ export default function ImageCropper({
       <div className="flex gap-2">
         <button
           onClick={handleConfirm}
-          className="flex items-center gap-1.5 bg-[#00A9CE] hover:bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm"
+          className="flex items-center gap-1.5 bg-[#00A9CE] hover:bg-[#2563eb] text-white px-5 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm"
         >
           <IoCheckmarkOutline size={16} /> Confirmar
         </button>

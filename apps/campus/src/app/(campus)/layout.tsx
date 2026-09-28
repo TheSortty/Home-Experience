@@ -58,7 +58,7 @@ export default async function CampusLayout({ children }: { children: React.React
   const showWelcome = profile?.profile_completed_at == null;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#020617] text-slate-800">
 
       {/* ── Top navbar ─────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200">

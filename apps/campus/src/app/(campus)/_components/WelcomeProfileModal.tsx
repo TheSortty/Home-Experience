@@ -216,7 +216,7 @@ export default function WelcomeProfileModal({ firstName, showOnLoad }: Props) {
               <button
                 onClick={handleSave}
                 disabled={saving || !nameReady}
-                className="w-full flex items-center justify-center gap-2 bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-sm text-sm"
+                className="w-full flex items-center justify-center gap-2 bg-[#00A9CE] hover:bg-[#2563eb] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-sm text-sm"
               >
                 {saving ? (
                   <span className="flex items-center gap-2">

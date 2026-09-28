@@ -176,7 +176,7 @@ export default function LessonViewer({
                 allowFullScreen
               />
             ) : (
-              <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center gap-3">
+              <div className="w-full h-full bg-[#0f172a] flex flex-col items-center justify-center gap-3">
                 <IoPlayCircleOutline size={48} className="text-white/30" />
                 <p className="text-white/50 text-sm font-medium">URL de video no reconocida</p>
               </div>
@@ -185,7 +185,7 @@ export default function LessonViewer({
 
           {/* Carousel nav — only when 2+ videos */}
           {isMulti && (
-            <div className="bg-slate-900 rounded-b-2xl -mt-px px-4 py-3 flex items-center gap-3">
+            <div className="bg-[#0f172a] rounded-b-2xl -mt-px px-4 py-3 flex items-center gap-3">
               <button
                 onClick={() => setActiveVideoIdx(i => Math.max(0, i - 1))}
                 disabled={activeVideoIdx === 0}
@@ -289,7 +289,7 @@ export default function LessonViewer({
                   ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default'
                   : isPending
                   ? 'bg-slate-100 text-slate-400 cursor-wait'
-                  : 'bg-[#00A9CE] text-white hover:bg-blue-600 hover:shadow-md cursor-pointer'
+                  : 'bg-[#00A9CE] text-white hover:bg-[#2563eb] hover:shadow-md cursor-pointer'
               }`}
             >
               <IoCheckmarkCircle size={20} />
@@ -346,9 +346,9 @@ export default function LessonViewer({
                     let iconColor = 'bg-blue-50 text-blue-500 group-hover:bg-blue-500 group-hover:text-white';
                     let typeLabel = r.type;
                     if (url.endsWith('.pdf') || r.type === 'pdf') { iconColor = 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white'; typeLabel = 'PDF'; }
-                    else if (url.endsWith('.doc') || url.endsWith('.docx')) { iconColor = 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'; typeLabel = 'Word'; }
-                    else if (url.endsWith('.xls') || url.endsWith('.xlsx') || url.endsWith('.csv')) { iconColor = 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white'; typeLabel = 'Planilla'; }
-                    else if (url.endsWith('.ppt') || url.endsWith('.pptx')) { iconColor = 'bg-orange-50 text-orange-600 group-hover:bg-orange-600 group-hover:text-white'; typeLabel = 'Presentación'; }
+                    else if (url.endsWith('.doc') || url.endsWith('.docx')) { iconColor = 'bg-blue-50 text-blue-600 group-hover:bg-[#2563eb] group-hover:text-white'; typeLabel = 'Word'; }
+                    else if (url.endsWith('.xls') || url.endsWith('.xlsx') || url.endsWith('.csv')) { iconColor = 'bg-emerald-50 text-emerald-600 group-hover:bg-[#059669] group-hover:text-white'; typeLabel = 'Planilla'; }
+                    else if (url.endsWith('.ppt') || url.endsWith('.pptx')) { iconColor = 'bg-orange-50 text-orange-600 group-hover:bg-[#ea580c] group-hover:text-white'; typeLabel = 'Presentación'; }
                     return (
                       <li key={r.id}>
                         <button

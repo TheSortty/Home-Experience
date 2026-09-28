@@ -159,7 +159,7 @@ function AvatarUploader({ initials, avatarUrl }: { initials: string; avatarUrl: 
           <button
             onClick={handleSave}
             disabled={uploading}
-            className="flex items-center gap-1.5 bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
+            className="flex items-center gap-1.5 bg-[#00A9CE] hover:bg-[#2563eb] disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
           >
             <IoCloudUploadOutline size={14} />
             {uploading ? 'Subiendo...' : 'Guardar foto'}
@@ -350,7 +350,7 @@ export default function ProfileTabs({
                 <button
                   onClick={handleSavePersonal}
                   disabled={isPending}
-                  className="bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm"
+                  className="bg-[#00A9CE] hover:bg-[#2563eb] disabled:opacity-50 text-slate-50 px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm"
                 >
                   {isPending ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
@@ -405,7 +405,7 @@ export default function ProfileTabs({
               <Feedback result={result} />
 
               <div className="flex justify-end">
-                <button onClick={handleSaveMedical} disabled={isPending} className="bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
+                <button onClick={handleSaveMedical} disabled={isPending} className="bg-[#00A9CE] hover:bg-[#2563eb] disabled:opacity-50 text-slate-50 px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
                   {isPending ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
               </div>
@@ -466,7 +466,7 @@ export default function ProfileTabs({
               ) : null}
 
               <div className="flex justify-end">
-                <button onClick={handleChangePassword} disabled={isPending || !newPassword || !confirmPassword} className="bg-slate-900 hover:bg-slate-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
+                <button onClick={handleChangePassword} disabled={isPending || !newPassword || !confirmPassword} className="bg-slate-900 hover:bg-slate-700 disabled:opacity-50 text-slate-50 px-6 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm">
                   {isPending ? 'Actualizando...' : 'Actualizar Contraseña'}
                 </button>
               </div>

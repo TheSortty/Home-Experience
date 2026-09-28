@@ -199,7 +199,7 @@ export default function LessonForum({
         </div>
         <button
           onClick={() => setShowNewPost(true)}
-          className="shrink-0 flex items-center gap-1.5 bg-[#00A9CE] hover:bg-blue-600 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-sm transition-colors"
+          className="shrink-0 flex items-center gap-1.5 bg-[#00A9CE] hover:bg-[#2563eb] text-white text-xs font-bold px-3 py-2 rounded-lg shadow-sm transition-colors"
         >
           <IoAddOutline size={16} /> Nueva pregunta
         </button>
@@ -234,7 +234,7 @@ export default function LessonForum({
             <button
               onClick={submitNewPost}
               disabled={!newBody.trim() || isPending}
-              className="flex items-center gap-1.5 text-xs font-bold bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg"
+              className="flex items-center gap-1.5 text-xs font-bold bg-[#00A9CE] hover:bg-[#2563eb] disabled:opacity-50 text-white px-3 py-1.5 rounded-lg"
             >
               <IoSendOutline size={14} /> Publicar
             </button>
@@ -380,7 +380,7 @@ export default function LessonForum({
                             <button
                               onClick={() => submitReply(post.id)}
                               disabled={!replyBody.trim() || isPending}
-                              className="flex items-center gap-1 text-xs font-bold bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-50 text-white px-3 py-1 rounded"
+                              className="flex items-center gap-1 text-xs font-bold bg-[#00A9CE] hover:bg-[#2563eb] disabled:opacity-50 text-white px-3 py-1 rounded"
                             >
                               <IoSendOutline size={12} /> Responder
                             </button>

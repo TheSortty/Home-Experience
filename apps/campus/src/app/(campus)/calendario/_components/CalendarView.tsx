@@ -223,7 +223,7 @@ export default function CalendarView({ sessions, todayISO }: Props) {
                   flex flex-col items-stretch p-1.5 gap-1
                   rounded-lg text-sm transition-colors text-left
                   ${isSelected
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-900 text-slate-50'
                     : isToday
                     ? 'bg-[#00A9CE]/10 ring-1 ring-[#00A9CE]/40'
                     : hasSessions
@@ -239,7 +239,7 @@ export default function CalendarView({ sessions, todayISO }: Props) {
                 {/* Day number */}
                 <span className={`text-xs md:text-sm font-bold leading-none ${
                   isSelected
-                    ? 'text-white'
+                    ? 'text-slate-50'
                     : isToday
                     ? 'text-[#00A9CE]'
                     : !inMonth
@@ -261,14 +261,14 @@ export default function CalendarView({ sessions, todayISO }: Props) {
                           key={i}
                           title={s.label ?? s.cycleName}
                           className={`h-1.5 rounded-full ${
-                            isSelected ? 'bg-white/80' : c.dot
+                            isSelected ? 'bg-slate-50/80' : c.dot
                           } ${isPast && !isSelected ? 'opacity-50' : ''}`}
                         />
                       );
                     })}
                     {dayList.length > 3 && (
                       <span className={`text-[9px] font-bold leading-none mt-0.5 ${
-                        isSelected ? 'text-white/80' : 'text-slate-500'
+                        isSelected ? 'text-slate-50/80' : 'text-slate-500'
                       }`}>
                         +{dayList.length - 3}
                       </span>
@@ -308,7 +308,7 @@ export default function CalendarView({ sessions, todayISO }: Props) {
               onClick={() => setSelectedProgram(null)}
               className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-colors ${
                 selectedProgram === null
-                  ? 'bg-slate-900 text-white border-slate-900'
+                  ? 'bg-slate-900 text-slate-50 border-slate-900'
                   : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
               }`}
             >
@@ -372,7 +372,7 @@ export default function CalendarView({ sessions, todayISO }: Props) {
                       ? 'bg-[#00A9CE] text-white'
                       : isPast
                       ? 'bg-white border border-slate-200 text-slate-400'
-                      : 'bg-slate-900 text-white'
+                      : 'bg-slate-900 text-slate-50'
                   }`}>
                     <span className="text-[10px] font-bold uppercase opacity-80">
                       {FULL_MONTHS_ES[d.getMonth()].slice(0, 3)}

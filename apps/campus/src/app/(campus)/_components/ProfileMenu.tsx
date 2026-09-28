@@ -3,9 +3,32 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { IoLogOutOutline, IoPersonOutline, IoChevronDownOutline, IoBriefcaseOutline } from 'react-icons/io5';
+import { IoLogOutOutline, IoPersonOutline, IoChevronDownOutline, IoBriefcaseOutline, IoSunnyOutline, IoMoonOutline, IoDesktopOutline } from 'react-icons/io5';
 import { supabase } from '@home/services/supabaseClient';
 import { MARKETING_URL } from '@home/services/siteUrls';
+
+type Theme = 'light' | 'dark' | 'system';
+
+const THEMES: { id: Theme; label: string; Icon: typeof IoSunnyOutline }[] = [
+  { id: 'light', label: 'Claro', Icon: IoSunnyOutline },
+  { id: 'dark', label: 'Oscuro', Icon: IoMoonOutline },
+  { id: 'system', label: 'Sistema', Icon: IoDesktopOutline },
+];
+
+const systemDark = () => window.matchMedia('(prefers-color-scheme: dark)');
+
+/** Pone o saca la clase .dark. El mismo criterio que THEME_SCRIPT en app/layout.tsx. */
+function applyTheme(theme: Theme) {
+  const dark = theme === 'dark' || (theme === 'system' && systemDark().matches);
+  document.documentElement.classList.toggle('dark', dark);
+}
+
+function readTheme(): Theme {
+  try {
+    const t = localStorage.getItem('theme');
+    return t === 'light' || t === 'dark' ? t : 'system';
+  } catch { return 'system'; }
+}
 
 interface Props {
   firstName: string;
@@ -23,6 +46,25 @@ export default function ProfileMenu({ firstName, lastName, fullName, email, init
   const [signingOut, setSigningOut] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const [theme, setTheme] = useState<Theme>('system');
+
+  // Al montar: leer lo guardado y, en "Sistema", seguir al SO en vivo.
+  useEffect(() => {
+    setTheme(readTheme());
+    const mq = systemDark();
+    const onChange = () => { if (readTheme() === 'system') applyTheme('system'); };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const chooseTheme = (t: Theme) => {
+    setTheme(t);
+    try {
+      if (t === 'system') localStorage.removeItem('theme');
+      else localStorage.setItem('theme', t);
+    } catch { /* sin storage: vale solo para esta pestaña */ }
+    applyTheme(t);
+  };
 
   const handleLogout = async () => {
     if (signingOut) return;
@@ -126,6 +168,27 @@ export default function ProfileMenu({ firstName, lastName, fullName, email, init
               Ir a administración
             </a>
           )}
+
+          <div className="border-t border-slate-100 px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Apariencia</p>
+            <div role="radiogroup" aria-label="Apariencia" className="grid grid-cols-3 gap-1 bg-slate-100 rounded-lg p-1">
+              {THEMES.map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={theme === id}
+                  onClick={() => chooseTheme(id)}
+                  className={`flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[11px] font-semibold transition-colors ${
+                    theme === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Icon size={16} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="border-t border-slate-100">
             <button

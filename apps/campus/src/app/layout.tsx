@@ -19,6 +19,10 @@ const fraunces = Fraunces({
   axes: ['SOFT', 'opsz'],
 })
 
+// Aplica el tema guardado (claro / oscuro / sistema) antes de pintar, para que
+// no parpadee. El selector vive en ProfileMenu. Por defecto: sistema.
+const THEME_SCRIPT = `try{var t=localStorage.getItem("theme");if(t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}`
+
 export const metadata: Metadata = {
   title: 'Mi Campus | HOME Experience',
   description: 'Espacio de alumno para programas de HOME Experience.',
@@ -38,7 +42,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" className={`${inter.variable} ${fraunces.variable}`}>
+    <html lang="es" className={`${inter.variable} ${fraunces.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="font-sans antialiased text-slate-900 bg-white">
         <Toaster
           position="top-center"

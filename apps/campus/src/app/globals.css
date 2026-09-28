@@ -34,6 +34,29 @@
   --transition-slow: 0.8s ease;
 }
 
+/* ── Modo oscuro ───────────────────────────────────────────────────
+   La paleta (slate, amber, violet, …) se invierte sola con variables
+   (ver tailwind.config.mjs). Acá va lo que no puede invertirse:
+   `white` también es texto sobre botones de color, así que solo el
+   FONDO blanco de tarjetas y paneles pasa a superficie oscura. */
+/* Inputs sin fondo propio: en oscuro el navegador los pinta gris; van como tarjeta. */
+@layer base {
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .dark textarea, .dark select { background-color: rgb(var(--surface)); }
+}
+/* En @layer components: quedan antes de las utilidades, así un dark:bg-… explícito les gana. */
+@layer components {
+.dark .bg-white,
+.dark .hover\:bg-white:hover { --tw-bg-opacity: 1; background-color: rgb(var(--surface) / var(--tw-bg-opacity)); }
+.dark .bg-white\/60 { background-color: rgb(var(--surface) / 0.6); }
+.dark .bg-white\/70 { background-color: rgb(var(--surface) / 0.7); }
+.dark .bg-white\/80 { background-color: rgb(var(--surface) / 0.8); }
+.dark .bg-white\/85 { background-color: rgb(var(--surface) / 0.85); }
+.dark .bg-white\/90 { background-color: rgb(var(--surface) / 0.9); }
+.dark .via-white { --tw-gradient-via: rgb(var(--surface)); --tw-gradient-stops: var(--tw-gradient-from), rgb(var(--surface)) var(--tw-gradient-via-position), var(--tw-gradient-to); }
+.dark .to-white { --tw-gradient-to: rgb(var(--surface)) var(--tw-gradient-to-position); }
+.dark .glass-panel { background: rgb(var(--surface) / 0.7); border-color: rgb(255 255 255 / 0.08); }
+}
+
 /* html { scroll-behavior: smooth; } — disabled for Lenis smooth scroll */
 
 body {
@@ -104,6 +127,16 @@ body {
 .animate-slide-in-right {
   animation: slideInRight 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Ilustraciones de la página del programa (estrellas, barco, salvavidas) */
+@keyframes twinkle { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes floaty  { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes bob     { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+.tw  { animation: twinkle 3.4s ease-in-out infinite; }
+.tw2 { animation: twinkle 4.6s ease-in-out infinite; animation-delay: 1.2s; }
+.fl  { animation: floaty 5s ease-in-out infinite; }
+.bob { animation: bob 4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .tw, .tw2, .fl, .bob { animation: none; } }
 
 /* Utility Classes */
 .hide-scrollbar::-webkit-scrollbar { display: none; }

@@ -384,14 +384,14 @@ export default async function CampusCursosPage({
                         referrerPolicy="no-referrer"
                       />
                     )}
-                    <div className="absolute inset-0 bg-slate-900/25 backdrop-blur-[2px]" />
+                    <div className="absolute inset-0 bg-[#0f172a]/25 backdrop-blur-[2px]" />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-11 h-11 rounded-full bg-white/85 flex items-center justify-center shadow-sm">
                         <IoLockClosedOutline size={20} className="text-slate-500" />
                       </div>
                     </div>
                     <div className="absolute top-3 right-3">
-                      <span className="px-2.5 py-1 bg-slate-900/45 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider">
+                      <span className="px-2.5 py-1 bg-[#0f172a]/45 backdrop-blur-md rounded-md text-white text-xs font-bold uppercase tracking-wider">
                         Sin acceso
                       </span>
                     </div>
@@ -413,7 +413,7 @@ export default async function CampusCursosPage({
                         )}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-700 transition-colors"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 text-slate-50 text-sm font-bold rounded-xl hover:bg-slate-700 transition-colors"
                       >
                         <IoChatbubbleEllipsesOutline size={16} />
                         Quiero saber más

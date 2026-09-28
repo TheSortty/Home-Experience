@@ -57,7 +57,7 @@ export default function GoogleCalendarCard({
         </div>
         <a
           href="/api/google-calendar/connect"
-          className="shrink-0 text-sm font-bold px-4 py-2.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors text-center"
+          className="shrink-0 text-sm font-bold px-4 py-2.5 rounded-xl bg-slate-900 text-slate-50 hover:bg-slate-800 transition-colors text-center"
         >
           Conectar
         </a>

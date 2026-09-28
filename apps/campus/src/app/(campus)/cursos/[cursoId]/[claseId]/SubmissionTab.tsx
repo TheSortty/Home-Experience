@@ -252,7 +252,7 @@ function UploadZone({
       <button
         onClick={handleSubmit}
         disabled={isPending || files.length === 0}
-        className="w-full py-3 bg-[#00A9CE] text-white font-bold text-sm rounded-xl hover:bg-blue-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-2"
+        className="w-full py-3 bg-[#00A9CE] text-white font-bold text-sm rounded-xl hover:bg-[#2563eb] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-2"
       >
         <IoSendOutline size={16} />
         {isPending ? 'Subiendo…' : isAdditional ? 'Agregar archivos' : 'Enviar entrega'}
@@ -559,7 +559,7 @@ function ChatInput({
         <button
           onClick={onSend}
           disabled={isPending || !body.trim()}
-          className="shrink-0 w-8 h-8 rounded-lg bg-[#00A9CE] text-white flex items-center justify-center hover:bg-blue-600 transition-colors disabled:opacity-40 mb-0.5"
+          className="shrink-0 w-8 h-8 rounded-lg bg-[#00A9CE] text-white flex items-center justify-center hover:bg-[#2563eb] transition-colors disabled:opacity-40 mb-0.5"
           aria-label="Enviar"
         >
           <IoSendOutline size={16} />

@@ -288,7 +288,7 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
             onClick={() => setShowNewPost(true)}
             disabled={courses.length === 0}
             title={courses.length === 0 ? 'El foro se abre cuando tengas un programa asignado' : undefined}
-            className="flex items-center justify-center gap-2 bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-40 disabled:hover:bg-[#00A9CE] text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm shrink-0"
+            className="flex items-center justify-center gap-2 bg-[#00A9CE] hover:bg-[#2563eb] disabled:opacity-40 disabled:hover:bg-[#00A9CE] text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-sm shrink-0"
           >
             <IoAddOutline size={18} /> Abrir conversación
           </button>
@@ -307,7 +307,7 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
             onClick={() => setSelectedCourse('all')}
             className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               selectedCourse === 'all'
-                ? 'bg-slate-900 text-white'
+                ? 'bg-slate-900 text-slate-50'
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
@@ -400,7 +400,7 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
                                 title={isVerifiedTag && post.lessonTitle ? post.lessonTitle : undefined}
                                 className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1 ${
                                   isVerifiedTag
-                                    ? 'bg-slate-900 text-white'
+                                    ? 'bg-slate-900 text-slate-50'
                                     : 'bg-slate-100 text-slate-600'
                                 }`}
                               >
@@ -588,7 +588,7 @@ export default function ForumClient({ profileId, actorRole, actorName, courses, 
               <button
                 onClick={handleNewPost}
                 disabled={isPending || !newBody.trim()}
-                className="flex items-center gap-2 px-5 py-2.5 bg-[#00A9CE] hover:bg-blue-600 disabled:opacity-50 text-white rounded-lg font-bold text-sm transition-colors shadow-sm"
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#00A9CE] hover:bg-[#2563eb] disabled:opacity-50 text-white rounded-lg font-bold text-sm transition-colors shadow-sm"
               >
                 <IoSendOutline size={16} /> Compartir
               </button>
