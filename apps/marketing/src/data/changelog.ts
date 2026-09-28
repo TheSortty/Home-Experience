@@ -15,6 +15,21 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '1.10',
+    date: '28 sep 2026',
+    title: 'Campus: modo oscuro y nueva página del programa',
+    description: 'El campus se puede usar en oscuro y la página de cada programa se rediseñó con la temática del barco.',
+    items: [
+      { type: 'nuevo',    text: 'Modo oscuro en todo el campus. Se elige desde el menú de la foto de perfil, en "Apariencia": Claro, Oscuro o Sistema (sigue lo que tenga configurado la compu o el celular).' },
+      { type: 'nuevo',    text: 'Página del programa renovada: arriba una "estantería" con un libro por módulo (más alto cuantos más temas tiene) que abre y cierra cada módulo.' },
+      { type: 'nuevo',    text: 'Filtros por tipo de tema: Lecturas, Videos y Bitácoras, cada uno con su cantidad. Las bitácoras (los temas con entrega) se destacan en una tarjeta oscura.' },
+      { type: 'mejorado', text: 'Si el título de un tema lleva el autor después de un guion (por ejemplo "Liderazgo - Jim Selman"), el autor aparece en una línea aparte.' },
+      { type: 'mejorado', text: 'Las pestañas cambian de nombre para el alumno: Talleres pasa a llamarse "Astillero" y CAMPO pasa a llamarse "Misiones". En el admin se cargan igual que antes.' },
+      { type: 'nuevo',    text: 'Cada misión tiene su personaje ilustrado (Tripulante, Vigía, y los que se vayan sumando).' },
+      { type: 'nuevo',    text: 'Los archivos institucionales se muestran como una biblioteca: se toca un libro y se ve el documento con su botón para abrirlo.' },
+    ],
+  },
+  {
     version: '1.9',
     date: '6 ago 2026',
     title: 'Material propio en el campus y acceso por programa',

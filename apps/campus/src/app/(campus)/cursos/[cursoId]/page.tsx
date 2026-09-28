@@ -5,9 +5,10 @@ import { lessonDueMs } from '@home/services/lessonDeadline';
 import { resolveCourseAccess, resolveCampusRole } from '@home/services/courseAccess';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { IoArrowBackOutline, IoDocumentTextOutline, IoEyeOutline } from 'react-icons/io5';
+import { IoArrowBackOutline, IoArrowForwardOutline, IoDocumentTextOutline, IoEyeOutline } from 'react-icons/io5';
 import CursoContent, { type CampoClass, type ModuleNode, type ResourceWithContext } from './CursoContent';
 import CursoBloqueado from './CursoBloqueado';
+import { HeroCielo } from './ProgramaIlustraciones';
 
 export default async function CursoDetallePage({
   params,
@@ -114,6 +115,7 @@ export default async function CursoDetallePage({
         video_url: l.video_url,
         duration_seconds: l.duration_seconds,
         order_index: l.order_index,
+        requires_submission: !!l.requires_submission,
       })),
   }));
 
@@ -259,7 +261,7 @@ export default async function CursoDetallePage({
     });
 
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-8 pb-12 max-w-[1440px] mx-auto">
 
       {/* BACK */}
       <div>
@@ -271,73 +273,72 @@ export default async function CursoDetallePage({
         </Link>
       </div>
 
-      {/* HERO */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row">
-        <div className="w-full md:w-1/3 min-h-[140px] relative overflow-hidden flex items-center justify-center p-8 text-center">
+      {/* HERO: panel azul con estrellas (o la tapa del curso) + datos */}
+      <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden flex flex-col md:flex-row">
+        <div className="relative md:w-[431px] shrink-0 min-h-[200px] md:min-h-[290px] bg-[#14567F] overflow-hidden">
           {(() => {
             const coverSrc = normalizeImageUrl(course.cover_image_url, 'w1200');
             return coverSrc ? (
               <>
                 <img
                   src={coverSrc}
-                  alt={course.title}
+                  alt=""
                   className="absolute inset-0 w-full h-full object-cover"
                   referrerPolicy="no-referrer"
                 />
-                <div className="absolute inset-0 bg-gradient-to-br from-[#00A9CE]/80 to-blue-900/80" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0B3A57] via-[#14567F]/80 to-[#14567F]/50" />
               </>
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-[#00A9CE] to-blue-700" />
-            );
+            ) : null;
           })()}
-          <h1 className="text-3xl font-black text-white relative z-10 leading-tight drop-shadow-md">
+          <HeroCielo />
+          <h1 className="absolute left-8 right-8 md:left-[38px] md:right-[38px] bottom-8 md:bottom-11 text-[28px] md:text-[32px] font-extrabold leading-[1.12] tracking-[-0.01em] text-white">
             {course.title}
           </h1>
         </div>
-        <div className="p-6 md:p-8 flex-1 flex flex-col justify-center">
-          <div className="flex items-center gap-3 mb-3">
+        <div className="flex-1 p-6 md:p-8 flex flex-col justify-center gap-4">
+          <div className="flex flex-wrap items-center gap-3.5">
             {isOrganizer ? (
-              <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-md bg-amber-100 text-amber-700 flex items-center gap-1">
-                <IoEyeOutline size={12} /> Organizando
+              <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold uppercase tracking-[0.06em] rounded-lg bg-amber-100 text-amber-800">
+                <IoEyeOutline size={14} /> Organizando
               </span>
             ) : (
-              <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-md ${
+              <span className={`px-3 py-1.5 text-xs font-extrabold uppercase tracking-[0.06em] rounded-lg ${
                 enrollment?.status === 'completed' || progressPercent === 100
-                  ? 'bg-emerald-100 text-emerald-700'
+                  ? 'bg-emerald-100 text-emerald-800'
                   : progressPercent > 0
-                  ? 'bg-[#00A9CE]/10 text-[#00A9CE]'
+                  ? 'bg-cyan-100 text-cyan-800'
                   : !enrollment
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-slate-100 text-slate-600'
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-slate-100 text-slate-700'
               }`}>
                 {enrollment?.status === 'completed' || progressPercent === 100
                   ? 'Completado'
                   : progressPercent > 0
-                  ? 'En Curso'
+                  ? 'En curso'
                   : !enrollment
                   ? 'Disponible'
                   : 'Sin iniciar'}
               </span>
             )}
-            <span className="text-sm font-medium text-slate-500">
+            <span className="text-sm text-slate-600">
               {totalLessons} {totalLessons === 1 ? 'tema' : 'temas'} · {modules.length} {modules.length === 1 ? 'módulo' : 'módulos'}
               {workshopModules.length > 0 && ` · ${workshopModules.length} taller${workshopModules.length !== 1 ? 'es' : ''}`}
             </span>
           </div>
 
           {course.description && (
-            <p className="text-slate-600 text-base mb-6 leading-relaxed">{course.description}</p>
+            <p className="text-base leading-[1.65] text-slate-600 max-w-[780px]">{course.description}</p>
           )}
 
           {isOrganizer ? (
-            <p className="text-sm text-amber-600 font-bold flex items-center gap-1.5 mb-4">
-              <IoEyeOutline size={14} /> Vista organizador — el progreso de los alumnos no se modifica
+            <p className="flex items-center gap-2 text-sm font-bold text-amber-700">
+              <IoEyeOutline size={15} /> Vista organizador — el progreso de los alumnos no se modifica
             </p>
           ) : (
-            <div className="space-y-2 mb-2">
+            <div className="space-y-2">
               <div className="flex justify-between text-sm font-bold text-slate-700">
-                <span>Progreso General</span>
-                <span className="text-[#00A9CE]">{completedCount}/{totalLessons} temas ({progressPercent}%)</span>
+                <span>Progreso general</span>
+                <span className="text-cyan-700">{completedCount}/{totalLessons} temas ({progressPercent}%)</span>
               </div>
               <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
@@ -352,18 +353,18 @@ export default async function CursoDetallePage({
             firstLessonId && (
               <Link
                 href={`/cursos/${cursoId}/${firstLessonId}`}
-                className="mt-3 self-start px-5 py-2.5 bg-slate-800 text-white text-sm font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-sm"
+                className="self-start flex items-center gap-2 min-h-11 px-5 rounded-xl bg-slate-800 hover:bg-slate-900 text-slate-50 text-sm font-bold transition-colors"
               >
-                Explorar el programa →
+                Explorar el programa <IoArrowForwardOutline size={16} />
               </Link>
             )
           ) : (
             nextLessonId && (
               <Link
                 href={`/cursos/${cursoId}/${nextLessonId}`}
-                className="mt-3 self-start px-5 py-2.5 bg-[#00A9CE] text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-colors shadow-sm"
+                className="self-start flex items-center gap-2 min-h-11 px-5 rounded-xl bg-[#0A7C97] hover:bg-[#08677E] text-white text-sm font-bold transition-colors"
               >
-                {progressPercent === 0 ? 'Comenzar programa →' : 'Continuar donde lo dejé →'}
+                {progressPercent === 0 ? 'Comenzar programa' : 'Continuar donde lo dejé'} <IoArrowForwardOutline size={16} />
               </Link>
             )
           )}

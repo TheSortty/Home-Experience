@@ -30,9 +30,9 @@ function getGreeting(): string {
     }).format(new Date()),
     10,
   );
-  if (hour < 6) return 'Estás despierta';
-  if (hour < 12) return 'Buen día';
-  if (hour < 19) return 'Buenas tardes';
+  // De madrugada (0 a 6 h) también es "Buenas noches".
+  if (hour >= 6 && hour < 12) return 'Buen día';
+  if (hour >= 12 && hour < 19) return 'Buenas tardes';
   return 'Buenas noches';
 }
 

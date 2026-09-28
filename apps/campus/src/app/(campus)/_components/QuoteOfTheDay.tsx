@@ -1,17 +1,22 @@
-// Citas del campus — placeholder hasta que el equipo de HOME las reemplace
-// con voces reales del staff/coaches/programa. Si vas a cambiarlas, mantené
-// el tono: corto, evocativo, evitá la frase motivacional de Instagram.
+// Frase del día del campus. Tono de la formación en coaching de HOME: el
+// observador, el lenguaje, la escucha, los quiebres y el aprendizaje. Frases
+// claras, sin dobles sentidos y sin autor (no atribuir citas que no se puedan
+// verificar). El equipo puede reemplazarlas por frases propias del programa.
 const QUOTES: { text: string; attr?: string }[] = [
-  { text: 'Sostener el proceso es más amoroso que apurar el resultado.' },
-  { text: 'Lo que evitás en silencio, te elige el doble.' },
-  { text: 'Volver a casa no es un destino, es una forma de mirar.' },
-  { text: 'El cambio no se decide. Se atraviesa.' },
-  { text: 'Lo que entiendas hoy es exactamente lo que necesitabas entender.' },
-  { text: 'Detenerse también es avanzar.' },
-  { text: 'No tenés que llegar a ningún lado. Ya estás acá.' },
-  { text: 'Lo que se nombra, se afloja.' },
-  { text: 'La paciencia no es esperar: es seguir presente mientras esperás.' },
-  { text: 'Hay procesos que no se entienden, se habitan.' },
+  { text: 'Cambiar la mirada es el primer paso para cambiar el resultado.' },
+  { text: 'Cada conversación es una oportunidad de crear algo nuevo.' },
+  { text: 'Escuchar de verdad es dejar de preparar la respuesta.' },
+  { text: 'Un quiebre no es un final: es una invitación a aprender.' },
+  { text: 'Lo que decís también construye lo que vivís.' },
+  { text: 'Aprender empieza cuando te animás a decir “no sé”.' },
+  { text: 'Tus juicios dicen tanto de vos como de lo que juzgás.' },
+  { text: 'Pedir ayuda también es un acto de liderazgo.' },
+  { text: 'Un compromiso cumplido vale más que cien promesas.' },
+  { text: 'Hoy podés elegir desde dónde mirar lo que te pasa.' },
+  { text: 'Las emociones no se esconden: se escuchan.' },
+  { text: 'Nadie aprende por vos, pero nadie aprende solo.' },
+  { text: 'Cada día es una oportunidad de ser el observador que querés ser.' },
+  { text: 'Para ver algo distinto, a veces hay que hacer preguntas distintas.' },
 ];
 
 function getDayOfYearAR(): number {
