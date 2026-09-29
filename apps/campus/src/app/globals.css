@@ -128,16 +128,6 @@ body {
   animation: slideInRight 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Ilustraciones de la página del programa (estrellas, barco, salvavidas) */
-@keyframes twinkle { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
-@keyframes floaty  { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-@keyframes bob     { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
-.tw  { animation: twinkle 3.4s ease-in-out infinite; }
-.tw2 { animation: twinkle 4.6s ease-in-out infinite; animation-delay: 1.2s; }
-.fl  { animation: floaty 5s ease-in-out infinite; }
-.bob { animation: bob 4s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .tw, .tw2, .fl, .bob { animation: none; } }
-
 /* Utility Classes */
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar {
