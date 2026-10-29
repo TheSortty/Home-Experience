@@ -22,6 +22,27 @@ export function isAllowedFile(fileName: string): boolean {
 }
 
 /**
+ * Copia a memoria los archivos recién elegidos. El navegador lee el archivo
+ * del disco recién al enviarlo: si en el medio cambió (Word guardando solo,
+ * Drive/OneDrive sincronizando), Chrome corta con ERR_UPLOAD_FILE_CHANGED, el
+ * pedido nunca llega al servidor y el usuario no ve por qué. Con la copia eso
+ * no pasa, y si el archivo no se puede leer, el aviso sale al elegirlo.
+ */
+export async function readFilesIntoMemory(files: File[]): Promise<File[]> {
+  return Promise.all(files.map(async f => {
+    try {
+      return new File([await f.arrayBuffer()], f.name, { type: f.type, lastModified: f.lastModified });
+    } catch {
+      throw new Error(`No se pudo leer "${f.name}". Si está abierto en Word, cerralo; si está en Drive u OneDrive, descargalo a la compu. Después elegilo de nuevo.`);
+    }
+  }));
+}
+
+/** Mensaje cuando el envío falla antes de llegar al servidor (red o archivo). */
+export const UPLOAD_SEND_ERROR =
+  'No se pudo enviar. Revisá la conexión y, si el archivo está abierto en Word, cerralo y volvé a elegirlo.';
+
+/**
  * Valor del atributo `accept` para escritorio: tipos MIME *y* extensiones.
  * Los MIME son lo único que entienden los selectores nativos; las extensiones,
  * lo único que entienden algunos diálogos de escritorio.

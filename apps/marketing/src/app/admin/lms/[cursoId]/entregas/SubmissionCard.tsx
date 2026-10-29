@@ -11,6 +11,7 @@ import {
 import { getReviewerThread, postReviewerChatMessage, submitAdminReview, deleteSubmission, resetStudentSubmission, setAdditionalAllowed } from '../../actions';
 import { supabase } from '@home/services/supabaseClient';
 import { entregaDownloadHref, entregaPreviewHref, isPreviewable } from '@home/services/entregaDownload';
+import { readFilesIntoMemory, UPLOAD_SEND_ERROR } from '@home/services/entregasFileTypes';
 import type { SubmissionThread, ChatMessage, SubmissionFile } from '@home/db-types/submissions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -165,6 +166,7 @@ function InlineReviewForm({
   const [isPending, startTransition] = useTransition();
   const [msg, setMsg] = useState<{ ok?: string; err?: string } | null>(null);
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
+  const [readingFiles, setReadingFiles] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   if (isApproved) {
@@ -181,11 +183,28 @@ function InlineReviewForm({
     if (!open) setTimeout(() => textareaRef.current?.focus(), 50);
   };
 
+  const pickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const chosen = Array.from(e.target.files ?? []);
+    setMsg(null);
+    setReadingFiles(true);
+    try {
+      setPickedFiles(await readFilesIntoMemory(chosen));
+    } catch (err) {
+      setPickedFiles([]);
+      e.target.value = '';
+      setMsg({ err: (err as Error).message });
+    } finally {
+      setReadingFiles(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // The file input is named "revised_files" inside the form, so FormData
-    // already carries every selected file — no manual append needed.
+    // Los archivos van desde la copia en memoria (pickedFiles), no desde el
+    // input: el del disco puede haber cambiado desde que se eligió.
     const fd = new FormData(e.currentTarget);
+    fd.delete('revised_files');
+    for (const f of pickedFiles) fd.append('revised_files', f);
     fd.append('submissionId', submissionId);
     fd.append('courseId', courseId);
     fd.append('lessonId', lessonId);
@@ -193,7 +212,7 @@ function InlineReviewForm({
     setMsg(null);
 
     startTransition(async () => {
-      const res = await submitAdminReview(fd);
+      const res = await submitAdminReview(fd).catch(() => ({ error: UPLOAD_SEND_ERROR, approved: undefined }));
       if (res.error) {
         setMsg({ err: res.error });
       } else {
@@ -244,7 +263,7 @@ function InlineReviewForm({
               name="revised_files"
               multiple
               accept=".pdf,application/pdf,.doc,application/msword,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.odt,application/vnd.oasis.opendocument.text,.rtf,application/rtf,.txt,text/plain,.md,text/markdown,.csv,text/csv,.ppt,application/vnd.ms-powerpoint,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.xls,application/vnd.ms-excel,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.jpg,.jpeg,image/jpeg,.png,image/png,.webp,image/webp,.heic,image/heic,.heif,image/heif,.gif,image/gif,.bmp,image/bmp,.tif,.tiff,image/tiff"
-              onChange={e => setPickedFiles(Array.from(e.target.files ?? []))}
+              onChange={pickFiles}
               className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 file:cursor-pointer"
             />
             {pickedFiles.length > 0 && (
@@ -289,7 +308,7 @@ function InlineReviewForm({
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || readingFiles}
               className={`flex-1 py-2.5 text-sm font-bold rounded-xl disabled:opacity-50 transition-colors ${
                 approve
                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -300,7 +319,7 @@ function InlineReviewForm({
             </button>
             <button
               type="button"
-              onClick={() => { setOpen(false); setApprove(false); setMsg(null); }}
+              onClick={() => { setOpen(false); setApprove(false); setMsg(null); setPickedFiles([]); }}
               className="px-4 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-900 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors"
             >
               Cancelar

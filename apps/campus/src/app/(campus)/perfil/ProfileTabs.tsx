@@ -9,6 +9,7 @@ import {
 } from 'react-icons/io5';
 import { updateProfile, updateMedicalInfo, changePassword, uploadAvatar } from './actions';
 import ImageCropper from '../_components/ImageCropper';
+import { UPLOAD_SEND_ERROR } from '@home/services/entregasFileTypes';
 
 type Tab = 'personal' | 'emergencia' | 'seguridad';
 
@@ -87,7 +88,7 @@ function AvatarUploader({ initials, avatarUrl }: { initials: string; avatarUrl: 
     setUploadResult(null);
     const fd = new FormData();
     fd.append('file', pendingFile);
-    const res = await uploadAvatar(fd);
+    const res = await uploadAvatar(fd).catch(() => ({ success: false, error: UPLOAD_SEND_ERROR }));
     setUploading(false);
     if (res.success) {
       setPendingFile(null);

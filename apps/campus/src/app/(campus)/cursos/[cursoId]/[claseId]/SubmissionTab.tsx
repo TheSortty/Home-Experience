@@ -8,6 +8,7 @@ import {
   IoSendOutline, IoTimeOutline, IoCloseOutline,
 } from 'react-icons/io5';
 import { submitLesson, addSubmissionFiles, postStudentChatMessage } from '../../actions';
+import { readFilesIntoMemory, UPLOAD_SEND_ERROR } from '@home/services/entregasFileTypes';
 import { supabase } from '@home/services/supabaseClient';
 import { entregaDownloadHref } from '@home/services/entregaDownload';
 import type { ChatMessage, SubmissionTabData, ThreadItem } from '@home/db-types/submissions';
@@ -141,12 +142,14 @@ function UploadZone({
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const addFiles = (incoming: FileList | null) => {
+  const addFiles = async (incoming: FileList | null) => {
     if (!incoming) return;
     setFeedback(null);
-    const picked = Array.from(incoming);
-    const tooBig = picked.find(f => f.size > MAX_MB * 1024 * 1024);
+    const tooBig = Array.from(incoming).find(f => f.size > MAX_MB * 1024 * 1024);
     if (tooBig) { setFeedback({ err: `"${tooBig.name}" supera los ${MAX_MB} MB` }); return; }
+    let picked: File[];
+    try { picked = await readFilesIntoMemory(Array.from(incoming)); }
+    catch (e) { setFeedback({ err: (e as Error).message }); return; }
     setFiles(prev => {
       // De-dup by name+size, cap at MAX_FILES
       const merged = [...prev];
@@ -170,7 +173,8 @@ function UploadZone({
     for (const f of files) fd.append('files', f);
 
     startTransition(async () => {
-      const res = isAdditional ? await addSubmissionFiles(fd) : await submitLesson(fd);
+      const res = await (isAdditional ? addSubmissionFiles(fd) : submitLesson(fd))
+        .catch(() => ({ error: UPLOAD_SEND_ERROR }));
       if (res.error) {
         setFeedback({ err: res.error });
       } else {
@@ -214,7 +218,7 @@ function UploadZone({
         multiple
         accept={ACCEPT}
         className="hidden"
-        onChange={(e) => addFiles(e.target.files)}
+        onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
       />
 
       {/* Selected files */}

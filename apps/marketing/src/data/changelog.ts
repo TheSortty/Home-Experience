@@ -15,6 +15,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: '1.12',
+    date: '29 oct 2026',
+    title: 'Subida de archivos más confiable',
+    items: [
+      { type: 'corregido', text: 'Las bitácoras y devoluciones ya no fallan si el archivo se sigue editando o guardando en Word (o sincronizando con Drive/OneDrive) después de elegirlo. Antes la subida se cortaba sin avisar y el panel mostraba "Error en el panel".' },
+      { type: 'mejorado', text: 'Si un archivo no se puede leer o no se puede enviar, ahora aparece un mensaje claro con qué hacer, y lo escrito en la devolución no se pierde.' },
+      { type: 'mejorado', text: 'Foto de perfil: si la imagen no se puede abrir (por ejemplo, algunas fotos HEIC del iPhone), se avisa que se pruebe con JPG o PNG en vez de quedar en blanco.' },
+    ],
+  },
+  {
     version: '1.10',
     date: '28 sep 2026',
     title: 'Campus: modo oscuro y nueva página del programa',

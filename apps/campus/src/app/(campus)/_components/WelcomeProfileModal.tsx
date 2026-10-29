@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { IoCameraOutline, IoArrowForwardOutline, IoSparklesOutline } from 'react-icons/io5';
 import { completeOnboarding } from '../perfil/actions';
 import ImageCropper from './ImageCropper';
+import { UPLOAD_SEND_ERROR } from '@home/services/entregasFileTypes';
 
 interface Props {
   firstName: string; // may be empty for brand-new users
@@ -67,7 +68,7 @@ export default function WelcomeProfileModal({ firstName, showOnLoad }: Props) {
     fd.append('last_name',  last.trim());
     if (pendingFile) fd.append('file', pendingFile);
 
-    const res = await completeOnboarding(fd);
+    const res = await completeOnboarding(fd).catch(() => ({ success: false, error: UPLOAD_SEND_ERROR }));
 
     setSaving(false);
     if (!res.success) {

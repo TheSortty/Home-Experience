@@ -30,7 +30,9 @@ export default function ImageCropper({
   const [offsetX, setOffsetX]     = useState(0);
   const [offsetY, setOffsetY]     = useState(0);
   const [dragging, setDragging]   = useState(false);
-  const imgRef                    = useRef<HTMLImageElement>(null);
+  // El navegador no pudo abrir la imagen (ej. foto HEIC del iPhone fuera de Safari).
+  const [loadFailed, setLoadFailed] = useState(false);
+  const imgRef                   = useRef<HTMLImageElement>(null);
   const lastPos                   = useRef({ x: 0, y: 0 });
 
   /* ── Load image ── */
@@ -111,7 +113,7 @@ export default function ImageCropper({
   /* ── Confirm: crop via Canvas ── */
   const handleConfirm = () => {
     const img = imgRef.current;
-    if (!img || !scale) return;
+    if (!img || !displayW) return;
 
     // The visible region in source-image coordinates
     const srcX    = ((displayW - displaySize) / 2 - offsetX) / scale;
@@ -169,6 +171,7 @@ export default function ImageCropper({
               src={imgSrc}
               alt="Ajustá el encuadre"
               onLoad={handleLoad}
+              onError={() => setLoadFailed(true)}
               draggable={false}
               style={{
                 width:          displayW || 'auto',
@@ -182,14 +185,21 @@ export default function ImageCropper({
         )}
       </div>
 
-      <p className="text-xs text-slate-500 text-center leading-relaxed">
-        Arrastrá para elegir el encuadre
-      </p>
+      {loadFailed ? (
+        <p className="text-xs text-red-600 text-center leading-relaxed max-w-[240px]">
+          No se pudo abrir esta imagen. Probá con una foto en JPG o PNG (las fotos HEIC del iPhone a veces no abren).
+        </p>
+      ) : (
+        <p className="text-xs text-slate-500 text-center leading-relaxed">
+          Arrastrá para elegir el encuadre
+        </p>
+      )}
 
       <div className="flex gap-2">
         <button
           onClick={handleConfirm}
-          className="flex items-center gap-1.5 bg-[#00A9CE] hover:bg-[#2563eb] text-white px-5 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm"
+          disabled={!displayW}
+          className="flex items-center gap-1.5 bg-[#00A9CE] hover:bg-[#2563eb] text-white px-5 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm disabled:opacity-40"
         >
           <IoCheckmarkOutline size={16} /> Confirmar
         </button>
